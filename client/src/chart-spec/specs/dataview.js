@@ -31,6 +31,11 @@ export function buildOption(values, _data, helpers = {}) {
   // Author-set per-column value formats ({ col → 'compact'|'duration'|
   // 'duration_clock'|'plain' }); missing/'auto' = default cell formatting.
   const columnFormats = dm.column_formats && typeof dm.column_formats === 'object' ? dm.column_formats : {};
+  // Per-column conditional formatting rules ({ col → [{ op, value, color,
+  // target, wholeRow }] }). First match wins; the grid evaluates them per
+  // cell (and per row for wholeRow rules). Absent = no conditional styling,
+  // which is why an unruled table costs nothing.
+  const columnRules = dm.column_rules && typeof dm.column_rules === 'object' ? dm.column_rules : {};
   const xAxisFormat = dm.x_axis_format || helpers.xAxisFormat || 'short';
 
   return {
@@ -39,6 +44,7 @@ export function buildOption(values, _data, helpers = {}) {
       columnAliases,
       columnWidths,
       columnFormats,
+      columnRules,
       visibleColumnsConfig,
       xAxisFormat,
     },

@@ -111,10 +111,12 @@ function SpecSection({ section, formState }) {
  * @param {string[]} props.availableColumns
  * @param {object} props.formState
  * @param {function} props.onFieldChange
+ * @param {object} [props.previewData]  { columns, rows } — only consumed by
+ *   field types that render real data (the dataview column manager).
  */
-export default function SpecDrivenSections({ spec, availableColumns, formState, onFieldChange }) {
+export default function SpecDrivenSections({ spec, availableColumns, formState, onFieldChange, previewData = null }) {
   if (!spec || !Array.isArray(spec.sections)) return null;
-  const ctx = { availableColumns, formState, onFieldChange };
+  const ctx = { availableColumns, formState, onFieldChange, previewData };
   return (
     <SpecRenderContext.Provider value={ctx}>
       {spec.sections.map((section) => (

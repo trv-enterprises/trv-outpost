@@ -165,6 +165,27 @@ type DataFilter struct {
 	Value interface{} `json:"value" bson:"value"` // Value to compare against (can be array for 'in' operator)
 }
 
+// ColumnRule is one conditional-formatting rule on a dataview column.
+//
+// Rules are stored per column (ChartDataMapping.ColumnRules) and evaluated
+// top-down with FIRST MATCH WINS, which is what lets a specific "equals"
+// rule sit above a broad "contains" catch-all. The stored order therefore
+// carries meaning and must never be sorted on the way in or out.
+//
+// The server does not evaluate these — the grid does, client-side, per cell
+// (see resolveColumnRule in client/src/chart-spec/option-helpers.js). This
+// type exists so the config survives the round trip through the strict
+// data_mapping struct.
+//
+// @Description One conditional-formatting rule for a dataview column
+type ColumnRule struct {
+	Op       string `json:"op" bson:"op"`                                 // Match operator: eq, contains, gt, lt, empty
+	Value    string `json:"value,omitempty" bson:"value,omitempty"`       // Operand. Unused by "empty"; a blank operand on any other operator makes the rule inert (a half-typed rule must not match every row).
+	Color    string `json:"color" bson:"color"`                           // Hex color applied on match
+	Target   string `json:"target,omitempty" bson:"target,omitempty"`     // What to paint: "text" (default) or "both" (text + background, text paired for contrast)
+	WholeRow bool   `json:"wholeRow,omitempty" bson:"wholeRow,omitempty"` // When true the whole row is painted, not just this cell. If rules in several columns claim the row, the leftmost column wins.
+}
+
 // SlidingWindow defines a time-based window for filtering data
 // @Description Time window configuration for limiting data to recent entries
 type SlidingWindow struct {
@@ -193,29 +214,30 @@ type DataAggregation struct {
 // ChartDataMapping defines how to map query results to chart elements
 // @Description Mapping configuration from data columns to chart axes/series
 type ChartDataMapping struct {
-	XAxis          string              `json:"x_axis" bson:"x_axis"`                                       // Column for X axis (categories)
-	XAxisLabel     string              `json:"x_axis_label" bson:"x_axis_label"`                           // Label for X axis (e.g., "Time", "Date"). Empty = render no x-axis name; most charts are time-based and don't need one.
-	XAxisFormat    string              `json:"x_axis_format" bson:"x_axis_format"`                         // Format for X axis values: chart, chart_time, chart_date, chart_datetime, short, long, etc.
-	YAxis          []string            `json:"y_axis" bson:"y_axis"`                                       // Columns for Y axis (values/series)
-	YAxisLabel     string              `json:"y_axis_label" bson:"y_axis_label"`                           // AXIS label rendered along the Y axis (single-axis charts only; dual-axis charts render no axis labels). Series/legend labels live in YAxisLabels. The old save-path mirror (YAxisLabels[0] copied here) was removed; strip_y_axis_label_mirror cleaned stored copies.
-	YAxisLabels    []string            `json:"y_axis_labels,omitempty" bson:"y_axis_labels,omitempty"`     // Per-SERIES labels (legend names), index-aligned to YAxis. Missing entries fall back to the column name. These never label the axes — the axis label is YAxisLabel (single-axis only).
-	YAxisColors    []string            `json:"y_axis_colors,omitempty" bson:"y_axis_colors,omitempty"`     // Per-column series color overrides (resolved hex; "" = auto palette). Index-aligned to YAxis, same parallel-array pattern as YAxisLabels (the wire y_axis is a string array). Not applied to pivot charts (Series set). Omitted when no column has an explicit color.
-	Series         string              `json:"series" bson:"series"`                                       // Column that identifies each series (e.g., "location") - used for time bucket partitioning
-	GroupBy        string              `json:"group_by" bson:"group_by"`                                   // Column to group/split series by (client-side grouping)
-	LabelCol       string              `json:"label_col" bson:"label_col"`                                 // Column for labels
-	Filters        []DataFilter        `json:"filters" bson:"filters"`                                     // Client-side filters applied after data fetch
-	Aggregation    *DataAggregation    `json:"aggregation" bson:"aggregation"`                             // Aggregation to apply (first, last, avg, etc.)
-	SlidingWindow  *SlidingWindow      `json:"sliding_window" bson:"sliding_window"`                       // Time-based sliding window (e.g., last 5 minutes)
-	TimeBucket     *TimeBucket         `json:"time_bucket" bson:"time_bucket"`                             // Time-bucketed aggregation for streaming data
-	SortBy         string              `json:"sort_by" bson:"sort_by"`                                     // Column to sort by
-	SortOrder      string              `json:"sort_order" bson:"sort_order"`                               // asc or desc
-	Limit          int                 `json:"limit" bson:"limit"`                                         // Max rows to return
-	ColumnAliases  map[string]string   `json:"column_aliases" bson:"column_aliases"`                       // Display names for columns (column name -> display name), primarily for dataview
-	VisibleColumns []string            `json:"visible_columns,omitempty" bson:"visible_columns,omitempty"` // For dataview only: columns to render as table columns. Empty/missing = show all (default). Preserves the order given.
-	ColumnWidths   map[string]int      `json:"column_widths,omitempty" bson:"column_widths,omitempty"`     // For dataview only: column name -> pixel width. Default if a per-user override isn't set in app_config.dataview_layouts.
-	ColumnFormats  map[string]string   `json:"column_formats,omitempty" bson:"column_formats,omitempty"`   // For dataview only: column name -> value format ("compact" SI 127G, "duration", "duration_clock", "plain"). Missing/"auto" = default cell formatting. Same format vocabulary as the number tile (number-formats.js).
-	Parser         *StreamParserConfig `json:"parser,omitempty" bson:"parser,omitempty"`                   // Per-component data extraction for streaming (MQTT, ts-store MQTT)
-	BandColumns    *BandColumns        `json:"band_columns,omitempty" bson:"band_columns,omitempty"`       // Banded-bar column mapping. Each row in the data is expected to carry a Mean column plus paired ±1 SD / ±2 SD columns; the renderer reads each row's own values to draw a per-row envelope. The chart is per-row only — there is no scalar/fixed-band convention.
+	XAxis          string                  `json:"x_axis" bson:"x_axis"`                                       // Column for X axis (categories)
+	XAxisLabel     string                  `json:"x_axis_label" bson:"x_axis_label"`                           // Label for X axis (e.g., "Time", "Date"). Empty = render no x-axis name; most charts are time-based and don't need one.
+	XAxisFormat    string                  `json:"x_axis_format" bson:"x_axis_format"`                         // Format for X axis values: chart, chart_time, chart_date, chart_datetime, short, long, etc.
+	YAxis          []string                `json:"y_axis" bson:"y_axis"`                                       // Columns for Y axis (values/series)
+	YAxisLabel     string                  `json:"y_axis_label" bson:"y_axis_label"`                           // AXIS label rendered along the Y axis (single-axis charts only; dual-axis charts render no axis labels). Series/legend labels live in YAxisLabels. The old save-path mirror (YAxisLabels[0] copied here) was removed; strip_y_axis_label_mirror cleaned stored copies.
+	YAxisLabels    []string                `json:"y_axis_labels,omitempty" bson:"y_axis_labels,omitempty"`     // Per-SERIES labels (legend names), index-aligned to YAxis. Missing entries fall back to the column name. These never label the axes — the axis label is YAxisLabel (single-axis only).
+	YAxisColors    []string                `json:"y_axis_colors,omitempty" bson:"y_axis_colors,omitempty"`     // Per-column series color overrides (resolved hex; "" = auto palette). Index-aligned to YAxis, same parallel-array pattern as YAxisLabels (the wire y_axis is a string array). Not applied to pivot charts (Series set). Omitted when no column has an explicit color.
+	Series         string                  `json:"series" bson:"series"`                                       // Column that identifies each series (e.g., "location") - used for time bucket partitioning
+	GroupBy        string                  `json:"group_by" bson:"group_by"`                                   // Column to group/split series by (client-side grouping)
+	LabelCol       string                  `json:"label_col" bson:"label_col"`                                 // Column for labels
+	Filters        []DataFilter            `json:"filters" bson:"filters"`                                     // Client-side filters applied after data fetch
+	Aggregation    *DataAggregation        `json:"aggregation" bson:"aggregation"`                             // Aggregation to apply (first, last, avg, etc.)
+	SlidingWindow  *SlidingWindow          `json:"sliding_window" bson:"sliding_window"`                       // Time-based sliding window (e.g., last 5 minutes)
+	TimeBucket     *TimeBucket             `json:"time_bucket" bson:"time_bucket"`                             // Time-bucketed aggregation for streaming data
+	SortBy         string                  `json:"sort_by" bson:"sort_by"`                                     // Column to sort by
+	SortOrder      string                  `json:"sort_order" bson:"sort_order"`                               // asc or desc
+	Limit          int                     `json:"limit" bson:"limit"`                                         // Max rows to return
+	ColumnAliases  map[string]string       `json:"column_aliases" bson:"column_aliases"`                       // Display names for columns (column name -> display name), primarily for dataview
+	VisibleColumns []string                `json:"visible_columns,omitempty" bson:"visible_columns,omitempty"` // For dataview only: columns to render as table columns. Empty/missing = show all (default). Preserves the order given.
+	ColumnWidths   map[string]int          `json:"column_widths,omitempty" bson:"column_widths,omitempty"`     // For dataview only: column name -> pixel width. Default if a per-user override isn't set in app_config.dataview_layouts.
+	ColumnFormats  map[string]string       `json:"column_formats,omitempty" bson:"column_formats,omitempty"`   // For dataview only: column name -> value format ("compact" SI 127G, "duration", "duration_clock", "plain"). Missing/"auto" = default cell formatting. Same format vocabulary as the number tile (number-formats.js).
+	ColumnRules    map[string][]ColumnRule `json:"column_rules,omitempty" bson:"column_rules,omitempty"`       // For dataview only: column name -> conditional-formatting rules. Evaluated top-down, FIRST MATCH WINS (the order is the author's logic, so it must be preserved as given).
+	Parser         *StreamParserConfig     `json:"parser,omitempty" bson:"parser,omitempty"`                   // Per-component data extraction for streaming (MQTT, ts-store MQTT)
+	BandColumns    *BandColumns            `json:"band_columns,omitempty" bson:"band_columns,omitempty"`       // Banded-bar column mapping. Each row in the data is expected to carry a Mean column plus paired ±1 SD / ±2 SD columns; the renderer reads each row's own values to draw a per-row envelope. The chart is per-row only — there is no scalar/fixed-band convention.
 
 	// ReferenceLevels was the original scalar (Westgard) reference-marker
 	// list. Banded-bar moved to a per-row-only convention (BandColumns
@@ -592,9 +614,9 @@ type VariableCandidatesResponse struct {
 // to that connection would render it degraded (e.g. a data table collapsing to
 // whatever columns happen to overlap). Detection only; never blocks a swap.
 type PanelSwapIssue struct {
-	PanelID       string   `json:"panel_id"`
-	ComponentID   string   `json:"component_id"`
-	ComponentName string   `json:"component_name"`
+	PanelID        string   `json:"panel_id"`
+	ComponentID    string   `json:"component_id"`
+	ComponentName  string   `json:"component_name"`
 	MissingColumns []string `json:"missing_columns"` // required-but-absent, in declaration order
 }
 
@@ -602,8 +624,8 @@ type PanelSwapIssue struct {
 // per-panel column issues for a specific candidate connection. Empty Issues =
 // every panel's required columns are present on that connection.
 type SwapCompatibilityResponse struct {
-	Variable     string           `json:"variable"`
-	ConnectionID string           `json:"connection_id"`
+	Variable     string `json:"variable"`
+	ConnectionID string `json:"connection_id"`
 	// SchemaUnavailable is true when the target connection's schema couldn't be
 	// read (idle store, unreachable) — the client should treat issues as
 	// "unknown", not "clean", and avoid a false all-clear.

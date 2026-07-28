@@ -2,11 +2,12 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import { useDataviewLayout } from '../../hooks/useDataviewLayout';
 import { formatCellValue } from '../../utils/dataTransforms';
 import { formatNumberValue } from '../specs/number-formats';
+import { resolveColumnRule, resolveRowRule, contrastPartnerFor } from '../option-helpers';
 
 /**
  * DataViewGrid — the non-ECharts render for the `dataview` chart type.
@@ -30,19 +31,120 @@ import { formatNumberValue } from '../specs/number-formats';
  * @param {object}        props.columnWidths        { col → px } author-set default widths
  * @param {object}        props.columnFormats       { col → value format } — 'compact' (SI, 127G),
  *                                                  'duration', 'duration_clock', 'plain'; missing/'auto' = default
+ * @param {object}        props.columnRules         { col → [{ op, value, color, target, wholeRow }] }
+ *                                                  conditional formatting; first match wins
  * @param {string[]|null} props.visibleColumnsConfig ordered whitelist, or null = show all
  * @param {string}        props.xAxisFormat         timestamp format for time columns
  * @param {object}        props.config              saved config (id, title)
  * @param {object}        props.dataCtx             { data, loading, error, isStreaming }
  */
+/**
+ * EditorColumnHeader — the header AG Grid renders for each column when the
+ * grid is mounted as the editor's visual column formatter (#214).
+ *
+ * Carries the direct-manipulation affordances that belong ON the column:
+ * open its options (⚙), size it to its content, and hide it. Sorting is
+ * dropped here deliberately — in the editor the header is a control
+ * surface for layout, and a stray sort-on-click while aiming for a button
+ * would reorder the author's sample data for no reason.
+ *
+ * A HIDDEN column (only rendered when "Show hidden" is on) shows greyed
+ * with a single "show" action instead: it has no width or order to
+ * manage while hidden, so offering those controls would be dead UI.
+ */
+function EditorColumnHeader(props) {
+  const {
+    displayName, column,
+    hidden, onEditColumn, onHideColumn, onShowColumn, onAutoSizeColumn,
+  } = props;
+  const colId = column?.getColId?.() || '';
+  // The in-flight drag width comes via the grid CONTEXT, not through
+  // headerComponentParams: params live on the column defs, so threading a
+  // value that changes on every mousemove would re-derive every def
+  // mid-drag. Context updates without touching the defs.
+  const live = props.context?.liveResize;
+  const liveWidth = live && live.colId === colId ? live.width : null;
+
+  if (hidden) {
+    return (
+      <div className="dvg-editor-header dvg-editor-header--hidden" title={`${colId} (hidden)`}>
+        <span className="dvg-editor-header__name">{displayName}</span>
+        <button
+          type="button"
+          className="dvg-editor-header__btn"
+          title="Show this column"
+          aria-label={`Show ${colId}`}
+          onClick={() => onShowColumn?.(colId)}
+        >
+          +
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="dvg-editor-header" title={colId}>
+      <span className="dvg-editor-header__name">{displayName}</span>
+      {/* Live px readout — the answer to "what width am I actually
+          setting?", which the old type-a-number-and-go-look flow never
+          gave. Only rendered for the column being dragged. */}
+      {liveWidth != null && (
+        <span className="dvg-editor-header__width">{liveWidth}px</span>
+      )}
+      <span className="dvg-editor-header__actions">
+        <button
+          type="button"
+          className="dvg-editor-header__btn"
+          title="Size to fit content"
+          aria-label={`Auto-size ${colId}`}
+          onClick={() => onAutoSizeColumn?.(colId)}
+        >
+          ⇔
+        </button>
+        <button
+          type="button"
+          className="dvg-editor-header__btn"
+          title="Column options — display name, format, conditional formatting"
+          aria-label={`Options for ${colId}`}
+          onClick={() => onEditColumn?.(colId)}
+        >
+          ⚙
+        </button>
+        <button
+          type="button"
+          className="dvg-editor-header__btn dvg-editor-header__btn--hide"
+          title="Hide this column"
+          aria-label={`Hide ${colId}`}
+          onClick={() => onHideColumn?.(colId)}
+        >
+          ✕
+        </button>
+      </span>
+    </div>
+  );
+}
+
 export default function DataViewGrid({
   columnAliases = {},
   columnWidths = {},
   columnFormats = {},
+  columnRules = {},
   visibleColumnsConfig = null,
   xAxisFormat = 'short',
   config,
   dataCtx,
+  // Editor-only hooks (#214). In the component editor the grid IS the
+  // column-layout control: a drag writes the AUTHOR's column_widths rather
+  // than the viewer's per-user layout. Absent in view mode, where the
+  // existing per-user behavior is unchanged.
+  editable = false,
+  editorHiddenColumns = [],
+  onAuthorWidthChange = null,
+  onAuthorOrderChange = null,
+  onEditColumn = null,
+  onHideColumn = null,
+  onShowColumn = null,
+  onAutoSizeColumn = null,
 }) {
   // Per-user layout is keyed on the component id (from config, not the
   // descriptor — the descriptor's buildOption has no access to it).
@@ -55,7 +157,14 @@ export default function DataViewGrid({
   // Per-user layout override — order + widths layered on top of the
   // chart defaults. Returns the user's stored layout for this chart_id
   // and a saver to push changes back.
-  const { layout: userLayout, saveLayout } = useDataviewLayout(chartId);
+  const { layout: storedLayout, saveLayout } = useDataviewLayout(chartId);
+  // EDITOR MODE (#214) shows the AUTHOR's configuration, not the editing
+  // user's personal view of it. Ignoring the stored layout here isn't just
+  // tidiness: the editor's whole job is to show what every viewer gets by
+  // default, and a width this author had previously dragged in view mode
+  // would otherwise silently sit on top of that — they'd be tuning a number
+  // while looking at a different one.
+  const userLayout = editable ? null : storedLayout;
 
   const allColumns = (!loading && !error && data?.columns) || [];
   // Effective order: user's saved order if it covers the same columns,
@@ -85,6 +194,28 @@ export default function DataViewGrid({
     .map(([c, f]) => `${c}:${f}`)
     .sort()
     .join('|');
+  // Conditional-format rules change cell styling, so columnDefs must
+  // re-derive when the author edits them. Serialized because the rules are
+  // nested arrays of objects — object identity would miss an in-place edit
+  // from the editor, and a shallow key would miss a color/operator change.
+  const columnRulesKey = JSON.stringify(columnRules || {});
+  // Editor "Show hidden": columns present in the grid purely so they can be
+  // un-hidden. Empty in view mode.
+  const hiddenKey = (editorHiddenColumns || []).join('|');
+  const hiddenSet = useMemo(
+    () => new Set(editorHiddenColumns || []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hiddenKey]
+  );
+  // Whether ANY rule paints the whole row. Row styling costs a per-row scan
+  // across every ruled column, so skip it entirely for the common case of a
+  // table with no whole-row rules (or none at all).
+  const hasRowRules = useMemo(() => (
+    Object.values(columnRules || {}).some(
+      (rules) => Array.isArray(rules) && rules.some((r) => r?.wholeRow === true)
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [columnRulesKey]);
   // Row objects derived from the latest snapshot. Stable __id (content
   // hash + index) so AG Grid's filter, sort, menu state, and scroll
   // position survive streaming buffer slices.
@@ -109,9 +240,22 @@ export default function DataViewGrid({
   // and open filter menus don't close on every streaming batch.
   const gridRef = useRef(null);
   const initialRowDataRef = useRef(null);
+  // Live px readout while an editor drag is in flight: { colId, width }.
+  // Editor-only — view mode never sets it, so view-mode renders are
+  // unaffected.
+  const [liveResize, setLiveResize] = useState(null);
   if (initialRowDataRef.current === null && latestRowObjs.length > 0) {
     initialRowDataRef.current = latestRowObjs;
   }
+
+  // Push the in-flight drag width to the headers. AG Grid snapshots
+  // `context` rather than watching it, so the header cells have to be told
+  // to re-read it — refreshHeader() is the cheap way (headers only, no row
+  // re-render) and this only ever runs in editor mode.
+  useEffect(() => {
+    if (!editable) return;
+    gridRef.current?.api?.refreshHeader();
+  }, [liveResize, editable]);
 
   useEffect(() => {
     const api = gridRef.current?.api;
@@ -190,6 +334,52 @@ export default function DataViewGrid({
         },
         minWidth: resolvedWidth > 0 ? Math.min(defaultFloor, resolvedWidth) : defaultFloor,
       };
+      // Conditional formatting (#214). Only attach cellStyle when the column
+      // actually has rules — AG Grid calls cellStyle for every rendered cell,
+      // so an unruled table shouldn't pay for a function call per cell.
+      //
+      // A whole-row rule is painted by getRowStyle instead (one style for the
+      // row, rather than each cell fighting over the same background), so the
+      // cell hands the row case back. Returning null lets the theme's own
+      // cell styling stand.
+      // Editor mode: swap in the control-surface header, and mark hidden
+      // columns (present only while "Show hidden" is on) so they render
+      // greyed with a show action instead of the layout controls.
+      if (editable) {
+        const isHidden = hiddenSet.has(colKey);
+        def.headerComponent = EditorColumnHeader;
+        def.headerComponentParams = {
+          hidden: isHidden,
+          onEditColumn,
+          onHideColumn,
+          onShowColumn,
+          onAutoSizeColumn,
+        };
+        def.sortable = false;
+        def.filter = false;
+        // A hidden column is a placeholder for un-hiding, not part of the
+        // layout being tuned: it can't be dragged or resized, and it stays
+        // narrow so it doesn't crowd the columns that matter.
+        if (isHidden) {
+          def.suppressMovable = true;
+          def.resizable = false;
+          def.cellClass = 'dvg-cell--hidden-col';
+          def.width = 140;
+          def.minWidth = 80;
+          def.flex = 0;
+          def.suppressSizeToFit = true;
+        }
+      }
+      const rules = columnRules?.[colKey];
+      if (Array.isArray(rules) && rules.length > 0) {
+        def.cellStyle = (params) => {
+          const hit = resolveColumnRule(params.value, rules);
+          if (!hit || hit.wholeRow) return null;
+          return hit.target === 'both'
+            ? { backgroundColor: hit.color, color: contrastPartnerFor(hit.color) || undefined }
+            : { color: hit.color };
+        };
+      }
       if (resolvedWidth > 0) {
         def.width = resolvedWidth;
         def.flex = 0;
@@ -198,7 +388,7 @@ export default function DataViewGrid({
       return def;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columnsKey, userLayout, columnWidthsKey, columnFormatsKey]);
+  }, [columnsKey, userLayout, columnWidthsKey, columnFormatsKey, columnRulesKey, editable, hiddenSet]);
 
   // Columns WITHOUT an explicit width — the only ones fitCellContents should
   // auto-size. A column with an author/user width must keep its def.width, but
@@ -208,13 +398,15 @@ export default function DataViewGrid({
   // the strategy's colIds to unsized columns lets the explicit widths stick.
   const autoSizeColIds = useMemo(() => {
     return orderedColumns.filter((col) => {
+      // Editor: a "Show hidden" placeholder is fixed-width by design.
+      if (hiddenSet.has(col)) return false;
       const uw = userLayout?.widths?.[col];
       const aw = Number(columnWidths?.[col]);
       const hasWidth = (uw && uw > 0) || (Number.isFinite(aw) && aw > 0);
       return !hasWidth;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columnsKey, userLayout, columnWidthsKey]);
+  }, [columnsKey, userLayout, columnWidthsKey, hiddenSet]);
 
   // No default flex — columns size to their content via the grid's
   // autoSizeStrategy=fitCellContents. A default flex=1 would cause AG Grid
@@ -226,6 +418,24 @@ export default function DataViewGrid({
     filter: true,
   }), []);
 
+  // Whole-row conditional formatting (#214). Scans the ruled columns in
+  // display order and takes the first whole-row match — the leftmost column
+  // wins, which is arbitrary but stable and explainable (see resolveRowRule).
+  //
+  // undefined (not null) when nothing matches: AG Grid treats undefined as
+  // "no opinion" and leaves its own row striping alone.
+  const getRowStyle = useMemo(() => {
+    if (!hasRowRules) return undefined;
+    return (params) => {
+      const hit = resolveRowRule(params.data, orderedColumns, columnRules);
+      if (!hit) return undefined;
+      return hit.target === 'both'
+        ? { backgroundColor: hit.color, color: contrastPartnerFor(hit.color) || undefined }
+        : { color: hit.color };
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasRowRules, columnsKey, columnRulesKey]);
+
   // Persist user layout changes (resize + reorder) to app_config.
   // Debounced via the saver itself in useDataviewLayout.
   //
@@ -236,9 +446,33 @@ export default function DataViewGrid({
   // store, which is a columnDefs dep, so the grid re-derives → re-applies →
   // fires again: a width-jitter feedback loop in view mode.
   const handleColumnResized = (event) => {
-    if (!event.finished || !event.column || !chartId) return;
+    if (!event.column) return;
     if (event.source !== 'uiColumnResized') return;
+    // Mid-drag: surface the width the author is currently dragging to.
+    // AG Grid fires this continuously with finished=false, which is
+    // exactly the signal the old blind "type a number" flow lacked.
+    if (!event.finished) {
+      if (editable) {
+        setLiveResize({ colId: event.column.getColId(), width: Math.round(event.column.getActualWidth()) });
+      }
+      return;
+    }
+    if (editable) setLiveResize(null);
     const colId = event.column.getColId();
+    // EDITOR MODE (#214): the author is setting the chart's default width, so
+    // the drag writes column_widths and must NOT touch the per-user layout.
+    //
+    // This split is load-bearing. useDataviewLayout's precedence is
+    // "viewer drag > author width", with widthBase recording which author
+    // width a drag was made against so a later author re-pin invalidates the
+    // override. If an EDITOR drag were captured as a user override it would
+    // be its own widthBase — the author's own change would look like a stale
+    // viewer drag and get discarded. That is the v0.37.1 clobbering bug.
+    if (editable) {
+      onAuthorWidthChange?.(colId, Math.round(event.column.getActualWidth()));
+      return;
+    }
+    if (!chartId) return;
     saveLayout((prev) => {
       const widths = { ...(prev?.widths || {}) };
       widths[colId] = event.column.getActualWidth();
@@ -250,13 +484,23 @@ export default function DataViewGrid({
       return { ...prev, widths, widthBase };
     });
   };
-  const handleColumnMoved = () => {
-    if (!chartId) return;
+  const handleColumnMoved = (event) => {
     const api = gridRef.current?.api;
     if (!api) return;
     // colId is the canonical column identifier (field is used as a path
     // lookup, not a literal name).
     const ids = api.getColumnDefs().map((c) => c.colId || c.field);
+    // Editor mode: reorder writes the AUTHOR's visible_columns order. Same
+    // reasoning as the resize split above.
+    if (editable) {
+      // AG Grid fires columnMoved continuously through a drag; only the drop
+      // is a real reorder. (event.finished is undefined for programmatic
+      // moves, which we also want to ignore here.)
+      if (event?.finished === false) return;
+      onAuthorOrderChange?.(ids);
+      return;
+    }
+    if (!chartId) return;
     saveLayout((prev) => ({ ...prev, order: ids }));
   };
 
@@ -307,6 +551,10 @@ export default function DataViewGrid({
             : undefined}
           animateRows={false}
           suppressCellFocus
+          // Editor-only: carries the in-flight drag width to the headers
+          // without re-deriving columnDefs on every mousemove.
+          context={editable ? { liveResize } : undefined}
+          getRowStyle={getRowStyle}
           getRowId={(params) => String(params.data.__id)}
           maintainColumnOrder
           onColumnResized={handleColumnResized}

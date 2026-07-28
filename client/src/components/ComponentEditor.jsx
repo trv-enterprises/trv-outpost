@@ -82,6 +82,26 @@ const pruneColumnWidths = (widths) => {
   return Object.keys(out).length > 0 ? out : null;
 };
 
+// dataview column_rules: per-column conditional-format rules. Drops columns
+// whose rule list is empty, and rules that can never fire — no color, or a
+// blank operand on an operator that needs one (a half-typed rule the author
+// abandoned). resolveColumnRule skips those at render time too; pruning here
+// keeps them out of the saved record rather than persisting dead config.
+const pruneColumnRules = (rules) => {
+  if (!rules || typeof rules !== 'object') return undefined;
+  const out = {};
+  for (const [col, list] of Object.entries(rules)) {
+    if (!Array.isArray(list)) continue;
+    const kept = list.filter((r) => {
+      if (!r?.color) return false;
+      if (r.op === 'empty') return true;
+      return r.value != null && String(r.value).trim() !== '';
+    });
+    if (kept.length > 0) out[col] = kept;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+};
+
 // ── ts-store absolute-range (range: DSL) datetime <-> epoch-seconds helpers ──
 // The <input type="datetime-local"> value is a local "YYYY-MM-DDTHH:MM" string;
 // the ts-store range: DSL takes epoch SECONDS. These convert each way.
@@ -690,6 +710,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // For dataview: author-set per-column value formats (column name ->
   // 'compact' | 'duration' | 'duration_clock' | 'plain'). Absent = auto.
   const [columnFormats, setColumnFormats] = useState({});
+  // For dataview: per-column conditional-formatting rules (column name ->
+  // [{ op, value, color, target, wholeRow }]). First match wins. Absent =
+  // no conditional styling for that column.
+  const [columnRules, setColumnRules] = useState({});
   // For dataview: which columns to render as table columns. Stored as an
   // explicit whitelist — null/empty means "show all" (default, back-compat).
   // When non-null, the table filters data.columns through this list.
@@ -1132,6 +1156,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       setColumnAliases(chart.data_mapping?.column_aliases || {});
       setColumnWidths(chart.data_mapping?.column_widths || {});
       setColumnFormats(chart.data_mapping?.column_formats || {});
+      setColumnRules(chart.data_mapping?.column_rules || {});
       // Visible columns: null means "show all" (default). Only populated when
       // the admin has actively hidden some.
       const loadedVisible = chart.data_mapping?.visible_columns;
@@ -1444,6 +1469,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         columnAliases: chart.data_mapping?.column_aliases || {},
         columnWidths: chart.data_mapping?.column_widths || {},
         columnFormats: chart.data_mapping?.column_formats || {},
+        columnRules: chart.data_mapping?.column_rules || {},
         visibleColumns: Array.isArray(loadedVisibleSnap) && loadedVisibleSnap.length > 0 ? loadedVisibleSnap : null,
         parserPreset: loadedParserPreset,
         parserDataPath: loadedParser?.data_path || '',
@@ -1520,6 +1546,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         columnAliases: {},
         columnWidths: {},
         columnFormats: {},
+        columnRules: {},
         visibleColumns: null,
         parserPreset: 'none',
         parserDataPath: '',
@@ -1603,6 +1630,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       columnAliases,
       columnWidths,
       columnFormats,
+      columnRules,
       visibleColumns,
       parserPreset,
       parserDataPath,
@@ -1626,7 +1654,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     groupByColumn, seriesColumn, filters, aggregation,
     slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol,
     timeBucketEnabled, timeBucketInterval, timeBucketFunction, timeBucketValueCols, timeBucketTimestampCol,
-    sortBy, sortOrder, limitRows, columnAliases, columnWidths, columnFormats, visibleColumns,
+    sortBy, sortOrder, limitRows, columnAliases, columnWidths, columnFormats, columnRules, visibleColumns,
     parserPreset, parserDataPath, parserTimestampField, parserTimestampScale,
     bandColumns, bandedBarStyle, chartOptions,
     componentCode, showCustomCode, usesDashboardVariable, initialState, onDirtyChange,
@@ -1908,6 +1936,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       return Object.keys(next).length === keys.length ? prev : next;
     });
 
+    // column_rules (dataview) — same treatment: a rule set keyed on a column
+    // the query no longer returns can never fire, so don't carry it forward.
+    setColumnRules((prev) => {
+      if (!prev || typeof prev !== 'object') return prev;
+      const keys = Object.keys(prev);
+      const next = {};
+      for (const k of keys) if (has(k)) next[k] = prev[k];
+      return Object.keys(next).length === keys.length ? prev : next;
+    });
+
     // Time bucket value + timestamp columns.
     setTimeBucketValueCols((prev) => {
       const kept = (prev || []).filter(has);
@@ -2010,6 +2048,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setColumnAliases({});
     setColumnWidths({});
     setColumnFormats({});
+    setColumnRules({});
     setVisibleColumns(null);
     setSlidingWindowEnabled(false);
     setSlidingWindowDuration(300);
@@ -2653,6 +2692,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         column_aliases: Object.keys(columnAliases).length > 0 ? columnAliases : null,
         column_widths: pruneColumnWidths(columnWidths),
         column_formats: Object.keys(columnFormats).length > 0 ? columnFormats : undefined,
+        column_rules: pruneColumnRules(columnRules),
         visible_columns: Array.isArray(visibleColumns) && visibleColumns.length > 0 ? visibleColumns : undefined,
         parser: parserPreset !== 'none' && (parserDataPath || parserTimestampField) ? {
           data_path: parserDataPath || undefined,
@@ -4033,6 +4073,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                   <SpecDrivenSections
                     spec={getChartTypeSpec(chartType)}
                     availableColumns={availableColumns}
+                    // The dataview column manager instantiates the REAL grid
+                    // so the author sizes columns against their own data
+                    // (#214). No other field type reads this.
+                    previewData={previewData}
                     formState={{
                       // data_mapping. multipleYAxis is purely the user's
                       // explicit choice (gated on the chart_type being
@@ -4167,6 +4211,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       column_aliases: columnAliases,
                       column_widths: columnWidths,
                       column_formats: columnFormats,
+                      column_rules: columnRules,
                     }}
                     onFieldChange={(fieldId, value) => {
                       switch (fieldId) {
@@ -4379,6 +4424,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           break;
                         case 'column_formats':
                           setColumnFormats(value);
+                          break;
+                        case 'column_rules':
+                          setColumnRules(value);
                           break;
                         default: break;
                       }
@@ -5156,6 +5204,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           column_aliases: columnAliases,
                           column_widths: pruneColumnWidths(columnWidths),
                           column_formats: Object.keys(columnFormats).length > 0 ? columnFormats : undefined,
+                          column_rules: pruneColumnRules(columnRules),
                         } : undefined,
                         // bandedBarStyle is a sibling state var (not inside
                         // chartOptions); merge it into options for the

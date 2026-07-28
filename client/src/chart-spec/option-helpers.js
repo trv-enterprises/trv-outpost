@@ -83,6 +83,113 @@ export function resolveTextThresholdColor(raw, rules) {
   return null;
 }
 
+// ── Per-column conditional formatting rules (dataview, #214) ─────────
+// Operators for the dataview's column rules. A superset of the text
+// threshold operators above: a table column is often numeric ("errors >
+// 0" → red) or sparse ("is empty" → grey), neither of which the value
+// chart's two string operators can express.
+//
+// The string operators stay case-INSENSITIVE for the same reason as the
+// text thresholds: the same logical state arrives as "Running" or
+// "running" depending on the source.
+export const COLUMN_RULE_OPERATORS = [
+  { value: 'eq', label: 'equals', needsValue: true },
+  { value: 'contains', label: 'contains', needsValue: true },
+  { value: 'gt', label: 'greater than', needsValue: true },
+  { value: 'lt', label: 'less than', needsValue: true },
+  // "is empty" takes no operand — null, undefined, and '' all count. A
+  // value input would be dead UI, so the editor hides it (needsValue).
+  { value: 'empty', label: 'is empty', needsValue: false },
+];
+
+// What a matched rule paints. Background implies text too: a background
+// alone would leave the theme's near-white text on an arbitrary fill,
+// which is the unreadable combination contrastPartnerFor exists to
+// prevent — so 'both' pairs the text from the fill automatically.
+export const COLUMN_RULE_TARGETS = [
+  { value: 'text', label: 'Text' },
+  { value: 'both', label: 'Text + background' },
+];
+
+/**
+ * Evaluate one column's rules against a cell value.
+ *
+ * FIRST MATCH WINS, in list order — same contract as the value chart's
+ * text thresholds, and the reason the editor offers reorder controls
+ * rather than sorting: the order IS the author's logic, letting a
+ * specific `equals` sit above a broad `contains`.
+ *
+ * A rule whose operand is blank is SKIPPED (except `is empty`, which has
+ * no operand). Without that, a half-typed rule would match every row and
+ * make the table look broken while the author is still typing.
+ *
+ * Numeric comparisons coerce both sides and skip when either is
+ * non-numeric, so a `>` rule on a text column simply never fires instead
+ * of throwing or matching by string ordering.
+ *
+ * @param {*} raw          the cell value
+ * @param {Array} rules    [{ op, value, color, target, wholeRow }]
+ * @returns {{color: string, target: string, wholeRow: boolean}|null}
+ */
+export function resolveColumnRule(raw, rules) {
+  if (!Array.isArray(rules) || rules.length === 0) return null;
+  const isEmpty = raw == null || String(raw).trim() === '';
+  const s = isEmpty ? '' : String(raw).toLowerCase();
+  for (const rule of rules) {
+    if (!rule?.color) continue;
+    const op = rule.op || 'eq';
+    const operand = typeof rule.value === 'string' ? rule.value.trim() : rule.value;
+    let hit = false;
+    if (op === 'empty') {
+      hit = isEmpty;
+    } else if (operand == null || operand === '') {
+      continue; // half-typed rule — don't let it capture everything
+    } else if (op === 'gt' || op === 'lt') {
+      const a = Number(raw);
+      const b = Number(operand);
+      if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
+      hit = op === 'gt' ? a > b : a < b;
+    } else if (op === 'contains') {
+      hit = !isEmpty && s.includes(String(operand).toLowerCase());
+    } else {
+      hit = !isEmpty && s === String(operand).toLowerCase();
+    }
+    if (hit) {
+      return {
+        color: rule.color,
+        target: rule.target === 'both' ? 'both' : 'text',
+        wholeRow: rule.wholeRow === true,
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Row-level resolution: the first column (in `columns` order) whose rules
+ * produce a whole-row match decides the row's formatting.
+ *
+ * Whole-row is opt-in per rule, so most tables never reach this. When two
+ * columns both claim the row, the leftmost wins — an arbitrary tiebreak,
+ * but a STABLE and explainable one ("the earlier column decides"), which
+ * beats last-writer-wins by cell iteration order.
+ *
+ * @param {object} row      { [col]: value }
+ * @param {string[]} columns  column order to scan
+ * @param {object} columnRules  { [col]: rule[] }
+ * @returns {{color: string, target: string}|null}
+ */
+export function resolveRowRule(row, columns, columnRules) {
+  if (!row || !columnRules) return null;
+  for (const col of columns) {
+    const rules = columnRules[col];
+    if (!Array.isArray(rules) || rules.length === 0) continue;
+    const hit = resolveColumnRule(row[col], rules);
+    if (hit?.wholeRow) return { color: hit.color, target: hit.target };
+  }
+  return null;
+}
+
 /**
  * Resolve a numeric value to a threshold color, or null when none apply.
  *

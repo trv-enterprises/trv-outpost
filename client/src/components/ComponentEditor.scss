@@ -938,170 +938,242 @@
       margin: 0;
     }
 
-    // Dataview column manager. Rendered by the spec-driven ColumnManager
-    // field type inside .mapping-section.spec-section — NOT under the
-    // legacy .dataview-config wrapper (deleted in the Stage 3 spec
-    // refactor), so these styles hang directly off .mapping-section.
-    .column-aliases-section {
+    // Dataview VISUAL COLUMN FORMATTER (#214). Rendered by the spec-driven
+    // ColumnManager field type inside .mapping-section.spec-section. This
+    // replaced a list of per-column rows (checkbox + rename + width number +
+    // format select) with the real AG Grid: the author drags column edges
+    // and headers directly, and per-column configuration moved into a modal
+    // opened from each header.
+    .column-formatter {
       margin-top: spacing.$spacing-05;
-        padding-top: spacing.$spacing-04;
-        border-top: 1px solid var(--cds-border-subtle-01);
+      padding-top: spacing.$spacing-04;
+      border-top: 1px solid var(--cds-border-subtle-01);
 
-        h5 {
-          color: var(--cds-text-primary);
-          font-size: 0.875rem;
-          font-weight: 600;
-          margin: 0 0 spacing.$spacing-02 0;
-        }
+      .column-formatter__bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: spacing.$spacing-03;
+        margin-bottom: spacing.$spacing-02;
+        flex-wrap: wrap;
+      }
 
-        .aliases-hint {
-          color: var(--cds-text-secondary);
-          font-size: 0.75rem;
-          margin: 0 0 spacing.$spacing-04 0;
-        }
+      .column-formatter__heading {
+        color: var(--cds-text-primary);
+        font-size: 0.875rem;
+        font-weight: 600;
+        margin: 0;
+      }
 
-        .aliases-grid {
-          // One row per line (no side-by-side tiling) so each row reads
-          // as a vertical list entry capped at the 3/4 row width below.
-          display: flex;
-          flex-direction: column;
-          gap: spacing.$spacing-03;
-          max-height: 300px;
-          overflow-y: auto;
+      // Toolbar actions stay grouped and right-justified when the bar wraps,
+      // rather than each button wrapping to its own line.
+      .column-formatter__bar-actions {
+        display: flex;
+        align-items: center;
+        gap: spacing.$spacing-02;
+        margin-left: auto;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
 
-          // Column-label header. Same grid template as .alias-row so the
-          // labels sit directly above the name / rename / width fields.
-          // No row background — reads as a header, not a data row.
-          .aliases-grid__header {
-            display: grid;
-            // Controls column is a FIXED 4.5rem here AND in .alias-row (below)
-            // so the header labels line up with the fields — an `auto` controls
-            // column would size to the checkbox+arrows and diverge from an
-            // empty header spacer.
-            grid-template-columns: 4.5rem minmax(0, 12rem) minmax(0, 12rem) 5rem 10rem; // + Format select
-            justify-content: start;
-            gap: spacing.$spacing-03;
-            padding: 0 spacing.$spacing-03;
-            min-width: 0;
+      .aliases-hint {
+        color: var(--cds-text-secondary);
+        font-size: 0.75rem;
+        margin: 0 0 spacing.$spacing-04 0;
+      }
 
-            span {
-              font-size: 0.6875rem;
-              font-weight: 600;
-              text-transform: uppercase;
-              letter-spacing: 0.02em;
-              color: var(--cds-text-secondary);
-              overflow: hidden;
-              text-overflow: ellipsis;
-              white-space: nowrap;
-            }
+      // The live table. Fixed height: it is a configuration surface, not the
+      // chart preview, so it shows enough rows to size against without
+      // taking over the editor.
+      .column-formatter__grid {
+        height: 320px;
+        min-height: 320px;
+        border: 1px solid var(--cds-border-subtle-01);
+        margin-bottom: spacing.$spacing-04;
+      }
 
-            // "COLUMN (↕)" — the reorder hint rides in parentheses after the
-            // Column label, since the ↕ arrows render alongside the column
-            // name. Let this cell show its full content (don't clip the parens).
-            .aliases-grid__header-column {
-              display: inline-flex;
-              align-items: center;
-              gap: 0.25rem;
-              overflow: visible;
-            }
+      .column-formatter__nodata {
+        padding: spacing.$spacing-05;
+        border: 1px dashed var(--cds-border-subtle-01);
+        text-align: center;
+        margin-bottom: spacing.$spacing-04;
+      }
 
-            .aliases-grid__header-reorder {
-              display: inline-flex;
-              align-items: center;
-              // Stacked carets mirror the row's reorder buttons; the parens
-              // are plain text on either side.
-              .cds--tooltip,
-              svg {
-                fill: currentColor;
-              }
+      // Hidden-column tray. Always visible when non-empty, even with
+      // "Show hidden" off — otherwise a hidden column has no representation
+      // anywhere and can't be found again.
+      .column-formatter__hidden {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: spacing.$spacing-02;
+      }
 
-              svg {
-                display: block;
-                margin: 0 0.0625rem;
-              }
-            }
-          }
-
-          // Packed-left layout: [checkbox ↕] hug their content (auto),
-          // then a name cell and a rename cell each ~1/4 of the row. The
-          // grid is justify-start so leftover width pools on the RIGHT
-          // instead of spreading the cells apart — keeps the arrows tight
-          // to the name (no big gap).
-          .alias-row {
-            // [checkbox ↕] fixed 4.5rem · name ~1/4 · rename ~1/4 · width (px)
-            // fixed. Controls width is fixed (not auto) so the header labels
-            // above line up with the name/rename/width fields.
-            display: grid;
-            grid-template-columns: 4.5rem minmax(0, 12rem) minmax(0, 12rem) 5rem 10rem; // + Format select
-            justify-content: start;
-            align-items: center;
-            gap: spacing.$spacing-03;
-            background-color: var(--cds-layer-02);
-            padding: spacing.$spacing-03;
-            border-radius: 4px;
-            min-width: 0;
-
-            // Controls cell: checkbox at the left edge, reorder arrows
-            // immediately to its right (not stretched/centered).
-            .alias-row__controls {
-              display: flex;
-              align-items: center;
-              gap: spacing.$spacing-02;
-              min-width: 0;
-
-              .cds--checkbox-wrapper,
-              .cds--form-item {
-                flex: 0 0 auto; // checkbox hugs the left edge
-                min-width: 0;
-              }
-
-              .alias-row__reorder {
-                flex: 0 0 auto;        // hug the checkbox, don't expand
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-              }
-            }
-
-            .column-name {
-              font-size: 0.75rem;
-              font-family: 'IBM Plex Mono', monospace;
-              color: var(--cds-text-secondary);
-              overflow: hidden;
-              text-overflow: ellipsis;
-              white-space: nowrap;
-            }
-
-            // Let Carbon's TextInput wrapper shrink inside its grid
-            // cell instead of claiming an intrinsic min-width that
-            // would push the row past the tile on narrow layouts.
-            .cds--text-input-wrapper,
-            .cds--form-item {
-              min-width: 0;
-              width: 100%;
-            }
-
-            .cds--text-input {
-              background-color: transparent;
-            }
-
-            // Per-column width (px). Compact NumberInput in the last cell;
-            // transparent like the alias input so the row reads uniform.
-            .column-width-input {
-              min-width: 0;
-
-              .cds--number__input-wrapper {
-                min-width: 0;
-              }
-
-              .cds--text-input,
-              input {
-                background-color: transparent;
-              }
-            }
-          }
-        }
+      .column-formatter__hidden-label {
+        color: var(--cds-text-secondary);
+        font-size: 0.75rem;
+        margin-right: spacing.$spacing-02;
+      }
     }
+
+    // Editor-mode column header inside the formatter grid. Name on the left,
+    // the live drag width, then the per-column actions.
+    .dvg-editor-header {
+      display: flex;
+      align-items: center;
+      gap: spacing.$spacing-02;
+      width: 100%;
+      min-width: 0;
+
+      .dvg-editor-header__name {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 600;
+      }
+
+      // Live px readout during a drag — deliberately prominent (this is the
+      // number the author is setting) but monospaced so it doesn't reflow
+      // the header as the digits change.
+      .dvg-editor-header__width {
+        flex: 0 0 auto;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.6875rem;
+        color: var(--cds-text-on-color);
+        background-color: var(--cds-support-info);
+        padding: 0 spacing.$spacing-02;
+        border-radius: 2px;
+      }
+
+      .dvg-editor-header__actions {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 1px;
+      }
+
+      .dvg-editor-header__btn {
+        border: none;
+        background: transparent;
+        color: var(--cds-text-secondary);
+        cursor: pointer;
+        padding: 0 spacing.$spacing-02;
+        line-height: 1.5rem;
+        border-radius: 2px;
+
+        &:hover {
+          background-color: var(--cds-layer-hover-01);
+          color: var(--cds-text-primary);
+        }
+
+        &:focus-visible {
+          outline: 2px solid var(--cds-focus);
+          outline-offset: -2px;
+        }
+      }
+
+      .dvg-editor-header__btn--hide:hover {
+        color: var(--cds-support-error);
+      }
+
+      // A hidden column shown only so it can be brought back.
+      &--hidden {
+        opacity: 0.55;
+        font-style: italic;
+      }
+    }
+
+    // Cells of a hidden column: dimmed, so the eye skips them while the
+    // author sizes the columns that are actually in the table.
+    .dvg-cell--hidden-col {
+      opacity: 0.4;
+    }
+
+    // Per-column options modal (display name / format / width / rules).
+    .column-options-modal {
+      .column-options-modal__grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+        gap: spacing.$spacing-05;
+        padding-top: spacing.$spacing-03;
+      }
+    }
+
+    // Conditional-format rule editor. Two lines per rule: the condition on
+    // top, the color + scope + preview beneath, so a rule reads as one block
+    // instead of a very wide row that wraps unpredictably.
+    .column-rule-list {
+      .column-rule-list__empty {
+        color: var(--cds-text-secondary);
+        font-size: 0.75rem;
+        font-style: italic;
+        margin: 0 0 spacing.$spacing-04 0;
+      }
+
+      .column-rule-list__rule {
+        border: 1px solid var(--cds-border-subtle-01);
+        border-radius: 2px;
+        padding: spacing.$spacing-04;
+        margin-bottom: spacing.$spacing-04;
+      }
+
+      .column-rule-list__line {
+        display: flex;
+        align-items: flex-end;
+        gap: spacing.$spacing-04;
+        flex-wrap: wrap;
+
+        &--second {
+          margin-top: spacing.$spacing-04;
+          align-items: center;
+        }
+      }
+
+      .column-rule-list__op,
+      .column-rule-list__target {
+        min-width: 10rem;
+      }
+
+      .column-rule-list__value {
+        min-width: 12rem;
+        flex: 1 1 auto;
+      }
+
+      .column-rule-list__reorder {
+        display: flex;
+        align-items: center;
+        gap: 1px;
+        margin-left: auto;
+      }
+
+      .column-rule-list__color {
+        display: flex;
+        align-items: center;
+        gap: spacing.$spacing-03;
+      }
+
+      .column-rule-list__color-label {
+        color: var(--cds-text-secondary);
+        font-size: 0.75rem;
+      }
+
+      // Shows the rule exactly as the grid will paint it, so the author
+      // doesn't have to save and switch to preview to check readability.
+      .column-rule-list__preview {
+        margin-left: auto;
+        padding: spacing.$spacing-02 spacing.$spacing-04;
+        border-radius: 2px;
+        font-size: 0.875rem;
+        font-weight: 600;
+      }
+
+      .column-rule-list__row-note {
+        margin-top: spacing.$spacing-03;
+      }
+    }
+
 
     // Grid should use full width - remove Carbon Grid padding
     .cds--grid {

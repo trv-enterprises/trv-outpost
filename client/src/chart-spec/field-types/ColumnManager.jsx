@@ -2,10 +2,11 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState } from 'react';
-import { Button, Checkbox, IconButton, NumberInput, Select, SelectItem, TextInput } from '@carbon/react';
-import { CaretUp, CaretDown } from '@carbon/icons-react';
+import { useCallback, useMemo, useState } from 'react';
+import { Button, Toggle, Tag } from '@carbon/react';
 import { useSpecRenderContext } from '../SpecContext';
+import DataViewGrid from '../views/DataViewGrid';
+import ColumnOptionsModal from './ColumnOptionsModal';
 
 // Per-column value formats — the number tile's vocabulary (number-formats.js),
 // minus its date/time preset (timestamp columns already auto-format).
@@ -17,76 +18,161 @@ const COLUMN_FORMATS = [
   { value: 'plain', label: 'Plain number' },
 ];
 
-// Editor row order at first sight of the columns: hidden columns anchored at
-// their discovered-schema slots, visible columns filling the remaining slots
-// in table (visible_columns) order — so a saved custom order is what the
-// author sees when the editor opens.
-const slotMerge = (available, visible) => {
-  const visInAvail = visible.filter((c) => available.includes(c));
-  const visSet = new Set(visInAvail);
-  let vi = 0;
-  return available.map((c) => (visSet.has(c) ? visInAvail[vi++] : c));
-};
-
 /**
- * ColumnManager — dataview's bespoke editor widget. A per-column row with:
- * a visibility checkbox, reorder (↕) buttons, the column name, and an
- * optional display-name (alias) text input.
+ * ColumnManager — dataview's bespoke editor widget: a VISUAL COLUMN
+ * FORMATTER built on the real table (#214).
  *
- * Unlike single-value field types, this manages TWO bound values:
+ * The author sees the actual AG Grid they're configuring, with their own
+ * data in it, and manipulates the layout directly: drag a column edge to
+ * set its width, drag a header to reorder, click ✕ to hide. Everything
+ * spatial is a gesture on the table itself. Per-column configuration that
+ * isn't spatial — display name, value format, exact pixel width,
+ * conditional-format rules — opens from the header's ⚙ button
+ * (ColumnOptionsModal).
+ *
+ * This replaced a list of per-column rows carrying a "Width (px)"
+ * NumberInput: the author typed a pixel count blind, saved, and switched
+ * to preview to find out what it looked like. The number is still
+ * reachable in the modal for the cases a drag can't serve (an exact
+ * value, matching a width across two tables), but it is no longer the
+ * only way in.
+ *
+ * WIDTH PRECEDENCE — the load-bearing part. The viewer-facing rule is
+ * "viewer drag > author width > autosize", with `widthBase` recording
+ * which author width a viewer's drag was made against so a later author
+ * re-pin invalidates the stale override. An editor drag therefore writes
+ * the AUTHOR layer (column_widths) and must never be captured as a user
+ * override — otherwise the author's own drag becomes its own widthBase
+ * and their next change looks stale. DataViewGrid's `editable` prop is
+ * what routes the two apart; see the comments on handleColumnResized.
+ *
+ * It manages several bound values, not one:
  *   - visible_columns (ordered whitelist; null = show all)
  *   - column_aliases  ({ col → display name })
- * It reads both from formState (keys `visible_columns` / `column_aliases`)
- * and writes via onFieldChange under those ids. (The spec field's own id,
- * `column_manager`, is just the React key — the editor's formState builder
- * + onFieldChange switch supply/consume the two underlying keys, same
- * multi-id-feeds-one-widget pattern as banded_bar's band columns.)
- *
- * Ported from the legacy `chartType === 'dataview'` editor JSX in
- * ComponentEditor.
- *
- * visible-column semantics: visible_columns = null means "show all" (the
- * default + back-compat). As soon as the user touches a checkbox it
- * switches to an explicit whitelist (an empty array = hide all).
+ *   - column_widths   ({ col → px })
+ *   - column_formats  ({ col → format id })
+ *   - column_rules    ({ col → rule[] })
+ * It reads them from formState and writes via onFieldChange under those
+ * ids. (The spec field's own id, `column_manager`, is just the React key
+ * — the editor's formState builder + onFieldChange switch supply and
+ * consume the underlying keys, the same multi-id-feeds-one-widget
+ * pattern as banded_bar's band columns.)
  */
 export default function ColumnManager() {
-  const { availableColumns, formState, onFieldChange } = useSpecRenderContext();
+  const { availableColumns, formState, onFieldChange, previewData } = useSpecRenderContext();
   const visibleColumns = formState.visible_columns ?? null;
   const columnAliases = formState.column_aliases || {};
-  // Author-set per-column pixel widths ({ col → px }). Blank = auto. These are
-  // the chart default; a viewer's live drag-resize still overrides per-user.
   const columnWidths = formState.column_widths || {};
-  // Author-set per-column value formats ({ col → format id }). Missing =
-  // 'auto' (default cell formatting).
   const columnFormats = formState.column_formats || {};
+  const columnRules = formState.column_rules || {};
+
+  // Which column's options modal is open (null = none).
+  const [editingColumn, setEditingColumn] = useState(null);
+  // Reveal hidden columns IN THE TABLE. Off by default and that's the
+  // point: the author hides columns to get them out of the way, and
+  // sizing the remaining ones against a table still full of noise defeats
+  // the purpose. On, hidden columns come back greyed so they can be
+  // un-hidden without leaving the table.
+  const [showHidden, setShowHidden] = useState(false);
 
   const effectiveVisible = Array.isArray(visibleColumns)
-    ? visibleColumns
+    ? visibleColumns.filter((c) => availableColumns.includes(c))
     : (availableColumns || []);
-  const isVisible = (col) => effectiveVisible.includes(col);
+  const isVisible = useCallback(
+    (col) => (Array.isArray(visibleColumns) ? visibleColumns.includes(col) : true),
+    [visibleColumns]
+  );
 
-  // Editor row order — the ONE thing that decides where a row renders, and
-  // ONLY the reorder arrows mutate it (each press swaps the two affected
-  // rows on screen). Visibility toggles never move a row: the old
-  // visible-then-hidden re-sort yanked rows under the cursor on uncheck
-  // (click-stealing), and the fix for THAT froze rows entirely — so arrow
-  // presses reordered the real table invisibly while the arrows' disabled
-  // states tracked a position the editor didn't show. Row order is frozen
-  // from the saved order when columns first appear (render-phase lazy init,
-  // the React "adjust state during render" pattern), then reconciled only
-  // when the discovered column set itself changes.
-  const [rowOrder, setRowOrder] = useState([]);
-  if (availableColumns?.length) {
-    if (rowOrder.length === 0) {
-      setRowOrder(slotMerge(availableColumns, effectiveVisible));
-    } else {
-      const kept = rowOrder.filter((c) => availableColumns.includes(c));
-      const added = availableColumns.filter((c) => !kept.includes(c));
-      if (kept.length !== rowOrder.length || added.length > 0) {
-        setRowOrder([...kept, ...added]);
-      }
+  const setVisible = (next) => onFieldChange('visible_columns', next);
+
+  // Hidden columns, in discovered-schema order — the tray below the table.
+  const hiddenColumns = (availableColumns || []).filter((c) => !isVisible(c));
+
+  // Columns the grid renders. With Show hidden on, hidden columns are
+  // appended after the visible ones rather than restored to their schema
+  // slots: they have no table position (that's what hidden means), and
+  // interleaving them would shuffle the visible layout the author is
+  // actively sizing.
+  const gridColumns = showHidden
+    ? [...effectiveVisible, ...hiddenColumns]
+    : effectiveVisible;
+
+  const hide = (col) => {
+    // Hiding switches null ("show all") into an explicit whitelist. An
+    // empty array is a real value — explicit hide-all — not a reversion
+    // to show-all.
+    setVisible(effectiveVisible.filter((c) => c !== col));
+  };
+
+  const show = (col) => {
+    if (isVisible(col)) return;
+    setVisible([...effectiveVisible, col]);
+  };
+
+  const setWidth = (col, raw) => {
+    const updated = { ...columnWidths };
+    const n = Number(raw);
+    // Blank / 0 / non-numeric = auto: drop the key rather than store 0.
+    if (raw === '' || raw == null || !Number.isFinite(n) || n <= 0) delete updated[col];
+    else updated[col] = n;
+    onFieldChange('column_widths', updated);
+  };
+
+  // A drag on the grid's column edge — the primary width gesture. Writes
+  // the AUTHOR layer (see the precedence note in the docblock).
+  const handleAuthorWidthChange = useCallback((col, px) => {
+    const updated = { ...(formState.column_widths || {}) };
+    updated[col] = px;
+    onFieldChange('column_widths', updated);
+  }, [formState.column_widths, onFieldChange]);
+
+  // A header drag — reorder. Writes visible_columns, which IS the table
+  // order. Hidden columns are filtered back out: with Show hidden on they
+  // appear in the grid, so the id list AG Grid hands back includes them,
+  // and letting them into visible_columns would silently un-hide them.
+  const handleAuthorOrderChange = useCallback((ids) => {
+    const next = ids.filter((c) => isVisible(c));
+    onFieldChange('visible_columns', next);
+  }, [isVisible, onFieldChange]);
+
+  // Clear a column's width back to content-autosize.
+  const autoSize = (col) => setWidth(col, '');
+
+  const clearAllWidths = () => onFieldChange('column_widths', {});
+
+  const patchColumn = (col, patch) => {
+    if ('alias' in patch) {
+      const updated = { ...columnAliases };
+      if (patch.alias) updated[col] = patch.alias;
+      else delete updated[col];
+      onFieldChange('column_aliases', updated);
     }
-  }
+    if ('format' in patch) {
+      const updated = { ...columnFormats };
+      if (!patch.format || patch.format === 'auto') delete updated[col];
+      else updated[col] = patch.format;
+      onFieldChange('column_formats', updated);
+    }
+    if ('width' in patch) setWidth(col, patch.width);
+    if ('rules' in patch) {
+      const updated = { ...columnRules };
+      if (Array.isArray(patch.rules) && patch.rules.length > 0) updated[col] = patch.rules;
+      else delete updated[col];
+      onFieldChange('column_rules', updated);
+    }
+  };
+
+  // The grid needs a { columns, rows } shape. previewData already has it;
+  // restrict the columns to what we're showing so the grid doesn't build
+  // defs for columns the author has hidden.
+  const gridDataCtx = useMemo(() => {
+    if (!previewData?.columns) return { data: null, loading: false, error: null };
+    return {
+      data: { columns: previewData.columns, rows: previewData.rows || [] },
+      loading: false,
+      error: null,
+    };
+  }, [previewData]);
 
   if (!availableColumns || availableColumns.length === 0) {
     return (
@@ -96,201 +182,111 @@ export default function ColumnManager() {
     );
   }
 
-  const setVisible = (next) => onFieldChange('visible_columns', next);
-  const setAliases = (next) => onFieldChange('column_aliases', next);
-  const setWidths = (next) => onFieldChange('column_widths', next);
-  const setFormats = (next) => onFieldChange('column_formats', next);
-
-  const displayOrder = rowOrder.length ? rowOrder : availableColumns;
-
-  const toggleVisible = (col) => {
-    if (isVisible(col)) {
-      // Hiding: drop the column. If that empties the list, keep it as []
-      // (explicit hide-all) rather than reverting to null/show-all.
-      setVisible(effectiveVisible.filter((c) => c !== col));
-    } else {
-      // Showing: insert at the column's ON-SCREEN position among the visible
-      // rows, so the table order matches what the editor shows. (The old
-      // rebuild-from-availableColumns reset the author's entire custom order
-      // every time a hidden column was re-checked.)
-      const before = displayOrder
-        .slice(0, displayOrder.indexOf(col))
-        .filter((c) => effectiveVisible.includes(c)).length;
-      const next = effectiveVisible.filter((c) => availableColumns.includes(c));
-      next.splice(before, 0, col);
-      setVisible(next);
-    }
-  };
-
   const allVisible = availableColumns.every(isVisible);
-
-  const visibleList = effectiveVisible.filter((c) => availableColumns.includes(c));
-
-  const moveColumn = (col, delta) => {
-    // Reorder only acts within the visible group (hidden columns have no
-    // table position). Swaps the column with its visible neighbor in BOTH
-    // visible_columns (the table order) and rowOrder (the editor rows) —
-    // on screen the two rows trade places, hopping over any hidden rows
-    // that sit between them.
-    const idx = visibleList.indexOf(col);
-    const target = idx + delta;
-    if (idx < 0 || target < 0 || target >= visibleList.length) return;
-    const neighbor = visibleList[target];
-    const next = [...visibleList];
-    next[idx] = neighbor;
-    next[target] = col;
-    setVisible(next);
-    setRowOrder((prev) => {
-      const a = prev.indexOf(col);
-      const b = prev.indexOf(neighbor);
-      if (a < 0 || b < 0) return prev;
-      const swapped = [...prev];
-      swapped[a] = neighbor;
-      swapped[b] = col;
-      return swapped;
-    });
-  };
-
-  const setAlias = (col, newValue) => {
-    const updated = { ...columnAliases };
-    if (newValue) updated[col] = newValue;
-    else delete updated[col];
-    setAliases(updated);
-  };
-
-  const setWidth = (col, raw) => {
-    const updated = { ...columnWidths };
-    const n = Number(raw);
-    // Blank / 0 / non-numeric = auto: drop the key rather than store 0.
-    if (raw === '' || raw == null || !Number.isFinite(n) || n <= 0) delete updated[col];
-    else updated[col] = n;
-    setWidths(updated);
-  };
-
-  const setFormat = (col, fmt) => {
-    const updated = { ...columnFormats };
-    // 'auto' is the default — drop the key rather than store it.
-    if (!fmt || fmt === 'auto') delete updated[col];
-    else updated[col] = fmt;
-    setFormats(updated);
-  };
-
-  const renderRow = (col, opts) => (
-    <div key={col} className="alias-row">
-      {/* First quarter: checkbox anchored left, reorder arrows centered
-          in the remaining space. Grouped so the column name stays one
-          cell over, not pushed away by the arrows. */}
-      <div className="alias-row__controls">
-        <Checkbox
-          id={`visible-${col}`}
-          labelText=""
-          checked={isVisible(col)}
-          onChange={() => toggleVisible(col)}
-        />
-        <div className="alias-row__reorder" style={{ visibility: opts.canReorder ? 'visible' : 'hidden' }}>
-          <IconButton kind="ghost" size="sm" label="Move up" onClick={() => moveColumn(col, -1)} disabled={!opts.canMoveUp}>
-            <CaretUp size={14} />
-          </IconButton>
-          <IconButton kind="ghost" size="sm" label="Move down" onClick={() => moveColumn(col, 1)} disabled={!opts.canMoveDown}>
-            <CaretDown size={14} />
-          </IconButton>
-        </div>
-      </div>
-      <span className="column-name" title={col}>{col}</span>
-      <TextInput
-        id={`alias-${col}`}
-        labelText=""
-        placeholder="rename"
-        value={columnAliases[col] || ''}
-        onChange={(e) => setAlias(col, e.target.value)}
-        size="sm"
-        disabled={!isVisible(col)}
-      />
-      <NumberInput
-        id={`width-${col}`}
-        label=""
-        hideLabel
-        className="column-width-input"
-        placeholder="auto"
-        value={columnWidths[col] ?? ''}
-        allowEmpty
-        min={1}
-        max={2000}
-        step={10}
-        hideSteppers
-        onChange={(_e, { value }) => setWidth(col, value)}
-        size="sm"
-        disabled={!isVisible(col)}
-      />
-      <Select
-        id={`format-${col}`}
-        labelText=""
-        hideLabel
-        size="sm"
-        className="column-format-select"
-        value={columnFormats[col] || 'auto'}
-        onChange={(e) => setFormat(col, e.target.value)}
-        disabled={!isVisible(col)}
-      >
-        {COLUMN_FORMATS.map((f) => (
-          <SelectItem key={f.value} value={f.value} text={f.label} />
-        ))}
-      </Select>
-    </div>
-  );
+  const hasData = !!previewData?.rows?.length;
 
   return (
-    <div className="column-aliases-section">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.5rem' }}>
-        <h5 style={{ margin: 0 }}>Columns</h5>
-        {/* Show all adopts the current ON-SCREEN order as the explicit table
-            order (not null/schema order) — rows never move, and the table
-            keeps matching the editor. Hide all keeps rows put too ([]). */}
-        <Button kind="ghost" size="sm" onClick={() => setVisible(allVisible ? [] : [...displayOrder])}>
-          {allVisible ? 'Hide all' : 'Show all'}
-        </Button>
-      </div>
-      <p className="aliases-hint">
-        Check to include the column. Use the ↕ arrows to reorder, set an optional display name, a fixed pixel width (blank = auto-size to fit), and a value format (e.g. Compact turns 136365211648 into 127.0G). A viewer can still drag the header in the live table to override the width for their own session.
-      </p>
-      <div className="aliases-grid">
-        {/* Header row — aligned to the same grid as each column row so the
-            three data fields are labelled once. The first cell hints at the
-            reorder (↕) control that sits under it; the rest label the data
-            fields. Without it the "rename" and "auto" placeholders don't say
-            what they are once a value is typed. */}
-        <div className="aliases-grid__header" aria-hidden="true">
-          {/* First cell sits over the checkbox — no label. The Column header
-              carries a parenthetical reorder hint, since the ↕ arrows render
-              alongside the column name. */}
-          <span />
-          <span className="aliases-grid__header-column">
-            Column
-            <span className="aliases-grid__header-reorder">
-              (
-              <CaretUp size={10} />
-              <CaretDown size={10} />
-              )
-            </span>
-          </span>
-          <span>Display name</span>
-          <span>Width (px)</span>
-          <span>Format</span>
+    <div className="column-formatter">
+      <div className="column-formatter__bar">
+        <h5 className="column-formatter__heading">Columns</h5>
+        <div className="column-formatter__bar-actions">
+          {hiddenColumns.length > 0 && (
+            <Toggle
+              id="column-formatter-show-hidden"
+              size="sm"
+              labelText=""
+              labelA="Show hidden"
+              labelB="Show hidden"
+              toggled={showHidden}
+              onToggle={setShowHidden}
+            />
+          )}
+          <Button kind="ghost" size="sm" onClick={clearAllWidths}>
+            Auto-size all
+          </Button>
+          <Button
+            kind="ghost"
+            size="sm"
+            onClick={() => setVisible(allVisible ? [] : [...availableColumns])}
+          >
+            {allVisible ? 'Hide all' : 'Show all'}
+          </Button>
         </div>
-        {/* One stable list — rows never relocate on a visibility toggle. A
-            column's reorder arrows are active only while it's visible (hidden
-            columns have no table position); position is its index within the
-            visible group. */}
-        {displayOrder.map((col) => {
-          const vIdx = visibleList.indexOf(col);
-          const isVis = vIdx >= 0;
-          return renderRow(col, {
-            canReorder: isVis,
-            canMoveUp: isVis && vIdx > 0,
-            canMoveDown: isVis && vIdx < visibleList.length - 1,
-          });
-        })}
       </div>
+
+      <p className="aliases-hint">
+        Drag a column edge to set its width, drag a header to reorder, and use each header&rsquo;s
+        controls to hide it or open its options (display name, value format, conditional
+        formatting). Widths set here are the chart default — a viewer can still drag the header
+        in the live table to override them for their own session.
+      </p>
+
+      {hasData ? (
+        <div className="column-formatter__grid">
+          <DataViewGrid
+            key={gridColumns.join('|')}
+            columnAliases={columnAliases}
+            columnWidths={columnWidths}
+            columnFormats={columnFormats}
+            columnRules={columnRules}
+            visibleColumnsConfig={gridColumns}
+            config={{ id: '', options: { showTitle: false } }}
+            dataCtx={gridDataCtx}
+            editable
+            editorHiddenColumns={showHidden ? hiddenColumns : []}
+            onAuthorWidthChange={handleAuthorWidthChange}
+            onAuthorOrderChange={handleAuthorOrderChange}
+            onEditColumn={setEditingColumn}
+            onHideColumn={hide}
+            onShowColumn={show}
+            onAutoSizeColumn={autoSize}
+          />
+        </div>
+      ) : (
+        // Columns are known (the schema came back) but there are no rows to
+        // render. Sizing against an empty table would be guesswork, so say
+        // so rather than showing an empty grid that looks broken.
+        <p className="aliases-hint column-formatter__nodata">
+          Run the query to load rows — the table below sizes against your real data.
+        </p>
+      )}
+
+      {/* Hidden-column tray. Always listed even when Show hidden is off:
+          otherwise a hidden column is invisible in BOTH places and the
+          author has no way to discover it, which is the bug this whole
+          section exists to avoid. */}
+      {hiddenColumns.length > 0 && (
+        <div className="column-formatter__hidden">
+          <span className="column-formatter__hidden-label">
+            Hidden ({hiddenColumns.length}):
+          </span>
+          {hiddenColumns.map((col) => (
+            <Tag
+              key={col}
+              type="gray"
+              size="sm"
+              filter
+              onClose={() => show(col)}
+              title="Show this column"
+            >
+              {col}
+            </Tag>
+          ))}
+        </div>
+      )}
+
+      {editingColumn && (
+        <ColumnOptionsModal
+          column={editingColumn}
+          alias={columnAliases[editingColumn] || ''}
+          format={columnFormats[editingColumn] || 'auto'}
+          width={columnWidths[editingColumn] ?? ''}
+          rules={columnRules[editingColumn] || []}
+          formats={COLUMN_FORMATS}
+          onChange={(patch) => patchColumn(editingColumn, patch)}
+          onClose={() => setEditingColumn(null)}
+        />
+      )}
     </div>
   );
 }
