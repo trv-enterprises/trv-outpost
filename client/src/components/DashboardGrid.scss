@@ -433,6 +433,45 @@
         font-size: 0.75rem;
       }
     }
+
+    // ── Transparent panels (admin setting `transparent_panels`) ──────
+    // Strips the panel's own surface so components read as floating
+    // directly on the dashboard canvas: the raised fill, the border, the
+    // drop shadow, and the legacy .chart-header band's fill all go.
+    //
+    // Gated on a ROOT attribute set by App.jsx, so the whole deployment
+    // flips from one place — the same shape as the theme itself, and the
+    // reason the rule lives here rather than being threaded through every
+    // panel as a prop.
+    //
+    // Only chrome is removed. Nothing here touches layout — no padding,
+    // sizing, or flex changes — so panel geometry is byte-identical with
+    // the setting on or off, and a component that paints its OWN
+    // background (a value tile with a background color) still shows it.
+    :root[data-transparent-panels='true'] & {
+      .panel-container {
+        background-color: transparent;
+        border-color: transparent;
+
+        // The shadow is what makes a panel read as raised; keeping it
+        // over a transparent fill leaves a floating rectangle of haze.
+        &.has-component {
+          box-shadow: none;
+        }
+
+        &.text-label-panel {
+          background-color: transparent;
+        }
+
+        // Legacy (non-spec) title band. The spec-driven bands in
+        // ChartShell / ValueView / DataViewGrid draw no background of
+        // their own, so they need no counterpart rule here.
+        .chart-header {
+          background-color: transparent;
+          border-bottom-color: transparent;
+        }
+      }
+    }
   }
 }
 
