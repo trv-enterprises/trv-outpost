@@ -3,6 +3,7 @@
 // See LICENSE file for details.
 
 import { useCallback, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Button, Toggle, Tag } from '@carbon/react';
 import { useSpecRenderContext } from '../SpecContext';
 import DataViewGrid from '../views/DataViewGrid';
@@ -182,7 +183,6 @@ export default function ColumnManager() {
     );
   }
 
-  const allVisible = availableColumns.every(isVisible);
   const hasData = !!previewData?.rows?.length;
 
   return (
@@ -203,13 +203,6 @@ export default function ColumnManager() {
           )}
           <Button kind="ghost" size="sm" onClick={clearAllWidths}>
             Auto-size all
-          </Button>
-          <Button
-            kind="ghost"
-            size="sm"
-            onClick={() => setVisible(allVisible ? [] : [...availableColumns])}
-          >
-            {allVisible ? 'Hide all' : 'Show all'}
           </Button>
         </div>
       </div>
@@ -275,7 +268,19 @@ export default function ColumnManager() {
         </div>
       )}
 
-      {editingColumn && (
+      {/* PORTALED to <body>, like every other nested modal the editor opens
+          (connection picker, chart-type picker, value pickers). When the
+          editor itself is inside ComponentEditorModal — the "Edit Chart"
+          dialog reached from a dashboard — an inline modal renders INSIDE
+          that outer modal's container and inherits its box: it was pushed
+          off-center and spilled past the right edge of the screen. Portaling
+          escapes to the top level, where the 40% width and centering apply
+          against the viewport as intended.
+
+          The outer modal already lists `.cds--modal` in
+          selectorsFloatingMenus, so its focus trap leaves portaled modals'
+          inputs alone (see the note in ComponentEditorModal). */}
+      {editingColumn && createPortal(
         <ColumnOptionsModal
           column={editingColumn}
           alias={columnAliases[editingColumn] || ''}
@@ -285,7 +290,8 @@ export default function ColumnManager() {
           formats={COLUMN_FORMATS}
           onChange={(patch) => patchColumn(editingColumn, patch)}
           onClose={() => setEditingColumn(null)}
-        />
+        />,
+        document.body
       )}
     </div>
   );

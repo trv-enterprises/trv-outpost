@@ -1014,8 +1014,8 @@
         // Measured correct at 33.6px × 1px and still invisible on screen,
         // so the fix is contrast, not geometry.
         .ag-header-cell-resize::after {
-          top: 20%;
-          height: 60%;
+          top: 35%;
+          height: 30%;
           width: 1px;
           background-color: var(--cds-border-strong-01);
         }
