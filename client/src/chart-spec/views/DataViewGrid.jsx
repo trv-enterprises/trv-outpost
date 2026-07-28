@@ -269,6 +269,25 @@ export default function DataViewGrid({
     gridRef.current?.api?.refreshHeader();
   }, [liveResize, editable]);
 
+  // Repaint rows when the conditional-format rules change.
+  //
+  // getRowStyle is a GRID-LEVEL prop: AG Grid calls it as rows render and
+  // does not re-run it on already-rendered rows just because the function
+  // identity changed. So editing rules left the previous row styling stuck
+  // on the DOM — un-checking "color the whole row" kept every cell's TEXT
+  // red (the stale inline row style) while the driving cell's background
+  // updated correctly, because cellStyle re-derives through columnDefs.
+  // The result was a mixed state that matched neither rule shape, and it
+  // "fixed itself" on the next edit only because that re-rendered the rows.
+  //
+  // redrawRows() forces the row styles to be re-evaluated. Rules change on
+  // author edits only — never per frame — so this is not a hot path.
+  const skipFirstRedrawRef = useRef(true);
+  useEffect(() => {
+    if (skipFirstRedrawRef.current) { skipFirstRedrawRef.current = false; return; }
+    gridRef.current?.api?.redrawRows();
+  }, [columnRulesKey]);
+
   // Auto-size a column the moment its author width is REMOVED.
   //
   // Clearing the width only stops us from setting def.width — it does not
