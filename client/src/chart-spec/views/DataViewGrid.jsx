@@ -269,6 +269,39 @@ export default function DataViewGrid({
     gridRef.current?.api?.refreshHeader();
   }, [liveResize, editable]);
 
+  // Auto-size a column the moment its author width is REMOVED.
+  //
+  // Clearing the width only stops us from setting def.width — it does not
+  // shrink the column, because AG Grid keeps whatever width it is already
+  // rendering at. (autoSizeStrategy doesn't help: it runs on data render,
+  // not on a columnDefs update.) So pressing Auto-size cleared the stored
+  // value and nothing moved on screen, which reads as a dead button.
+  //
+  // Diff the author-width keys against the previous render and explicitly
+  // auto-size whichever columns just lost theirs. Editor-only; view mode
+  // never edits author widths.
+  const prevWidthKeysRef = useRef(null);
+  useEffect(() => {
+    if (!editable) return;
+    const current = new Set(
+      Object.entries(columnWidths || {})
+        .filter(([, w]) => Number.isFinite(Number(w)) && Number(w) > 0)
+        .map(([c]) => c)
+    );
+    const prev = prevWidthKeysRef.current;
+    prevWidthKeysRef.current = current;
+    if (!prev) return; // first render — nothing was cleared
+    const cleared = [...prev].filter((c) => !current.has(c));
+    if (cleared.length === 0) return;
+    const api = gridRef.current?.api;
+    if (!api) return;
+    // Only size columns the grid still displays; a cleared width on a
+    // since-hidden column has nothing to resize.
+    const live = cleared.filter((c) => api.getColumn?.(c));
+    if (live.length > 0) api.autoSizeColumns(live);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [columnWidthsKey, editable]);
+
   useEffect(() => {
     const api = gridRef.current?.api;
     if (!api || latestRowObjs.length === 0) return;
