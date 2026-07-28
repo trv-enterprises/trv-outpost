@@ -172,6 +172,30 @@ check('null cell → empty string, not "null"',
 check('no rows → empty string',
   buildOption(vals({}, ['cpu_percent']), data(['ts', 'cpu_percent'], [])).props.formatted === '');
 
+// --- aggregated value ----------------------------------------------------
+// applyAggregation (dataTransforms) puts avg/min/max/sum/count into a
+// separate `aggregatedValue` and leaves `rows` UNTOUCHED, so a tile
+// reading rows[0] showed the first raw sample while the author had asked
+// for an average. Prefer the aggregate whenever it is a real number.
+const withAgg = (agg, rows = [['2026-01-01T00:00:00Z', 21.456]]) => ({
+  ...data(['ts', 'cpu_percent'], rows), aggregatedValue: agg,
+});
+check('aggregatedValue overrides row 0',
+  buildOption(vals({ valueFormat: 'plain', valueDecimals: '1' }), withAgg(88.25)).props.formatted === '88.3');
+check('no aggregatedValue → row 0 (unchanged)',
+  buildOption(vals({ valueFormat: 'plain', valueDecimals: '1' }), numeric).props.formatted === '21.5');
+check('null aggregatedValue → row 0',
+  buildOption(vals({ valueFormat: 'plain', valueDecimals: '1' }), withAgg(null)).props.formatted === '21.5');
+// count over an empty set is 0 — a real aggregate, not "unset".
+check('aggregatedValue 0 is honored, not treated as absent',
+  buildOption(vals({ valueFormat: 'plain', valueDecimals: '0' }), withAgg(0)).props.formatted === '0');
+check('non-numeric aggregatedValue ignored',
+  buildOption(vals({ valueFormat: 'plain', valueDecimals: '1' }), withAgg('n/a')).props.formatted === '21.5');
+// A TEXT tile must keep its string: the aggregate is always numeric, so
+// letting it win would turn a status readout into a number.
+check('text value keeps its string despite an aggregate',
+  buildOption(vals({ valueType: 'text' }, ['s']), { ...data(['s'], [['online']]), aggregatedValue: 3 }).props.formatted === 'online');
+
 if (FAILURES.length > 0) {
   process.stderr.write(`\n${FAILURES.length} failure(s):\n${FAILURES.join('\n')}\n`);
   process.exit(1);

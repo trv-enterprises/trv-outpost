@@ -40,96 +40,340 @@
     {
       "id": "chart_options",
       "label": "Gauge Options",
-      "layout": "row-4",
-      "fields": [
+      "subsections": [
         {
-          "id": "gauge_min",
-          "binds": "options.gaugeMin",
-          "type": "number",
-          "label": "Min Value",
-          "default": 0,
-          "min": -1000000,
-          "step": 1
-        },
-        {
-          "id": "gauge_max",
-          "binds": "options.gaugeMax",
-          "type": "number",
-          "label": "Max Value",
-          "default": 100,
-          "max": 1000000,
-          "step": 1
-        },
-        {
-          "id": "gauge_warning_threshold",
-          "binds": "options.gaugeWarningThreshold",
-          "type": "number",
-          "label": "Warning Threshold (%)",
-          "default": 70,
-          "min": 0,
-          "max": 100,
-          "step": 1,
-          "helperText": "Yellow zone starts"
-        },
-        {
-          "id": "gauge_danger_threshold",
-          "binds": "options.gaugeDangerThreshold",
-          "type": "number",
-          "label": "Danger Threshold (%)",
-          "default": 90,
-          "min": 0,
-          "max": 100,
-          "step": 1,
-          "helperText": "Red zone starts"
-        }
-      ]
-    },
-    {
-      "id": "chart_options_extras",
-      "label": "Appearance",
-      "layout": "row-3",
-      "fields": [
-        {
-          "id": "gauge_unit",
-          "binds": "options.gaugeUnit",
-          "type": "text",
-          "label": "Unit Suffix",
-          "default": "",
-          "placeholder": "e.g., °F, %, psi"
-        },
-        {
-          "id": "gauge_decimals",
-          "binds": "options.gaugeDecimals",
-          "type": "enum",
-          "label": "Decimal places",
-          "default": "auto",
-          "helperText": "Auto keeps the source precision (up to 2 places). Pick a number to force exactly that many decimals.",
-          "options": [
-            { "value": "auto", "label": "Auto" },
-            { "value": "0", "label": "0" },
-            { "value": "1", "label": "1" },
-            { "value": "2", "label": "2" },
-            { "value": "3", "label": "3" },
-            { "value": "4", "label": "4" }
+          "id": "style_group",
+          "label": "Style",
+          "layout": "row-3",
+          "fields": [
+            {
+              "id": "gauge_style",
+              "binds": "options.gaugeStyle",
+              "type": "enum",
+              "label": "Gauge Style",
+              "default": "custom",
+              "helperText": "Picking a style RESETS every appearance option below to that style's values. Reads \"Custom\" once you change any of them; charts saved before styles existed read \"Classic\".",
+              "options": [
+                {
+                  "value": "modern",
+                  "label": "Modern"
+                },
+                {
+                  "value": "classic",
+                  "label": "Classic"
+                },
+                {
+                  "value": "custom",
+                  "label": "Custom"
+                }
+              ]
+            }
           ]
         },
         {
-          "id": "chart_si_prefixes",
-          "binds": "options.chartSiPrefixes",
-          "type": "boolean",
-          "label": "Abbreviate large values (SI)",
-          "helperText": "Show large dial-tick numbers with SI prefixes and 3 significant digits (14,340,393,939 → 14.3G).",
-          "default": true
+          "id": "range_group",
+          "label": "Range & Thresholds",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "gauge_min",
+              "binds": "options.gaugeMin",
+              "type": "number",
+              "label": "Min Value",
+              "default": 0,
+              "min": -1000000,
+              "step": 1
+            },
+            {
+              "id": "gauge_max",
+              "binds": "options.gaugeMax",
+              "type": "number",
+              "label": "Max Value",
+              "default": 100,
+              "max": 1000000,
+              "step": 1
+            },
+            {
+              "id": "gauge_warning_threshold",
+              "binds": "options.gaugeWarningThreshold",
+              "type": "number",
+              "label": "Warning Threshold (%)",
+              "default": 70,
+              "min": 0,
+              "max": 100,
+              "step": 1,
+              "helperText": "Yellow zone starts"
+            },
+            {
+              "id": "gauge_danger_threshold",
+              "binds": "options.gaugeDangerThreshold",
+              "type": "number",
+              "label": "Danger Threshold (%)",
+              "default": 90,
+              "min": 0,
+              "max": 100,
+              "step": 1,
+              "helperText": "Red zone starts"
+            }
+          ]
         },
         {
-          "id": "gauge_line_thickness",
-          "binds": "options.gaugeLineThickness",
-          "type": "slider",
-          "label": "Arc Thickness (%)",
-          "default": 8,
-          "min": 1,
-          "max": 16,
-          "step": 1
+          "id": "readout_format_group",
+          "label": "Value Format",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "gauge_unit",
+              "binds": "options.gaugeUnit",
+              "type": "text",
+              "label": "Unit Suffix",
+              "default": "",
+              "placeholder": "e.g., \u00b0F, %, psi"
+            },
+            {
+              "id": "gauge_decimals",
+              "binds": "options.gaugeDecimals",
+              "type": "enum",
+              "label": "Decimal places",
+              "default": "auto",
+              "helperText": "Auto keeps the source precision (up to 2 places). Pick a number to force exactly that many decimals.",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Auto"
+                },
+                {
+                  "value": "0",
+                  "label": "0"
+                },
+                {
+                  "value": "1",
+                  "label": "1"
+                },
+                {
+                  "value": "2",
+                  "label": "2"
+                },
+                {
+                  "value": "3",
+                  "label": "3"
+                },
+                {
+                  "value": "4",
+                  "label": "4"
+                }
+              ]
+            },
+            {
+              "id": "chart_si_prefixes",
+              "binds": "options.chartSiPrefixes",
+              "type": "boolean",
+              "label": "Abbreviate large values (SI)",
+              "helperText": "Show large dial-tick numbers with SI prefixes and 3 significant digits (14,340,393,939 \u2192 14.3G).",
+              "default": true
+            },
+            {
+              "id": "gauge_line_thickness",
+              "binds": "options.gaugeLineThickness",
+              "type": "slider",
+              "label": "Arc Thickness",
+              "default": 8,
+              "min": 1,
+              "max": 30,
+              "step": 1,
+              "helperText": "Width of the dial arc."
+            }
+          ]
+        },
+        {
+          "id": "gauge_arc",
+          "label": "Dial & Arc",
+          "helperText": "Segmented paints the whole track in threshold bands; Progress paints only the swept arc, in the color of the band the value is in.",
+          "layout": "row-4",
+          "fields": [
+            {
+              "id": "gauge_arc_mode",
+              "binds": "options.gaugeArcMode",
+              "type": "enum",
+              "label": "Arc Coloring",
+              "default": "segmented",
+              "options": [
+                {
+                  "value": "segmented",
+                  "label": "Segmented track"
+                },
+                {
+                  "value": "progress",
+                  "label": "Progress arc"
+                }
+              ]
+            },
+            {
+              "id": "gauge_start_angle",
+              "binds": "options.gaugeStartAngle",
+              "type": "number",
+              "label": "Start Angle",
+              "default": 225,
+              "min": -360,
+              "max": 360,
+              "step": 5,
+              "helperText": "Degrees; 180 is due left."
+            },
+            {
+              "id": "gauge_end_angle",
+              "binds": "options.gaugeEndAngle",
+              "type": "number",
+              "label": "End Angle",
+              "default": -45,
+              "min": -360,
+              "max": 360,
+              "step": 5,
+              "helperText": "Degrees; 0 is due right."
+            },
+            {
+              "id": "gauge_radius",
+              "binds": "options.gaugeRadius",
+              "type": "slider",
+              "label": "Dial Size (%)",
+              "default": 75,
+              "min": 30,
+              "max": 100,
+              "step": 5
+            }
+          ]
+        },
+        {
+          "id": "gauge_ticks",
+          "label": "Ticks & Pointer",
+          "layout": "row-3",
+          "fields": [
+            {
+              "id": "gauge_show_split_line",
+              "binds": "options.gaugeShowSplitLine",
+              "type": "boolean",
+              "label": "Show split lines",
+              "default": true
+            },
+            {
+              "id": "gauge_show_axis_label",
+              "binds": "options.gaugeShowAxisLabel",
+              "type": "boolean",
+              "label": "Show dial numbers",
+              "default": true
+            },
+            {
+              "id": "gauge_show_pointer",
+              "binds": "options.gaugeShowPointer",
+              "type": "boolean",
+              "label": "Show pointer",
+              "default": true
+            },
+            {
+              "id": "gauge_pointer_length",
+              "binds": "options.gaugePointerLength",
+              "type": "slider",
+              "label": "Pointer Length (%)",
+              "default": 65,
+              "min": 10,
+              "max": 100,
+              "step": 5,
+              "visibleWhen": {
+                "field": "gauge_show_pointer",
+                "operator": "truthy"
+              }
+            },
+            {
+              "id": "gauge_pointer_width",
+              "binds": "options.gaugePointerWidth",
+              "type": "slider",
+              "label": "Pointer Width",
+              "default": 5,
+              "min": 1,
+              "max": 20,
+              "step": 1,
+              "visibleWhen": {
+                "field": "gauge_show_pointer",
+                "operator": "truthy"
+              }
+            },
+            {
+              "id": "gauge_show_anchor",
+              "binds": "options.gaugeShowAnchor",
+              "type": "boolean",
+              "label": "Show pointer anchor",
+              "default": true,
+              "helperText": "The hub disc at the pointer's pivot.",
+              "visibleWhen": {
+                "field": "gauge_show_pointer",
+                "operator": "truthy"
+              }
+            }
+          ]
+        },
+        {
+          "id": "gauge_readout",
+          "label": "Readout",
+          "layout": "row-3",
+          "fields": [
+            {
+              "id": "gauge_value_font_size",
+              "binds": "options.gaugeValueFontSize",
+              "type": "slider",
+              "label": "Value Size (px)",
+              "default": 24,
+              "min": 8,
+              "max": 72,
+              "step": 1
+            },
+            {
+              "id": "gauge_value_offset",
+              "binds": "options.gaugeValueOffset",
+              "type": "slider",
+              "label": "Value Offset (%)",
+              "default": 70,
+              "min": -100,
+              "max": 100,
+              "step": 5,
+              "helperText": "Vertical position from the dial center."
+            },
+            {
+              "id": "gauge_label",
+              "binds": "options.gaugeLabel",
+              "type": "text",
+              "label": "Caption",
+              "default": "",
+              "placeholder": "e.g., RAM %",
+              "helperText": "Small label under the value. Blank hides it."
+            },
+            {
+              "id": "gauge_label_offset",
+              "binds": "options.gaugeLabelOffset",
+              "type": "slider",
+              "label": "Caption Offset (%)",
+              "default": 60,
+              "min": -100,
+              "max": 100,
+              "step": 5,
+              "visibleWhen": {
+                "field": "gauge_label",
+                "operator": "not_empty"
+              }
+            },
+            {
+              "id": "gauge_label_font_size",
+              "binds": "options.gaugeLabelFontSize",
+              "type": "slider",
+              "label": "Caption Size (px)",
+              "default": 13,
+              "min": 8,
+              "max": 48,
+              "step": 1,
+              "visibleWhen": {
+                "field": "gauge_label",
+                "operator": "not_empty"
+              }
+            }
+          ]
         }
       ]
     }

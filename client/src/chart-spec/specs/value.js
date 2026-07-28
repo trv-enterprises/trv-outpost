@@ -47,7 +47,7 @@ export function buildOption(values, data, helpers = {}) {
 
   const rows = data?.rows || [];
   const idx = columnIndex(data, valueColumn);
-  const raw = idx >= 0 && rows.length > 0 ? rows[0][idx] : null;
+  const rawCell = idx >= 0 && rows.length > 0 ? rows[0][idx] : null;
 
   // Which family of options applies: options.valueType is the author's
   // explicit declaration ('number' | 'text'), defaulting to 'auto' —
@@ -55,9 +55,25 @@ export function buildOption(values, data, helpers = {}) {
   // detection needs a sample: an empty result, a mixed column, or a
   // stream that hasn't produced a record yet would otherwise leave the
   // author unable to reach the options they need.
+  //
+  // Detection reads the RAW CELL, never the aggregate below: an
+  // aggregate is always numeric, so deciding from it would flip a text
+  // column ("online"/"offline" with a count configured) onto the numeric
+  // path and render the row count in place of the status.
   const declaredType = opts.valueType || 'auto';
   const isText = declaredType === 'text'
-    || (declaredType === 'auto' && raw != null && !isNumericValue(raw));
+    || (declaredType === 'auto' && rawCell != null && !isNumericValue(rawCell));
+
+  // A configured aggregation (avg/min/max/sum/count) computes its scalar
+  // into data.aggregatedValue and leaves `rows` UNTOUCHED — so reading
+  // row 0 alone showed the first raw sample while the author had asked
+  // for an average. Prefer the aggregate on the NUMERIC path only; a
+  // text tile keeps its string. (first/last leave aggregatedValue null
+  // unless an explicit field is chosen, and they already slice rows to
+  // one, so both paths agree for them.)
+  const aggValue = data?.aggregatedValue;
+  const hasAgg = !isText && aggValue != null && Number.isFinite(Number(aggValue));
+  const raw = hasAgg ? Number(aggValue) : rawCell;
 
   // Text path: render the string, optionally re-cased. The numeric
   // formats and decimals are meaningless here and the editor doesn't

@@ -581,6 +581,36 @@ export function firstNumericValue(data, name, fallback = 0) {
   return toNumber(rows[0][idx], fallback);
 }
 
+/**
+ * The value a SINGLE-VALUE chart (gauge, value) should display.
+ *
+ * Prefers `data.aggregatedValue` — the scalar `transformData` computes
+ * when the author configured an aggregation (avg / min / max / sum /
+ * count) — and falls back to row 0 of the value column otherwise.
+ *
+ * WHY THIS EXISTS: applyAggregation returns the aggregate in a separate
+ * `aggregatedValue` field and, for avg/min/max/sum/count, leaves `rows`
+ * UNTOUCHED. A chart that reads rows[0] therefore showed the first raw
+ * sample while claiming to show an average — the number was computed
+ * correctly and then dropped. (first/last are unaffected either way:
+ * they genuinely slice rows to one AND return null here unless an
+ * explicit field is set, so they fall through to the row-0 path.)
+ *
+ * Multi-row charts (line, bar, …) deliberately do NOT use this — an
+ * aggregate scalar has no meaning on a series, and those types keep
+ * consuming `rows`.
+ *
+ * @param {Object} data   { columns, rows, aggregatedValue? }
+ * @param {string} name   value column
+ * @param {number} fallback
+ * @returns {number}
+ */
+export function singleDisplayValue(data, name, fallback = 0) {
+  const agg = data?.aggregatedValue;
+  if (agg != null && Number.isFinite(Number(agg))) return Number(agg);
+  return firstNumericValue(data, name, fallback);
+}
+
 // ── Value formatting (decimals + unit suffix) ────────────────────────
 
 /**

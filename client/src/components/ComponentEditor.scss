@@ -2087,6 +2087,49 @@
     font-weight: 400;
     font-size: 0.75rem;
   }
+
+  // Carbon sizes a Slider's min/max labels to their text, so the track
+  // starts and ends wherever those labels happen to fall. Sliders in
+  // adjacent columns then have different track lengths and their number
+  // inputs land at different x-positions — "-100" pushes one track in by
+  // three characters more than "1" does.
+  //
+  // Reserving a fixed gutter (wide enough for "-100") makes every
+  // slider's internal geometry identical, so tracks and inputs line up
+  // across a row and between subsections. Only the LABELS are pinned —
+  // the track keeps flexing to fill what's left, so this cannot collapse
+  // it the way constraining the track itself would.
+  // Carbon lays a Slider out as [label(min)] [track] [label(max)]
+  // [number input], flex siblings with a 1rem gap between each. In the
+  // editor's narrow columns that gap is more air than the controls need,
+  // and it pushes the number input well away from the value it edits.
+  .cds--slider-container {
+    gap: spacing.$spacing-03;
+  }
+
+  // Carbon sizes the min/max labels to their text, so the track starts
+  // and ends wherever those labels happen to fall. Sliders in adjacent
+  // columns then get different track lengths and their number inputs
+  // land at different x-positions — "-100" pushes one track in by three
+  // characters more than "1" does.
+  //
+  // Reserving a fixed gutter (wide enough for "-100") makes every
+  // slider's geometry identical, so tracks and inputs line up across a
+  // row and between subsections. Only the LABELS are pinned; the track
+  // keeps Carbon's own 200px min-inline-size, so this can't collapse it.
+  //
+  // The min label is the one BEFORE the track and the max the one after
+  // — matched positionally rather than with :first-of-type, which would
+  // depend on no other same-tag sibling appearing in between.
+  .cds--slider__range-label {
+    min-inline-size: 2.25rem;
+    text-align: end; // min side: digits sit against the track
+  }
+
+  // Max label: the one immediately AFTER the track. Mirror the min side.
+  .cds--slider + .cds--slider__range-label {
+    text-align: start;
+  }
 }
 
 // NullableNumber: label on top, then a single row holding the
