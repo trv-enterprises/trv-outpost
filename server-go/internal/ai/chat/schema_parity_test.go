@@ -90,6 +90,7 @@ func TestChartDataMappingSchemaParity(t *testing.T) {
 		"visible_columns":  "dataview-only column selection",
 		"column_widths":    "dataview-only per-column pixel widths (UI/per-user layout)",
 		"column_formats":   "dataview-only per-column value formats (compact/duration/plain — UI display concern)",
+		"column_rules":     "dataview-only per-column conditional formatting (colors by cell value — UI display concern, evaluated client-side)",
 		"parser":           "per-component streaming extraction config; not yet a chat authoring surface",
 	}
 	assertParity(t, models.ChartDataMapping{}, chartDataMappingSchema(), allow)

@@ -8195,6 +8195,16 @@
                         "type": "string"
                     }
                 },
+                "column_rules": {
+                    "description": "For dataview only: column name -\u003e conditional-formatting rules. Evaluated top-down, FIRST MATCH WINS (the order is the author's logic, so it must be preserved as given).",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/definitions/models.ColumnRule"
+                        }
+                    }
+                },
                 "column_widths": {
                     "description": "For dataview only: column name -\u003e pixel width. Default if a per-user override isn't set in app_config.dataview_layouts.",
                     "type": "object",
@@ -8351,6 +8361,32 @@
                 "type": {
                     "description": "Data type (e.g., \"varchar\", \"integer\")",
                     "type": "string"
+                }
+            }
+        },
+        "models.ColumnRule": {
+            "description": "One conditional-formatting rule for a dataview column",
+            "type": "object",
+            "properties": {
+                "color": {
+                    "description": "Hex color applied on match",
+                    "type": "string"
+                },
+                "op": {
+                    "description": "Match operator: eq, contains, gt, lt, empty",
+                    "type": "string"
+                },
+                "target": {
+                    "description": "What to paint: \"text\" (default) or \"both\" (text + background, text paired for contrast)",
+                    "type": "string"
+                },
+                "value": {
+                    "description": "Operand. Unused by \"empty\"; a blank operand on any other operator makes the rule inert (a half-typed rule must not match every row).",
+                    "type": "string"
+                },
+                "wholeRow": {
+                    "description": "When true the whole row is painted, not just this cell. If rules in several columns claim the row, the leftmost column wins.",
+                    "type": "boolean"
                 }
             }
         },
