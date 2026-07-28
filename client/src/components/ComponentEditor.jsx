@@ -2439,6 +2439,51 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     }
   };
 
+  // Auto-fetch the preview query once when the editor opens on a SAVED
+  // component that already has everything the query needs.
+  //
+  // availableColumns is only populated by a fetch (the old seed-from-saved-
+  // references was removed — it showed a misleading subset, see the note in
+  // the chart-load effect). That left every column surface inert on open:
+  // the dataview column formatter rendered nothing but its "run the query"
+  // hint, and the x/y/series dropdowns offered only the already-chosen value.
+  // The author had to know to press Fetch Data before the editor was usable
+  // at all. Running it for them is the whole point.
+  //
+  // Deliberately conservative — this must never surprise the author:
+  //   - saved components only. A brand-new component has nothing to run.
+  //   - ONCE per component id (autoFetchedRef), so it can't re-fire on an
+  //     unrelated state change or fight a manual fetch.
+  //   - skipped when anything is already in flight or already fetched.
+  //   - skipped for custom-code components, which own their own data path.
+  //   - skipped for any case where fetchPreviewData would OPEN A MODAL or
+  //     start a live capture rather than just query: an unresolved dashboard
+  //     variable (value picker) and raw socket/mqtt discovery. An automatic
+  //     action must not pop UI the author didn't ask for.
+  //   - skipped for MQTT, whose "fetch" is a long-lived SSE capture, not a
+  //     one-shot query.
+  // The same preconditions fetchPreviewData would otherwise reject with a
+  // user-facing error are checked here so the auto path stays silent.
+  const autoFetchedRef = useRef(null);
+  useEffect(() => {
+    const id = chart?.id;
+    if (!id) return;                         // new component — nothing saved
+    if (autoFetchedRef.current === id) return;
+    if (showCustomCode) return;
+    if (!selectedConnectionId) return;
+    if (previewLoading || previewData) return;
+    // Needs a query unless the type supplies its own.
+    if (!isSocket && !isMQTT && !isAPI && !isTSStore && !queryRaw.trim()) return;
+    // Would open the value picker instead of querying.
+    if (typeof queryRaw === 'string' && queryRaw.includes(DASHBOARD_VARIABLE_TOKEN) && !previewVariableValue) return;
+    // Would start a live capture instead of querying.
+    if ((isSocket || isMQTT) && variableBoundFilter && !previewVariableValue) return;
+    if (isMQTT) return;
+    autoFetchedRef.current = id;
+    fetchPreviewData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chart?.id, selectedConnectionId, queryRaw, showCustomCode, isSocket, isMQTT, isAPI, isTSStore]);
+
   const generatedCode = useMemo(() => {
     if (showCustomCode && componentCode) {
       return componentCode;
