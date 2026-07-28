@@ -2,6 +2,8 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
+import { contrastPartnerFor } from '../option-helpers';
+
 /**
  * ValueView — the non-ECharts render for the `value` chart type.
  *
@@ -20,7 +22,10 @@
  * @param {string} props.formatted   pre-formatted value string ('' when no data)
  * @param {string} props.unit        optional unit suffix
  * @param {number} props.size        value font size in px
- * @param {string} [props.color]     threshold color; falsy = theme default
+ * @param {string} [props.color]     threshold color, else the background's
+ *   auto-paired contrast color; falsy = theme default
+ * @param {string} [props.background] tile fill color; '' = transparent (the
+ *   panel's own background shows through, the default)
  * @param {string} props.title       centered title ('' to hide)
  * @param {object} config            saved config (options.showTitle gate)
  * @param {object} dataCtx           { loading, error } for placeholders
@@ -29,7 +34,7 @@
  *   tile (whose band was drawn by the loader above this view) aligns with
  *   a structured value tile. Used by ValueTile.
  */
-export default function ValueView({ formatted, unit, size, color, title, config, dataCtx, titleBottomOffset = false }) {
+export default function ValueView({ formatted, unit, size, color, background, title, config, dataCtx, titleBottomOffset = false }) {
   // Title is suppressible per-component via options.showTitle (default
   // on) — same uniform guard as ChartShell / DataViewGrid. Off →
   // reclaim the title's vertical space (the value centers in the full
@@ -73,8 +78,22 @@ export default function ValueView({ formatted, unit, size, color, title, config,
   const bodyTopPull = titleBottomOffset && !titleText
     ? 'calc(-0.8125rem * var(--title-scale, 1))'
     : 0;
+  // Background fill (#214). Unset = transparent, so the panel's own
+  // background shows through exactly as before — this is purely additive.
+  //
+  // The TITLE sits on the fill too, so it can't stay on --cds-text-primary
+  // when one is set: that token is near-white and would vanish on a light
+  // fill. It takes the same paired color as the value. `color` may instead
+  // be a matched THRESHOLD color (which outranks the pairing, see value.js);
+  // tinting the title to a severity color would misread as the title itself
+  // being in alarm, so the title only follows the pairing.
+  const paired = background ? contrastPartnerFor(background) : null;
+  const titleColor = paired || 'var(--cds-text-primary)';
   return (
-    <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
+    <div style={{
+      width: '100%', height: '100%', position: 'relative', overflow: 'hidden',
+      backgroundColor: background || 'transparent',
+    }}>
       {titleText ? (
         // 2.5rem title band — matches ChartShell / DataViewGrid exactly so
         // a number tile's title sits at the same height as a chart's, and
@@ -84,7 +103,7 @@ export default function ValueView({ formatted, unit, size, color, title, config,
           position: 'absolute', top: 0, left: 0, right: 0,
           height: titleBand, lineHeight: titleBand,
           fontSize: 'calc(0.875rem * var(--title-scale, 1))', fontWeight: 600,
-          color: 'var(--cds-text-primary)', textAlign: 'center',
+          color: titleColor, textAlign: 'center',
           padding: '0 0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
           {titleText}

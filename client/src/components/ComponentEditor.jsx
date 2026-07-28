@@ -388,6 +388,9 @@ const DEFAULT_CHART_OPTIONS = {
   valueTextCase: 'none',     // none | upper | lower | capitalize | title (text only)
   valueThresholds: [],       // numeric: [{ value, color, label? }] — highest reached wins
   valueTextThresholds: [],   // text: [{ operator, match, color }] — first match wins
+  valueBackground: '',       // tile fill hex; '' = transparent. Text color is
+                             // PAIRED from it automatically (contrastPartnerFor),
+                             // so there is no companion foreground option.
   // Pie options
   pieInnerRadius: 0,          // 0 = pie, >0 = donut
   pieShowLabels: true,
@@ -867,15 +870,40 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState(null);
   const [availableColumns, setAvailableColumns] = useState([]);
-  // Alphabetically-sorted view of availableColumns for the data-mapping
-  // dropdowns (x/y/series/filter/time-bucket/sliding-window). The raw
+  // Alphabetically-sorted OPTION LIST for the data-mapping dropdowns
+  // (x/y/series/group-by/filter/time-bucket/sliding-window). The raw
   // availableColumns keeps its query/fetch order (used only as a default
   // seed, e.g. filters default to [0]); the dropdowns render this sorted
   // copy so the option lists aren't in an arbitrary column order.
-  const sortedColumns = useMemo(
-    () => [...availableColumns].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })),
-    [availableColumns]
-  );
+  //
+  // Saved selections are UNIONED IN so a dropdown still shows the value the
+  // author previously chose before any Fetch Data has run. This is the local
+  // replacement for the old global availableColumns seed (removed — see the
+  // note in the chart-load effect): the option list may include a saved
+  // column that isn't in the current schema, but availableColumns itself
+  // stays strictly "the real schema", so surfaces that enumerate the schema
+  // — notably the dataview column list — are never shown a subset that
+  // looks complete.
+  //
+  // A saved column that no longer exists in the fetched schema is still
+  // listed, deliberately: silently dropping it would make the author's
+  // selection vanish with no explanation. pruneStaleColumnSelections (in the
+  // fetch handler) is what actually clears genuinely-stale selections.
+  const sortedColumns = useMemo(() => {
+    const opts = new Set(availableColumns);
+    const addSaved = (c) => { if (typeof c === 'string' && c) opts.add(c); };
+    addSaved(xAxisColumn);
+    yAxisColumns.forEach((y) => addSaved(typeof y === 'object' && y ? y.column : y));
+    addSaved(groupByColumn);
+    addSaved(seriesColumn);
+    addSaved(slidingWindowTimestampCol);
+    addSaved(timeBucketTimestampCol);
+    filters.forEach((f) => addSaved(f?.field ?? f?.column));
+    return [...opts].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [
+    availableColumns, xAxisColumn, yAxisColumns, groupByColumn, seriesColumn,
+    slidingWindowTimestampCol, timeBucketTimestampCol, filters,
+  ]);
   // The single query-results table lives at the bottom of the Data Mapping tab
   // (it's filter-aware). It's easy to miss after running a query, so we scroll
   // to it when a NEW run lands. Keyed on previewData (a fresh fetch), NOT on the
@@ -1109,23 +1137,25 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       const loadedVisible = chart.data_mapping?.visible_columns;
       setVisibleColumns(Array.isArray(loadedVisible) && loadedVisible.length > 0 ? loadedVisible : null);
 
-      // Seed availableColumns from the saved column references so the x/y/series/
-      // group-by/filter dropdowns RENDER THE PREVIOUSLY-SELECTED VALUES on edit
-      // WITHOUT requiring a Fetch Data first. availableColumns otherwise starts
-      // empty on load (it's only populated by a fetch), so a saved selection has
-      // no matching <SelectItem> and shows blank. A later Fetch Data replaces
-      // this seed with the real schema. pruneStaleColumnSelections only runs in
-      // the fetch handler, so it never wipes this seed.
-      const seededCols = [];
-      const addCol = (c) => { if (typeof c === 'string' && c && !seededCols.includes(c)) seededCols.push(c); };
-      addCol(chart.data_mapping?.x_axis);
-      loadedYCols.forEach(addCol);
-      addCol(chart.data_mapping?.group_by);
-      addCol(chart.data_mapping?.series);
-      (chart.data_mapping?.filters || []).forEach((f) => addCol(f?.column));
-      (Array.isArray(loadedVisible) ? loadedVisible : []).forEach(addCol);
-      Object.keys(chart.data_mapping?.column_aliases || {}).forEach(addCol);
-      if (seededCols.length > 0) setAvailableColumns(seededCols);
+      // NOTE: availableColumns is deliberately NOT seeded from the saved
+      // column references here. It means exactly one thing — THE REAL SCHEMA
+      // FROM THE LAST FETCH — and nothing else.
+      //
+      // It used to be seeded so the x/y/series dropdowns would render their
+      // saved values without a Fetch Data first. But a seed built from saved
+      // references is a subset masquerading as the schema, and the dataview
+      // column list reads it as the full set: on open the author saw ONLY the
+      // already-ticked columns, with no row for the unticked ones, so a column
+      // that wasn't already added could not be discovered or added at all
+      // (10-column result set → 3 rows, 0 unticked). The seed also bought less
+      // than it looked: it rendered the current selection but left every
+      // dropdown functionally inert, since the other columns still weren't
+      // options until a fetch.
+      //
+      // The narrow case the seed did solve — "render a saved value that isn't
+      // in the option list" — is handled locally instead, by unioning saved
+      // selections into the OPTION lists (columnsWithSaved / sortedColumns
+      // below). Same pattern the sliding-window timestamp select already used.
       // Sliding window initialization
       const sw = chart.data_mapping?.sliding_window;
       setSlidingWindowEnabled(sw?.duration > 0 && !!sw?.timestamp_col);
@@ -4115,6 +4145,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       // text match-rules are separate lists.
                       value_thresholds: Array.isArray(chartOptions.valueThresholds) ? chartOptions.valueThresholds : [],
                       value_text_thresholds: Array.isArray(chartOptions.valueTextThresholds) ? chartOptions.valueTextThresholds : [],
+                      // Background fill (#214). Applies to both value types,
+                      // so it binds one key regardless of the numeric/text
+                      // split above.
+                      value_background: chartOptions.valueBackground ?? '',
                       // Both size fields bind the SAME stored key — only
                       // one is ever visible, so the size survives a
                       // number↔text switch.
@@ -4304,6 +4338,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           break;
                         case 'value_text_thresholds':
                           updateChartOption('valueTextThresholds', value);
+                          break;
+                        case 'value_background':
+                          updateChartOption('valueBackground', value);
                           break;
                         // Both size fields write the same stored key —
                         // the numeric and text Display rows each carry

@@ -21,6 +21,7 @@ import {
   toNumber,
   resolveTextThresholdColor,
   resolveNumericThresholdColor,
+  contrastPartnerFor,
 } from '../option-helpers.js';
 import { formatNumberValue, applyTextCase, isNumericValue } from './number-formats.js';
 
@@ -98,9 +99,24 @@ export function buildOption(values, data, helpers = {}) {
   // (first rule wins), numeric bands by magnitude (highest reached
   // wins). null = no rule matched → the view keeps the default text
   // color, which is why "no thresholds configured" costs nothing.
-  const color = isText
+  const thresholdColor = isText
     ? resolveTextThresholdColor(raw, opts.valueTextThresholds)
     : resolveNumericThresholdColor(toNumber(raw, NaN), opts.valueThresholds);
+
+  // Background fill + its automatically-paired text color (#214). The author
+  // picks only the background; the readable partner is looked up from
+  // Carbon's aligned light/dark sets — see contrastPartnerFor.
+  const background = typeof opts.valueBackground === 'string' ? opts.valueBackground : '';
+  const pairedText = background ? contrastPartnerFor(background) : null;
+
+  // Precedence: a MATCHED threshold/rule still wins over the paired color.
+  // The pairing exists to keep an un-thresholded value readable on its fill,
+  // not to disable the author's explicit "color this red when it's bad" —
+  // silently dropping thresholds the moment a background is set would make
+  // the two features mutually exclusive for no reason. When no rule matched,
+  // the paired color takes over from the default text token (which would be
+  // near-invisible on a light fill).
+  const color = thresholdColor || pairedText;
 
   return {
     render: 'value',
@@ -109,6 +125,7 @@ export function buildOption(values, data, helpers = {}) {
       unit,
       size,
       color,
+      background,
       title: chartName || '',
     },
   };

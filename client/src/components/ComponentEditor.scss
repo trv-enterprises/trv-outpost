@@ -2340,6 +2340,47 @@
   }
 }
 
+// ── Optional single-color field (color_select) ───────────────────────
+// The swatch strip plus a Clear action ("no color" is a real value here)
+// and a live preview of the auto-paired text color on the chosen fill.
+.spec-color-select {
+  .spec-color-select__label {
+    font-size: 0.75rem;
+    color: var(--cds-text-secondary);
+    margin-bottom: spacing.$spacing-02;
+  }
+
+  .spec-color-select__row {
+    display: flex;
+    align-items: center;
+    gap: spacing.$spacing-03;
+    flex-wrap: wrap;
+  }
+
+  // Preview shows the actual pairing the viewer will get, so the author
+  // doesn't have to switch to the chart preview to check readability.
+  // Colors are inline (they ARE the thing being previewed).
+  .spec-color-select__preview {
+    display: flex;
+    align-items: baseline;
+    gap: spacing.$spacing-03;
+    margin-top: spacing.$spacing-03;
+    padding: spacing.$spacing-03 spacing.$spacing-05;
+    border-radius: 2px;
+    font-size: 1.5rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    // Keep it a sample, not a banner — it shouldn't read as the chart.
+    max-width: 16rem;
+  }
+
+  .spec-color-select__preview-note {
+    font-size: 0.75rem;
+    font-weight: 400;
+    opacity: 0.8;
+  }
+}
+
 // banded_bar band-scheme widget: a scheme <Select> on its own row, then
 // the per-scheme column pickers laid out as quarter-width cells that wrap
 // (5-field schemes spill onto a second row). Quarter math matches

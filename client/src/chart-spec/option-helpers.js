@@ -2,7 +2,10 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { CATEGORICAL_PALETTE, CATEGORICAL_NAMES, CATEGORICAL_PAIRINGS, PAIRING_COUNTS } from '../config/theme.js';
+import {
+  CATEGORICAL_PALETTE, CATEGORICAL_NAMES, CATEGORICAL_PAIRINGS, PAIRING_COUNTS,
+  CATEGORICAL_PAIRINGS_LIGHT, CATEGORICAL_PAIRINGS_DARK, IS_DARK_THEME,
+} from '../config/theme.js';
 import { getPreferredColorOption } from '../utils/chartColorConfig.js';
 
 // Shared ECharts-option helpers for spec-driven chart buildOption
@@ -102,6 +105,10 @@ export function resolveNumericThresholdColor(n, thresholds) {
 }
 export const COLOR_TEXT = '#f4f4f4';
 export const COLOR_TEXT_SECONDARY = '#c6c6c6';
+// Carbon gray100 — the counterpart to COLOR_TEXT (gray10) for drawing text
+// on a LIGHT fill. Used by contrastPartnerFor's luminance fallback, which is
+// only reached for a custom (non-Carbon) background hex.
+export const COLOR_TEXT_ON_LIGHT = '#161616';
 
 // ── Carbon categorical (multi-series) palette ────────────────────────
 // The canonical Carbon Charts 14-color qualitative sequence, in the
@@ -186,6 +193,119 @@ export const TEXT_THRESHOLD_COLOR_PALETTE = (() => {
     .map((c) => ({ name: c.name, hex: c.hex }));
   return [...ALERT_COLOR_PALETTE, ...extras];
 })();
+
+// ── Background / foreground color PAIRS ──────────────────────────────
+// For surfaces that fill a region with color and then draw text on it —
+// the value chart's background, a conditionally-formatted table cell.
+// Picking a background is the author's job; picking readable text on top
+// of it is NOT, so the partner is looked up, never chosen.
+//
+// Carbon's two categorical palettes (LIGHT and DARK) are index-aligned:
+// _LIGHT[n][i] and _DARK[n][i] are the same hue at different lightness
+// (purple-70 ↔ purple-30, blue-80 ↔ blue-50). That alignment IS the
+// pairing — so "given this color, get its contrasting partner" is an
+// index lookup across the two maps, not color math. See config/theme.js.
+//
+// Direction depends on the active theme: on a dark canvas the author
+// picks the deeper LIGHT-palette color as the background and the text
+// takes the brighter DARK-palette partner; on a light canvas it flips.
+//
+// Do NOT hand-pick hex here. theme.js's values are re-extracted from
+// Carbon on upgrade and must stay auditable; this file only indexes them.
+const PAIR_INDEX = (() => {
+  // hex → its partner in the opposite-lightness palette, both directions.
+  const map = new Map();
+  const link = (a, b) => {
+    if (!a || !b) return;
+    const lo = a.toLowerCase();
+    const hi = b.toLowerCase();
+    if (!map.has(lo)) map.set(lo, hi);
+    if (!map.has(hi)) map.set(hi, lo);
+  };
+  for (const count of Object.keys(CATEGORICAL_PAIRINGS_LIGHT)) {
+    const lightOpts = CATEGORICAL_PAIRINGS_LIGHT[count] || [];
+    const darkOpts = CATEGORICAL_PAIRINGS_DARK[count] || [];
+    lightOpts.forEach((combo, oi) => {
+      const darkCombo = darkOpts[oi];
+      if (!Array.isArray(darkCombo)) return;
+      combo.forEach((hex, ci) => link(hex, darkCombo[ci]));
+    });
+  }
+  return map;
+})();
+
+// The ALERT ramp is a severity scale, not a categorical palette, so it has
+// no slot in CATEGORICAL_PAIRINGS and therefore no index-aligned partner.
+// Its partners are declared explicitly: each alert color paired with the
+// Carbon step of THE SAME HUE at the opposite end of the lightness range
+// (red-60 ↔ red-30, green-50 ↔ green-30, …). Named tokens in the comments
+// so this stays as auditable as the extracted maps above.
+const ALERT_PAIRS = [
+  [COLOR_DANGER, '#ffd7d9'], // red60    ↔ red20
+  [COLOR_CAUTION, '#ffd9be'], // orange40 ↔ orange20
+  [COLOR_WARN, '#fcf4d6'], // yellow30 ↔ yellow20
+  [COLOR_OK, '#a7f0ba'], // green50  ↔ green20
+  [COLOR_PRIMARY, '#d0e2ff'], // blue60   ↔ blue20
+];
+for (const [a, b] of ALERT_PAIRS) {
+  const lo = a.toLowerCase();
+  const hi = b.toLowerCase();
+  if (!PAIR_INDEX.has(lo)) PAIR_INDEX.set(lo, hi);
+  if (!PAIR_INDEX.has(hi)) PAIR_INDEX.set(hi, lo);
+}
+
+// Swatches offered when picking a BACKGROUND color. Alert ramp first —
+// a filled value tile is most often a status readout, and these are the
+// same five swatches the numeric/text threshold pickers already offer, so
+// the vocabulary is consistent across the chart's color controls. The
+// curated Carbon pairing colors follow for non-severity uses.
+export const BACKGROUND_COLOR_PALETTE = (() => {
+  const seen = new Set(ALERT_COLOR_PALETTE.map((c) => c.hex.toLowerCase()));
+  const extras = [];
+  // Draw from the ACTIVE theme's pairings so the offered backgrounds are
+  // the ones that have a partner on this canvas.
+  for (const count of PAIRING_COUNTS) {
+    for (const combo of CATEGORICAL_PAIRINGS[count] || []) {
+      for (const hex of combo) {
+        const lo = hex.toLowerCase();
+        if (seen.has(lo)) continue;
+        seen.add(lo);
+        const ni = CATEGORICAL_PALETTE.findIndex((c) => c.toLowerCase() === lo);
+        extras.push({ name: ni >= 0 ? CATEGORICAL_NAMES[ni] : hex, hex });
+      }
+    }
+  }
+  return [...ALERT_COLOR_PALETTE, ...extras];
+})();
+
+/**
+ * The contrasting partner for a background color — what to draw text in
+ * so it reads against that fill.
+ *
+ * Resolution order:
+ *   1. The Carbon index-aligned partner (categorical pairs / alert ramp).
+ *   2. A relative-luminance fallback for a CUSTOM hex the author picked
+ *      out of the OS color wheel, which by definition has no Carbon
+ *      partner. Returns Carbon's text-on-color tokens rather than pure
+ *      black/white.
+ *
+ * @param {string} bg   background hex ('#rrggbb')
+ * @returns {string|null} partner hex, or null when bg is absent/unparseable
+ */
+export function contrastPartnerFor(bg) {
+  if (typeof bg !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(bg)) return null;
+  const lo = bg.toLowerCase();
+  const partner = PAIR_INDEX.get(lo);
+  if (partner) return partner;
+  // Custom color: fall back to luminance. sRGB relative luminance
+  // (WCAG 2.x), threshold at the conventional 0.5 crossover.
+  const r = parseInt(lo.slice(1, 3), 16) / 255;
+  const g = parseInt(lo.slice(3, 5), 16) / 255;
+  const b = parseInt(lo.slice(5, 7), 16) / 255;
+  const lin = (c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+  const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return L > 0.5 ? COLOR_TEXT_ON_LIGHT : COLOR_TEXT;
+}
 
 /**
  * Resolve a series-color token to a canonical hex from SERIES_COLOR_PALETTE.
