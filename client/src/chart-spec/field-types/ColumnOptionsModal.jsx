@@ -2,6 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
+import { useState } from 'react';
 import { Modal, TextInput, Select, SelectItem, NumberInput } from '@carbon/react';
 import ColumnRuleList from './ColumnRuleList';
 
@@ -24,6 +25,7 @@ import ColumnRuleList from './ColumnRuleList';
  * @param {Array} props.rules        current conditional-format rules
  * @param {Array} props.formats      [{ value, label }] format vocabulary
  * @param {function} props.onChange  (patch) => void — { alias?, format?, width?, rules? }
+ *   Called ONCE, on Apply, with everything that changed.
  * @param {function} props.onClose
  */
 export default function ColumnOptionsModal({
@@ -36,12 +38,43 @@ export default function ColumnOptionsModal({
   onChange,
   onClose,
 }) {
+  // DRAFT state — edits are local until Apply, so Cancel genuinely reverts.
+  // Matches the Dashboard Settings modal (DashboardViewerPage), which is the
+  // established shape for a settings dialog in this app. The earlier
+  // write-through version had only a Close button and no way back: every
+  // keystroke hit the real config, so an experiment with a color or a
+  // half-typed rule was already applied by the time you thought better of it.
+  //
+  // Seeded once per mount. The modal is only mounted while open (the caller
+  // renders it conditionally), so there's no stale-draft case to reconcile.
+  const [draft, setDraft] = useState(() => ({
+    alias: alias || '',
+    format: format || 'auto',
+    width: width === '' || width == null ? '' : width,
+    rules: Array.isArray(rules) ? rules : [],
+  }));
+
+  const patch = (p) => setDraft((d) => ({ ...d, ...p }));
+
+  const apply = () => {
+    onChange({
+      alias: draft.alias,
+      format: draft.format,
+      width: draft.width,
+      rules: draft.rules,
+    });
+    onClose();
+  };
+
   return (
     <Modal
       open
-      passiveModal
       modalHeading={`Column: ${column}`}
       modalLabel="Column options"
+      primaryButtonText="Apply"
+      secondaryButtonText="Cancel"
+      onRequestSubmit={apply}
+      onSecondarySubmit={onClose}
       onRequestClose={onClose}
       // `sm`, not `lg`. This edits ONE column's four settings — at `lg`
       // (1152px measured) the fields floated in a mostly-empty expanse that
@@ -65,15 +98,15 @@ export default function ColumnOptionsModal({
             labelText="Display name"
             placeholder={column}
             helperText="Shown as the column header. Leave blank to use the column name."
-            value={alias || ''}
-            onChange={(e) => onChange({ alias: e.target.value })}
+            value={draft.alias}
+            onChange={(e) => patch({ alias: e.target.value })}
           />
           <Select
             id={`colopt-${column}-format`}
             labelText="Value format"
             helperText="Compact turns 136365211648 into 127.0G."
-            value={format || 'auto'}
-            onChange={(e) => onChange({ format: e.target.value })}
+            value={draft.format}
+            onChange={(e) => patch({ format: e.target.value })}
           >
             {formats.map((f) => (
               <SelectItem key={f.value} value={f.value} text={f.label} />
@@ -87,13 +120,13 @@ export default function ColumnOptionsModal({
             // exact number, or matching a width across two tables.
             helperText="Blank = size to fit the content. Dragging the column edge in the table sets this too."
             placeholder="auto"
-            value={width === '' || width == null ? '' : width}
+            value={draft.width}
             allowEmpty
             min={1}
             max={2000}
             step={10}
             hideSteppers
-            onChange={(_e, { value }) => onChange({ width: value })}
+            onChange={(_e, { value }) => patch({ width: value })}
           />
         </div>
       </div>
@@ -101,11 +134,11 @@ export default function ColumnOptionsModal({
       <div className="column-options-modal__section">
         <h6 className="column-options-modal__section-title">
           Conditional formatting
-          {rules?.length ? ` (${rules.length})` : ''}
+          {draft.rules.length ? ` (${draft.rules.length})` : ''}
         </h6>
         <ColumnRuleList
-          rules={rules}
-          onChange={(next) => onChange({ rules: next })}
+          rules={draft.rules}
+          onChange={(next) => patch({ rules: next })}
           idPrefix={`colopt-${column}-rule`}
         />
       </div>

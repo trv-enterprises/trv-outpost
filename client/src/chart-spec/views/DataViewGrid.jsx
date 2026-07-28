@@ -206,6 +206,15 @@ export default function DataViewGrid({
     .map(([c, f]) => `${c}:${f}`)
     .sort()
     .join('|');
+  // ...and for the alias map, which feeds headerName. This was MISSING:
+  // columnDefs read columnAliases but had no dep for it, so renaming a
+  // column updated the stored config and re-rendered, and the grid kept
+  // showing the old header. Object identity alone wouldn't be safe here
+  // either — the editor rebuilds the map on every edit.
+  const columnAliasesKey = Object.entries(columnAliases || {})
+    .map(([c, a]) => `${c}:${a}`)
+    .sort()
+    .join('|');
   // Conditional-format rules change cell styling, so columnDefs must
   // re-derive when the author edits them. Serialized because the rules are
   // nested arrays of objects — object identity would miss an in-place edit
@@ -458,7 +467,7 @@ export default function DataViewGrid({
       return def;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columnsKey, userLayout, columnWidthsKey, columnFormatsKey, columnRulesKey, editable, hiddenSet]);
+  }, [columnsKey, userLayout, columnWidthsKey, columnFormatsKey, columnAliasesKey, columnRulesKey, editable, hiddenSet]);
 
   // Columns WITHOUT an explicit width — the only ones fitCellContents should
   // auto-size. A column with an author/user width must keep its def.width, but
