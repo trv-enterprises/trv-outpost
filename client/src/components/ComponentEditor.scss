@@ -1007,11 +1007,17 @@
         // to set a width, so the boundary has to be findable without hunting
         // for a cursor change. Scoped to the editor grid — the viewer's
         // table keeps Quartz's cleaner look.
+        // --cds-border-strong-01, not -subtle-01. The subtle token is
+        // #393939, which is what the BODY cell edges use — but those read
+        // because they run between alternating row fills, while the header
+        // line has only the flat header behind it and disappeared into it.
+        // Measured correct at 33.6px × 1px and still invisible on screen,
+        // so the fix is contrast, not geometry.
         .ag-header-cell-resize::after {
           top: 20%;
           height: 60%;
           width: 1px;
-          background-color: var(--cds-border-subtle-01);
+          background-color: var(--cds-border-strong-01);
         }
 
         // Hover: the whole 8px grab zone tints, so it reads as a handle
@@ -2470,6 +2476,18 @@
 // TOP LEVEL. Nested under .mapping-section (where they started) they matched
 // nothing and the modal rendered unstyled.
 .column-options-modal {
+  // Carbon's `size` prop is a fixed ladder (xs/sm/md/lg — sm measured
+  // 576px), so a proportional width has to be set here. 40% of the viewport
+  // keeps the dialog in proportion to the screen it's on, with bounds at
+  // both ends: 22rem so the labelled fields don't crush on a laptop, 40rem
+  // so it doesn't sprawl on an ultrawide (40% of 3440px would be 1376px —
+  // back to the over-wide dialog this replaced).
+  .cds--modal-container {
+    width: 40%;
+    min-width: 22rem;
+    max-width: 40rem;
+  }
+
   .column-options-modal__section {
     padding-top: spacing.$spacing-05;
 
