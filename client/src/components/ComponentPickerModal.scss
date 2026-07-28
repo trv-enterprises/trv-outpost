@@ -181,3 +181,25 @@
   }
 }
 
+
+// "Create a duplicate" opt-in (issue #221). Pinned below the scrolling tile
+// grid, adjacent to the footer buttons it modifies. flex: 0 0 auto keeps it
+// out of the grid's flex-grow so it never scrolls away.
+.picker-duplicate-option {
+  flex: 0 0 auto;
+  padding-top: spacing.$spacing-03;
+  border-top: 1px solid var(--cds-border-subtle-01);
+}
+
+.picker-duplicate-hint {
+  margin: spacing.$spacing-02 0 0 spacing.$spacing-06;
+  font-size: 0.75rem;
+  color: var(--cds-text-secondary);
+}
+
+// Duplicate failure banner — above the toolbar, doesn't scroll with the grid.
+.picker-duplicate-error {
+  flex: 0 0 auto;
+  max-width: 100%;
+  margin: 0;
+}

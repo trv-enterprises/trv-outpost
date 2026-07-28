@@ -237,8 +237,9 @@
         }
       }
 
-      // Edit button hover - blue
-      .cds--btn--icon-only:first-child:hover {
+      // Edit button hover - blue. Class-keyed, not positional — Duplicate
+      // now sits between Edit and Delete.
+      .action-edit:hover {
         color: #78a9ff !important;
         background-color: rgba(15, 98, 254, 0.1);
 
@@ -248,7 +249,7 @@
       }
 
       // Delete button hover - red
-      .cds--btn--icon-only:last-child:hover {
+      .action-delete:hover {
         color: #fa4d56 !important;
         background-color: rgba(218, 30, 40, 0.1);
 
@@ -359,25 +360,41 @@
 
   // Actions cell
   .actions-cell {
-    width: 48px;
+    width: 96px;
     text-align: right;
+    padding-right: 8px !important;
 
     .cds--btn--icon-only {
-      color: #f4f4f4 !important;
+      color: var(--cds-icon-primary) !important;
 
       svg {
-        fill: #f4f4f4 !important;
+        fill: var(--cds-icon-primary) !important;
       }
 
+      // Neutral hover for every action; Delete overrides it below.
       &:hover {
-        color: #fa4d56 !important;
-        background-color: rgba(218, 30, 40, 0.1);
-
-        svg {
-          fill: #fa4d56 !important;
-        }
+        background-color: rgba(255, 255, 255, 0.1);
       }
     }
+
+    // Destructive hover is scoped to Delete only — Duplicate keeps the
+    // neutral hover so it doesn't read as a dangerous action.
+    .action-delete:hover {
+      color: var(--cds-support-error) !important;
+      background-color: rgba(218, 30, 40, 0.1);
+
+      svg {
+        fill: var(--cds-support-error) !important;
+      }
+    }
+  }
+
+  // Actions wrapper (div inside td) — flexbox for horizontal layout
+  .actions-wrapper {
+    display: inline-flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 4px;
   }
 
   // Tags styling

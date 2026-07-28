@@ -2,8 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getFilters, setFilters } from '../utils/filterStore';
 import { getListPrefs, setListPrefs } from '../utils/listPrefs';
@@ -28,7 +27,7 @@ import {
   Dropdown,
   Pagination
 } from '@carbon/react';
-import { TrashCan, DataBase, List, Grid, Edit, Information, Sql, Api, Document, NetworkEnterprise, ChartLineSmooth, Meter, Db2Database, Tree, Video } from '@carbon/icons-react';
+import { TrashCan, DataBase, List, Grid, Edit, Copy, Information, Sql, Api, Document, NetworkEnterprise, ChartLineSmooth, Meter, Db2Database, Tree, Video } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import usePaginatedList from '../hooks/usePaginatedList';
 import TagFilter from '../components/shared/TagFilter';
@@ -40,7 +39,7 @@ import SortMenu from '../components/shared/SortMenu';
 import CountListPopover from '../components/shared/CountListPopover';
 import { toUsageItems } from '../utils/usageRefs';
 import CreateMenu from '../components/CreateMenu';
-import ConnectionPickerModal from '../components/ConnectionPickerModal';
+import { buildConnectionCopy } from '../utils/duplicateEntity';
 import './ConnectionsPage.scss';
 
 const PAGE_SIZES = [25, 50, 100];
@@ -72,7 +71,8 @@ function ConnectionsPage() {
   const [tagFilter, setTagFilter] = useState(savedFilters.tags || []); // array of tag names
   const [namespaceFilter, setNamespaceFilter] = useState(savedFilters.namespaces || []);
   const [reloadTick, setReloadTick] = useState(0); // bump to refetch after delete
-  const [pickerOpen, setPickerOpen] = useState(false); // "From Existing" connection picker
+  const [duplicatingId, setDuplicatingId] = useState(null);
+  const duplicatingRef = useRef(false); // synchronous re-entry guard, see handleDuplicate
 
   // Server-side filter/sort/pagination (#21). The wrapped include_usage rows
   // each carry { connection, component_usage, component_count }; flatten them
@@ -172,18 +172,39 @@ function ConnectionsPage() {
     navigate('/design/connections/new');
   };
 
-  // "From Existing" creates a NEW connection seeded from the chosen one.
-  // Navigate to the create route with a cloneFrom hint so the editor loads
-  // the source's config but saves as a create (not an overwrite). Secrets
-  // aren't available to the frontend, so the clone clears them and the
-  // editor surfaces a toast asking the user to re-enter credentials.
-  const handleSelectExisting = () => {
-    setPickerOpen(true);
-  };
-
-  const handlePickerSelect = (connection) => {
-    setPickerOpen(false);
-    navigate(`/design/connections/new?cloneFrom=${connection.id}`);
+  // Duplicate a connection: copy it under a "(copy)" name in the same namespace
+  // and stay on the list (mirrors the dashboard duplicate). Secrets are never
+  // sent to the frontend — the fetched config carries "********" masks — so the
+  // copy is created WITHOUT credentials and a toast tells the user to re-enter
+  // them. The copy is otherwise ready to edit.
+  const handleDuplicate = async (e, connection) => {
+    e.stopPropagation();
+    // Ref, not state: state is read from this render's closure, so two clicks
+    // dispatched before a re-render would both pass the guard and create two
+    // copies. The state still drives the disabled prop.
+    if (duplicatingRef.current) return;
+    duplicatingRef.current = true;
+    setDuplicatingId(connection.id);
+    try {
+      // The list row omits config; fetch the full record so the copy carries it.
+      const full = await apiClient.getConnection(connection.id);
+      const existingNames = new Set((connections || []).map((c) => c?.name).filter(Boolean));
+      const { payload, droppedSecrets } = buildConnectionCopy(full, existingNames);
+      await apiClient.createConnection(payload);
+      refetch();
+      if (droppedSecrets) {
+        pushToast({
+          kind: 'info',
+          title: 'Re-enter credentials',
+          subtitle: `"${payload.name}" was created without secrets (passwords, API keys, tokens) — open it and re-enter them before use.`,
+        });
+      }
+    } catch (err) {
+      pushToast({ kind: 'error', title: 'Duplicate failed', subtitle: err.message });
+    } finally {
+      duplicatingRef.current = false;
+      setDuplicatingId(null);
+    }
   };
 
   const handleRowClick = (connection) => {
@@ -377,10 +398,7 @@ function ConnectionsPage() {
         <div className="toolbar-actions">
           {/* No "Create with AI" for connections — they're config-driven,
               not code-driven, so omit the onCreateWithAI handler. */}
-          <CreateMenu
-            onCreate={handleCreate}
-            onSelectExisting={handleSelectExisting}
-          />
+          <CreateMenu onCreate={handleCreate} />
         </div>
       </div>
 
@@ -465,6 +483,7 @@ function ConnectionsPage() {
                     <div className="tile-actions">
                       <IconButton
                         kind="ghost"
+                        className="action-edit"
                         label="Edit"
                         onClick={(e) => { e.stopPropagation(); handleRowClick(connection); }}
                         size="sm"
@@ -473,6 +492,16 @@ function ConnectionsPage() {
                       </IconButton>
                       <IconButton
                         kind="ghost"
+                        label="Duplicate"
+                        onClick={(e) => handleDuplicate(e, connection)}
+                        size="sm"
+                        disabled={duplicatingId === connection.id}
+                      >
+                        <Copy size={16} />
+                      </IconButton>
+                      <IconButton
+                        kind="ghost"
+                        className="action-delete"
                         label="Delete"
                         onClick={(e) => handleDelete(e, connection)}
                         size="sm"
@@ -578,14 +607,26 @@ function ConnectionsPage() {
                             if (cell.info.header === 'actions') {
                               return (
                                 <TableCell key={cell.id} className="actions-cell">
-                                  <IconButton
-                                    kind="ghost"
-                                    label="Delete"
-                                    onClick={(e) => handleDelete(e, connection)}
-                                    size="sm"
-                                  >
-                                    <TrashCan size={16} />
-                                  </IconButton>
+                                  <div className="actions-wrapper">
+                                    <IconButton
+                                      kind="ghost"
+                                      label="Duplicate"
+                                      onClick={(e) => handleDuplicate(e, connection)}
+                                      size="sm"
+                                      disabled={duplicatingId === connection.id}
+                                    >
+                                      <Copy size={16} />
+                                    </IconButton>
+                                    <IconButton
+                                      kind="ghost"
+                                      className="action-delete"
+                                      label="Delete"
+                                      onClick={(e) => handleDelete(e, connection)}
+                                      size="sm"
+                                    >
+                                      <TrashCan size={16} />
+                                    </IconButton>
+                                  </div>
                                 </TableCell>
                               );
                             }
@@ -659,19 +700,6 @@ function ConnectionsPage() {
         />
       )}
 
-      {/* "From Existing" — pick a connection to clone into a new one.
-          Conditionally rendered and portaled to <body>, matching the
-          component editor's usage. Rendering it inline + always-mounted
-          left the modal's search field unable to take keyboard input
-          (focus/stacking context of the page subtree). */}
-      {pickerOpen && createPortal(
-        <ConnectionPickerModal
-          open
-          onClose={() => setPickerOpen(false)}
-          onSelect={handlePickerSelect}
-        />,
-        document.body
-      )}
     </div>
   );
 }

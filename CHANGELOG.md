@@ -10,6 +10,33 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Duplicate components and connections.** The component and connection lists
+  gain a **Duplicate** action on every row and tile, matching the one
+  dashboards already had. It copies the record as `<name> (copy)` in the same
+  namespace and leaves you on the list — no editor round-trip, no selector to
+  fill in. A repeated copy bumps to `(copy 2)`, `(copy 3)`, and so on.
+
+  Connection duplicates are created **without secrets**: passwords, API keys
+  and tokens are never sent to the browser, so the copy starts blank there and
+  a notification prompts you to re-enter them before using it.
+
+  This replaces the **From Existing** item in the Create menu for these two
+  entities, which needed an extra picker to do the same job and created
+  nothing until you saved. The Create menu now collapses to a plain button
+  when only one create option remains. (#203)
+
+- **Create a duplicate when picking a component for a panel.** The dashboard
+  editor's **Select Existing** picker gains a **Create a duplicate of the
+  selected component** checkbox. Confirm with it checked and the panel gets a
+  new `<name> (copy)` instead of the original — the fast path for "I want this
+  chart, but slightly different," without the edits reaching every other
+  dashboard using it.
+
+  The copy is created when you confirm, so it exists immediately and shows up
+  in the component list; cancelling the picker creates nothing. Leave the box
+  clear for the existing behavior of placing the shared component itself.
+  (#221)
+
 - **Per-dashboard panel background.** Dashboard Settings gains a **Panel
   background** choice — *Default*, *Solid background*, or *Transparent
   background* — that overrides the deployment-wide Transparent Panels setting

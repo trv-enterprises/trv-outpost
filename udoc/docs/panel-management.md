@@ -66,6 +66,12 @@ Click the edit icon (pencil for existing components, `+` for empty panels) in th
 
 After assigning a component, the panel automatically expands to meet the component's minimum size if needed.
 
+The **Select Existing** picker also offers a **Create a duplicate of the
+selected component** checkbox: confirm with it checked and the panel gets a new
+`<name> (copy)` component instead of the original, so you can edit it without
+affecting other dashboards. See
+[Create a duplicate instead](creating-components.md#create-a-duplicate-instead).
+
 ## Panels and Dashboard Variables
 
 When a dashboard defines a [dashboard variable](dashboard-variables.md), panels interact with it in two ways:

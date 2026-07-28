@@ -4338,12 +4338,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         panelId={editingPanelId}
       />
 
-      {/* Component Picker Modal (edit mode) */}
+      {/* Component Picker Modal (edit mode). allowDuplicate offers the
+          "create a duplicate" checkbox (#221) — building a dashboard often
+          means wanting a slight variant of an existing chart. */}
       <ComponentPickerModal
         open={componentPickerOpen}
         onClose={closeComponentPicker}
         onSelect={handleComponentSelect}
         category={componentPickerCategory}
+        allowDuplicate
       />
 
       {/* Component-swap rules editor (edit mode, dashboard-variable active) */}

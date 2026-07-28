@@ -24,6 +24,19 @@ Use the search bar to filter by name, description, or type. Switch between list 
 4. Use **Test Connection** to verify the settings
 5. Click **Save**
 
+## Duplicating a Connection
+
+The **Duplicate** icon on each row (list view) or card (tile view) copies a
+connection immediately as `<name> (copy)` in the same namespace, carrying its
+type, configuration, description, and tags. You stay on the list; the copy
+appears there and can be edited like any other connection.
+
+:::caution Secrets are not copied
+Passwords, API keys, and tokens are never sent to the browser, so a duplicate is
+created **without** them. Open the copy and re-enter its credentials before
+testing or using it — a notification reminds you when the source had secrets.
+:::
+
 ## Testing Connections
 
 The connection editor includes a test feature:
