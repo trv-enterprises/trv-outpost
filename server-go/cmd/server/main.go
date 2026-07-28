@@ -920,6 +920,9 @@ func main() {
 			components.GET("/:id/versions/:version", componentHandler.GetComponentVersion)
 			components.DELETE("/:id/versions/:version", componentHandler.DeleteComponentVersion)
 			components.GET("/:id/version-info", componentHandler.GetComponentVersionInfo)
+			// Which dashboards reference this component — powers the
+			// shared-component save warning and the panel-header indicator.
+			components.GET("/:id/usage", componentHandler.GetComponentUsage)
 			components.GET("/:id/draft", componentHandler.GetComponentDraft)
 			components.DELETE("/:id/draft", componentHandler.DeleteComponentDraft)
 		}

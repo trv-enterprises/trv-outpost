@@ -51,6 +51,7 @@ import {
   Download,
   Notification,
   Code,
+  Copy,
   BorderFull,
   Draw
 } from '@carbon/icons-react';
@@ -1848,6 +1849,49 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     setIsEditMode(true);
   };
 
+  // Panel-header "shared component" indicator (#221 follow-up).
+  //
+  // Components are shared entities, so a panel may be showing something that
+  // several other dashboards also depend on — editing it there is a wider
+  // change than it looks. Mark those panels in edit mode so the author knows
+  // before they open the editor.
+  //
+  // One include_usage list request rather than N per-component /usage calls:
+  // the components list already denormalizes dashboard_count server-side
+  // (#21), and a dashboard's panels can reference many components. Edit-mode
+  // only — view mode never needs it.
+  const [componentUsageCounts, setComponentUsageCounts] = useState({});
+  const placedComponentKey = useMemo(
+    () => (editablePanels || [])
+      .map((p) => p?.component_id)
+      .filter(Boolean)
+      .sort()
+      .join(','),
+    [editablePanels]
+  );
+  useEffect(() => {
+    if (!isEditMode) return undefined;
+    let cancelled = false;
+    apiClient
+      .getComponents({ include_usage: true, page_size: 'all' })
+      .then((data) => {
+        if (cancelled) return;
+        const counts = {};
+        (data?.components || []).forEach((c) => {
+          if (c?.id) counts[c.id] = c.dashboard_count || 0;
+        });
+        setComponentUsageCounts(counts);
+      })
+      .catch((err) => {
+        // Indicator-only: a failure just means no badges, never a broken editor.
+        console.error('[DashboardViewerPage] usage counts failed:', err);
+      });
+    return () => { cancelled = true; };
+    // Keyed on the SET of placed component ids, not editablePanels itself —
+    // otherwise every drag/resize would refetch the whole list. Adding or
+    // swapping a component changes the key and picks up its badge.
+  }, [isEditMode, placedComponentKey]);
+
   // Cancel returns to wherever the user came from:
   //   - Came from design list (fromDesign=true) → back to /design/dashboards
   //   - Came from view mode (clicked Edit on a dashboard they were
@@ -1953,6 +1997,20 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             </span>
           )}
           <span className="panel-size-label">{panel.w}×{panel.h}</span>
+          {/* Shared-component indicator: this panel's component is also on
+              other dashboards, so editing it here changes them too. Count is
+              total dashboards; "others" is what the author doesn't already
+              know about. */}
+          {chart?.id && (componentUsageCounts[chart.id] || 0) > 1 && (
+            <span
+              className="panel-shared-indicator"
+              title={`Shared component — also used on ${componentUsageCounts[chart.id] - 1} other dashboard${componentUsageCounts[chart.id] - 1 === 1 ? '' : 's'}. Editing it changes them too.`}
+              aria-label={`Shared component, used on ${componentUsageCounts[chart.id]} dashboards`}
+            >
+              <Copy size={14} />
+              <span className="panel-shared-count">{componentUsageCounts[chart.id]}</span>
+            </span>
+          )}
           {chart?.use_custom_code && (
             <span
               className="panel-custom-code-indicator"
@@ -4336,6 +4394,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         onSave={handleChartSave}
         chart={editingChart}
         panelId={editingPanelId}
+        // Lets the shared-component save warning exclude THIS dashboard from
+        // the "also affects…" list — the user knows they're editing here.
+        dashboardId={id}
       />
 
       {/* Component Picker Modal (edit mode). allowDuplicate offers the

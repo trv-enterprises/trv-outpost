@@ -807,6 +807,16 @@ class APIClient {
     });
   }
 
+  /**
+   * Dashboards referencing this component (panel default or component-swap
+   * override). Powers the shared-component save warning and the dashboard
+   * editor's panel-header "shared" indicator.
+   * @returns {Promise<{dashboards: Array<{id,name}|{unauthorized:true,kind:string}>, has_unauthorized?: boolean}>}
+   */
+  async getComponentUsage(id) {
+    return this.request(`/api/components/${id}/usage`);
+  }
+
   // Component versioning endpoints
   async getComponentVersionInfo(id) {
     return this.request(`/api/components/${id}/version-info`);

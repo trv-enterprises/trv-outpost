@@ -336,6 +336,32 @@ func (h *ComponentHandler) GetComponentVersionInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, info)
 }
 
+// GetComponentUsage reports which dashboards reference a component
+// @Summary Get component dashboard usage
+// @Description List the dashboards referencing this component (panel default or component-swap override). Used by the editor's shared-component save warning. Dashboards in namespaces the caller can't see are returned as {unauthorized:true} so the count stays accurate.
+// @Tags components
+// @Produce json
+// @Param id path string true "Component ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /components/{id}/usage [get]
+func (h *ComponentHandler) GetComponentUsage(c *gin.Context) {
+	id := c.Param("id")
+
+	usage, err := h.service.GetComponentUsage(c.Request.Context(), id)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Component not found"})
+			return
+		}
+		respondError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, usage)
+}
+
 // GetComponentDraft retrieves the draft version of a component
 // @Summary Get component draft
 // @Description Get the draft version of a component (if exists)

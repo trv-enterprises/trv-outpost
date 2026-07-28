@@ -767,7 +767,7 @@
     },
     {
       "name": "components",
-      "description": "components endpoints (13).",
+      "description": "components endpoints (14).",
       "item": [
         {
           "name": "Create a new component",
@@ -1038,6 +1038,41 @@
               ]
             },
             "description": "Get a specific component version\n\nGet a specific version of a component by ID and version number\n\n\nResponses: 200, 400, 404, 500"
+          },
+          "response": []
+        },
+        {
+          "name": "Get component dashboard usage",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/components/{id}/usage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "components",
+                ":id",
+                "usage"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Component ID"
+                }
+              ]
+            },
+            "description": "Get component dashboard usage\n\nList the dashboards referencing this component (panel default or component-swap override). Used by the editor's shared-component save warning. Dashboards in namespaces the caller can't see are returned as {unauthorized:true} so the count stays accurate.\n\n\nResponses: 200, 404, 500"
           },
           "response": []
         },

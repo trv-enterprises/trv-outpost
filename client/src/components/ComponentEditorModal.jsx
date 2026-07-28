@@ -8,6 +8,8 @@ import ComponentEditor from './ComponentEditor';
 import apiClient from '../api/client';
 import { invalidateTagsCache } from './shared/tagsApi';
 import DiscardChangesModal from './shared/DiscardChangesModal';
+import SharedComponentWarningModal from './shared/SharedComponentWarningModal';
+import useSharedComponentWarning from '../hooks/useSharedComponentWarning';
 import './ComponentEditorModal.scss';
 
 /**
@@ -16,7 +18,7 @@ import './ComponentEditorModal.scss';
  * Modal wrapper for ComponentEditor component.
  * Used in dashboard editing to create/edit charts inline.
  */
-function ComponentEditorModal({ open, onClose, onSave, chart, panelId }) {
+function ComponentEditorModal({ open, onClose, onSave, chart, panelId, dashboardId }) {
   const [saving, setSaving] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isValid, setIsValid] = useState(false);
@@ -77,7 +79,19 @@ function ComponentEditorModal({ open, onClose, onSave, chart, panelId }) {
     return cleanup;
   }, [open]);
 
-  const handleSave = async (chartPayload) => {
+  // Editing from a dashboard is where the shared-component trap bites hardest:
+  // the user is looking at ONE dashboard, so it's easy to miss that the save
+  // lands on every other dashboard using this component. Gate the write behind
+  // a confirmation naming them (the current dashboard is excluded from the
+  // "others" test — see useSharedComponentWarning).
+  const { guardSave, modalProps: sharedWarningProps } = useSharedComponentWarning({
+    currentDashboardId: dashboardId,
+  });
+
+  const handleSave = (chartPayload) =>
+    guardSave(chart?.id, chartPayload?.name || chart?.name, () => doSave(chartPayload));
+
+  const doSave = async (chartPayload) => {
     setSaving(true);
     try {
       let savedChart;
@@ -170,6 +184,9 @@ function ComponentEditorModal({ open, onClose, onSave, chart, panelId }) {
         }}
         body="You have unsaved changes to this chart. Are you sure you want to discard them?"
       />
+
+      {/* Shared-component save confirmation */}
+      <SharedComponentWarningModal {...sharedWarningProps} />
     </>
   );
 }

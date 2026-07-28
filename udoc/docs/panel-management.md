@@ -72,6 +72,20 @@ selected component** checkbox: confirm with it checked and the panel gets a new
 affecting other dashboards. See
 [Create a duplicate instead](creating-components.md#create-a-duplicate-instead).
 
+## Shared Component Indicator
+
+In edit mode, a panel whose component is also placed on **other** dashboards
+shows a counter icon in its header. The number is how many dashboards use that
+component in total, and the tooltip names how many others are affected.
+
+It's a heads-up, not a problem: sharing a component is normal and often the
+point. But it means editing that panel's component changes those dashboards
+too. If you want a change that stays local, duplicate the component first —
+either from the panel's **Select Existing** picker or from the components list.
+
+Saving a shared component asks for confirmation and lists the dashboards it
+will affect, so you get a second chance even if you miss the icon.
+
 ## Panels and Dashboard Variables
 
 When a dashboard defines a [dashboard variable](dashboard-variables.md), panels interact with it in two ways:

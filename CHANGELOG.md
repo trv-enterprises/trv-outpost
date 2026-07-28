@@ -37,6 +37,26 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   clear for the existing behavior of placing the shared component itself.
   (#221)
 
+- **Shared-component save warning and panel indicator.** Components are shared
+  entities, so editing one changes every dashboard using it — easy to forget
+  when the edit is made from a single dashboard's editor. Two additions make
+  the sharing visible before it bites:
+
+  Saving a component that's on more than one dashboard now asks for
+  confirmation and **names the dashboards the save will reach**. This applies
+  to all three save paths: the component detail page, the editor opened from a
+  dashboard panel (which previously had no confirmation at all), and the AI
+  builder's draft promotion. Dashboards in a namespace you can't view are
+  counted but not named, so the number stays honest without leaking anything.
+
+  In the dashboard editor, panels whose component is used elsewhere carry a
+  **counter icon in the panel header**, with a tooltip naming how many other
+  dashboards are affected.
+
+  Neither blocks anything — sharing is normal and often the point. They exist
+  so the choice is deliberate, and both point at duplication as the way to make
+  a change that stays local. New endpoint: `GET /api/components/:id/usage`.
+
 - **Per-dashboard panel background.** Dashboard Settings gains a **Panel
   background** choice — *Default*, *Solid background*, or *Transparent
   background* — that overrides the deployment-wide Transparent Panels setting

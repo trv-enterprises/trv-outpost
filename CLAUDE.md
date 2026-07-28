@@ -396,6 +396,7 @@ dashboard/
 | GET | `/api/components/:id/versions/:version` | Get a specific version |
 | DELETE | `/api/components/:id/versions/:version` | Delete a specific version |
 | GET | `/api/components/:id/version-info` | Version metadata (count, has draft) |
+| GET | `/api/components/:id/usage` | Dashboards referencing this component; powers the shared-component save warning + panel indicator |
 | GET | `/api/components/:id/draft` | Get the draft version (if any) |
 | DELETE | `/api/components/:id/draft` | Delete the draft version |
 | **Dashboards** |||

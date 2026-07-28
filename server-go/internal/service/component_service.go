@@ -25,9 +25,14 @@ var ErrComponentInUse = errors.New("component is in use")
 
 // ComponentUsage describes the entities referencing a component. Empty
 // slice means no dashboards reference it. The handler serializes this
-// struct under "usage" in the 409 response.
+// struct under "usage" in the 409 response, and as the body of
+// GET /components/:id/usage.
 type ComponentUsage struct {
 	Dashboards []EntityRef `json:"dashboards"`
+	// HasUnauthorized is set when at least one referencing dashboard
+	// was redacted because the caller can't see its namespace. omitempty
+	// keeps the delete-409 body byte-identical to what it was before.
+	HasUnauthorized bool `json:"has_unauthorized,omitempty"`
 }
 
 // ComponentService handles component business logic
@@ -503,6 +508,10 @@ func (s *ComponentService) DeleteComponent(ctx context.Context, id string) (*Com
 // dashboard whose panels reference the given component. If the
 // dashboard repo is unavailable (nil), reports an empty list rather
 // than failing.
+//
+// Namespace is carried on each ref for the benefit of callers that
+// redact (see GetComponentUsage); it is decode-only and never
+// serializes.
 func (s *ComponentService) componentUsage(ctx context.Context, id string) (*ComponentUsage, error) {
 	usage := &ComponentUsage{}
 	if s.dashboardRepo == nil {
@@ -513,7 +522,37 @@ func (s *ComponentService) componentUsage(ctx context.Context, id string) (*Comp
 		return nil, fmt.Errorf("listing dashboards: %w", err)
 	}
 	for _, d := range dashes {
-		usage.Dashboards = append(usage.Dashboards, EntityRef{ID: d.ID, Name: d.Name})
+		usage.Dashboards = append(usage.Dashboards, EntityRef{ID: d.ID, Name: d.Name, Namespace: d.Namespace})
+	}
+	return usage, nil
+}
+
+// GetComponentUsage reports which dashboards reference a component,
+// for the shared-component save warning (#221 follow-up): the editor
+// asks before writing so the user knows an edit lands on more than
+// the dashboard in front of them.
+//
+// Dashboards in namespaces the caller can't see are redacted to
+// {unauthorized:true} rather than dropped — the COUNT has to stay
+// honest or the warning under-reports the blast radius, which is the
+// one thing it exists to prevent.
+func (s *ComponentService) GetComponentUsage(ctx context.Context, id string) (*ComponentUsage, error) {
+	component, err := s.repo.FindLatestFinal(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving component: %w", err)
+	}
+	if component == nil {
+		return nil, fmt.Errorf("component not found")
+	}
+	usage, err := s.componentUsage(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	usage.Dashboards, usage.HasUnauthorized = redactUsageRefs(ctx, usage.Dashboards, "dashboard")
+	// Serialize an empty list, not null: "used by nothing" is a normal answer
+	// and callers shouldn't have to special-case a null array.
+	if usage.Dashboards == nil {
+		usage.Dashboards = []EntityRef{}
 	}
 	return usage, nil
 }

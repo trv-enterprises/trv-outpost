@@ -84,6 +84,19 @@ From the component list or a dashboard panel:
 
 Changes to a component update it everywhere it's used.
 
+:::note Saving a shared component
+Because components are shared, the save dialog tells you when the one you're
+editing is placed on more than one dashboard, and names them. This applies
+wherever you save — the component editor, the editor opened from a dashboard
+panel, and the AI builder. Confirming saves to all of them; to change it in
+one place only, cancel and
+[duplicate the component](#4-duplicate-from-the-component-list) instead.
+
+In the dashboard editor, panels whose component is shared also carry a
+counter icon in the panel header — see
+[Panel Management](panel-management.md#shared-component-indicator).
+:::
+
 ## Versioning
 
 Components are stored as a sequence of versions in the database (each
