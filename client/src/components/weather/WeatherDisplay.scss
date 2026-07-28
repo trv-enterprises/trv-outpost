@@ -353,6 +353,10 @@
 // component's own structure — they group the forecast into readable
 // tiles — not panel chrome, and removing them would leave the forecast
 // as unseparated text on the canvas rather than a cleaner-looking panel.
-:root[data-transparent-panels='true'] .weather-display {
+// Same two-arm condition as the panel rule (DashboardGrid.scss): the
+// deployment setting, unless this dashboard forces solid; or a dashboard
+// that overrides to transparent.
+:root[data-transparent-panels='true']:not([data-panel-background='solid']) .weather-display,
+:root[data-panel-background='transparent'] .weather-display {
   background-color: transparent;
 }
