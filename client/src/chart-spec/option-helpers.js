@@ -112,6 +112,47 @@ export const COLUMN_RULE_TARGETS = [
 ];
 
 /**
+ * Parse a human-written number for a rule operand.
+ *
+ * The author types what they SEE in the table, and the table abbreviates:
+ * a memory column reads "2.1G", a byte count reads "9,819,455,488". Plain
+ * Number() returns NaN for both, so a `> 2.1G` rule silently never fired —
+ * no error, just a rule that looked right and did nothing.
+ *
+ * Accepts, in addition to a bare number:
+ *   - THOUSANDS SEPARATORS — "2,048" → 2048. Stripped only when they are
+ *     positioned like separators; "1,5" (a decimal comma in some locales)
+ *     is rejected rather than silently read as 15.
+ *   - SI SUFFIXES — k/M/G/T (and lowercase), matching the SI table the
+ *     compact formatter prints with, so "2.1G" round-trips.
+ *   - a leading sign and surrounding whitespace.
+ *
+ * Deliberately NOT accepting binary units (Ki/Mi/Gi): the formatter never
+ * emits them, so honoring them here would invent a convention the display
+ * side doesn't share.
+ *
+ * @param {string|number} input
+ * @returns {number} the parsed value, or NaN when it isn't a number
+ */
+export function parseNumericOperand(input) {
+  if (typeof input === 'number') return input;
+  if (typeof input !== 'string') return NaN;
+  let s = input.trim();
+  if (!s) return NaN;
+  // Strip thousands separators only in a well-formed grouping position:
+  // optional leading 1-3 digits, then one or more ,ddd groups.
+  if (/^[+-]?\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) s = s.replace(/,/g, '');
+  const m = /^([+-]?(?:\d+\.?\d*|\.\d+))\s*([kKmMgGtT])?$/.exec(s);
+  if (!m) return NaN;
+  const n = Number(m[1]);
+  if (!Number.isFinite(n)) return NaN;
+  if (!m[2]) return n;
+  // Same SI table the compact formatter prints with (number-formats.js).
+  const mult = { k: 1e3, m: 1e6, g: 1e9, t: 1e12 }[m[2].toLowerCase()];
+  return n * mult;
+}
+
+/**
  * Evaluate one column's rules against a cell value.
  *
  * FIRST MATCH WINS, in list order — same contract as the value chart's
@@ -145,8 +186,14 @@ export function resolveColumnRule(raw, rules) {
     } else if (operand == null || operand === '') {
       continue; // half-typed rule — don't let it capture everything
     } else if (op === 'gt' || op === 'lt') {
-      const a = Number(raw);
-      const b = Number(operand);
+      // Both sides go through the same lenient parse. The OPERAND is what
+      // the author typed ("2.1G", "2,048"); the CELL may itself be a
+      // formatted string, since JSON/MQTT/CSV sources routinely deliver
+      // numbers as text. A cell that genuinely isn't numeric yields NaN and
+      // the rule is skipped, so a `>` rule on a text column still never
+      // fires rather than comparing as strings.
+      const a = parseNumericOperand(raw);
+      const b = parseNumericOperand(operand);
       if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
       hit = op === 'gt' ? a > b : a < b;
     } else if (op === 'contains') {

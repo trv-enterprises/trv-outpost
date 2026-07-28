@@ -64,7 +64,8 @@ export default function ColumnRuleList({ rules, onChange, idPrefix }) {
       <p className="aliases-hint">
         Color this column&rsquo;s cells by what they contain. Rules are checked top to bottom
         and the first match wins, so put specific rules above broad ones. Text matching
-        ignores case.
+        ignores case; numeric comparisons accept what the table shows &mdash; SI suffixes
+        (2.1G) and thousands separators (2,048).
       </p>
 
       {entries.length === 0 && (
@@ -105,7 +106,7 @@ export default function ColumnRuleList({ rules, onChange, idPrefix }) {
                   labelText="Value"
                   size="sm"
                   className="column-rule-list__value"
-                  placeholder="e.g. running"
+                  placeholder={/^(gt|lt)$/.test(rule.op) ? 'e.g. 2.1G or 2,048' : 'e.g. running'}
                   value={rule.value ?? ''}
                   onChange={(e) => update(i, { value: e.target.value })}
                 />
