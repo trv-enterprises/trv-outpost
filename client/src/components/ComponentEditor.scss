@@ -991,39 +991,38 @@
         border: 1px solid var(--cds-border-subtle-01);
         margin-bottom: spacing.$spacing-04;
 
-        // Header column separators. Quartz ships
-        // --ag-header-column-separator-display: none, so header cells have
-        // NO right border while body cells do — measured 0px none vs
-        // 1px solid #393939. In the viewer that's a deliberate clean look,
-        // but here the header IS the control surface: dragging a column
-        // edge is the primary way to set a width, and with no line there is
-        // nothing showing WHERE to grab. The cursor changed to ew-resize
-        // over an invisible 8px zone, which reads as a rendering bug.
+        // Header column separators.
         //
-        // Scoped to the editor grid so the viewer's table is untouched.
-        .ag-header-cell::after {
-          content: '';
-          position: absolute;
-          right: 0;
+        // AG Grid ALREADY draws one — `.ag-header-cell-resize::after`, a
+        // 2px × ~17px bar sitting in the resize handle. An earlier attempt
+        // here added a second separator on `.ag-header-cell::after`, which
+        // was a mistake: both land at the same x, the resize element's is
+        // thicker, so the added line was simply hidden behind it and the
+        // only visible mark stayed the short built-in one. Style the
+        // separator AG Grid already has rather than stacking another on it.
+        //
+        // It's made taller (60% of the row) so the column boundary reads at
+        // a glance. This matters more here than in the viewer: the header is
+        // the control surface, and dragging a column edge is the primary way
+        // to set a width, so the boundary has to be findable without hunting
+        // for a cursor change. Scoped to the editor grid — the viewer's
+        // table keeps Quartz's cleaner look.
+        .ag-header-cell-resize::after {
           top: 20%;
           height: 60%;
           width: 1px;
           background-color: var(--cds-border-subtle-01);
-          pointer-events: none;
         }
 
-        // Last column has no edge to drag against the next one, so no line.
-        .ag-header-cell:last-of-type::after {
-          display: none;
-        }
-
-        // Make the grab zone itself discoverable on hover — the separator
-        // brightens and thickens, so it reads as a handle rather than a
-        // decorative rule. AG Grid's .ag-header-cell-resize is the real
-        // 8px hit area; this only styles it.
+        // Hover: the whole 8px grab zone tints, so it reads as a handle
+        // rather than a decorative rule, and the line itself brightens.
         .ag-header-cell-resize:hover {
           background-color: var(--cds-interactive);
           opacity: 0.5;
+
+          &::after {
+            background-color: var(--cds-border-strong-01);
+          }
         }
 
         // Let the header content WRAP instead of being clipped. AG Grid sizes
