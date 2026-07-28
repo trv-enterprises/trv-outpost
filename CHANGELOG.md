@@ -8,6 +8,18 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Transparent panels.** A new **Transparent Panels** appearance setting in
+  Manage → Settings drops the panel background, border, and title-band fill
+  across every dashboard, so components appear to float directly on the dark
+  canvas instead of sitting on raised tiles. Off by default — existing
+  deployments look exactly as they do today.
+
+  Only the panel chrome changes: sizes, positions, and spacing are identical
+  either way, so turning it on can't reflow a dashboard. A component that
+  paints its own background still shows it. Applies on next page load.
+
 ### Changed
 
 - **Dashboard borders can be built by clicking, not just dragging.**

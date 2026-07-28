@@ -37,6 +37,11 @@ settings:
     description: "Default font size (px) for the value on newly created Value charts. Individual charts override this in the chart editor."
     value: 56
 
+  - key: transparent_panels
+    category: appearance
+    description: "Render dashboard panels with no background, border, or title-band fill, so components appear to float directly on the dashboard's dark canvas. Off = the standard raised panel surface. Applies on next page load."
+    value: false
+
   - key: chart_preferred_color_options
     category: appearance
     description: "Which Carbon color-combination 'option' multi-series charts use when auto-coloring, per number of series. Carbon curates several distinguishable combinations for 1–5 series; this picks the preferred one for each. Charts with 6+ series fall back to the full 14-color sequence. Per-series manual color overrides always win. Applies on next page load."
