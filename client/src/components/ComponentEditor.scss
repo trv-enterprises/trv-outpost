@@ -1156,87 +1156,10 @@
     }
 
     // Per-column options modal (display name / format / width / rules).
-    .column-options-modal {
-      .column-options-modal__grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-        gap: spacing.$spacing-05;
-        padding-top: spacing.$spacing-03;
-      }
-    }
 
     // Conditional-format rule editor. Two lines per rule: the condition on
     // top, the color + scope + preview beneath, so a rule reads as one block
     // instead of a very wide row that wraps unpredictably.
-    .column-rule-list {
-      .column-rule-list__empty {
-        color: var(--cds-text-secondary);
-        font-size: 0.75rem;
-        font-style: italic;
-        margin: 0 0 spacing.$spacing-04 0;
-      }
-
-      .column-rule-list__rule {
-        border: 1px solid var(--cds-border-subtle-01);
-        border-radius: 2px;
-        padding: spacing.$spacing-04;
-        margin-bottom: spacing.$spacing-04;
-      }
-
-      .column-rule-list__line {
-        display: flex;
-        align-items: flex-end;
-        gap: spacing.$spacing-04;
-        flex-wrap: wrap;
-
-        &--second {
-          margin-top: spacing.$spacing-04;
-          align-items: center;
-        }
-      }
-
-      .column-rule-list__op,
-      .column-rule-list__target {
-        min-width: 10rem;
-      }
-
-      .column-rule-list__value {
-        min-width: 12rem;
-        flex: 1 1 auto;
-      }
-
-      .column-rule-list__reorder {
-        display: flex;
-        align-items: center;
-        gap: 1px;
-        margin-left: auto;
-      }
-
-      .column-rule-list__color {
-        display: flex;
-        align-items: center;
-        gap: spacing.$spacing-03;
-      }
-
-      .column-rule-list__color-label {
-        color: var(--cds-text-secondary);
-        font-size: 0.75rem;
-      }
-
-      // Shows the rule exactly as the grid will paint it, so the author
-      // doesn't have to save and switch to preview to check readability.
-      .column-rule-list__preview {
-        margin-left: auto;
-        padding: spacing.$spacing-02 spacing.$spacing-04;
-        border-radius: 2px;
-        font-size: 0.875rem;
-        font-weight: 600;
-      }
-
-      .column-rule-list__row-note {
-        margin-top: spacing.$spacing-03;
-      }
-    }
 
 
     // Grid should use full width - remove Carbon Grid padding
@@ -2539,6 +2462,106 @@
     .cds--select {
       width: 100%;
       min-width: 0;
+    }
+  }
+}
+
+// ── Column options modal (portaled) ──────────────────────────────────
+// Carbon's Modal portals to document.body, so these rules must live at the
+// TOP LEVEL. Nested under .mapping-section (where they started) they matched
+// nothing and the modal rendered unstyled.
+.column-options-modal {
+  .column-options-modal__section {
+    padding-top: spacing.$spacing-05;
+
+    & + .column-options-modal__section {
+      margin-top: spacing.$spacing-05;
+      border-top: 1px solid var(--cds-border-subtle-01);
+    }
+  }
+
+  .column-options-modal__section-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--cds-text-primary);
+    margin: 0 0 spacing.$spacing-03 0;
+  }
+
+  // Single column: the modal is `sm`, so side-by-side fields would be too
+  // cramped to label clearly.
+  .column-options-modal__grid {
+    display: flex;
+    flex-direction: column;
+    gap: spacing.$spacing-05;
+  }
+
+  .column-rule-list {
+    .column-rule-list__empty {
+      color: var(--cds-text-secondary);
+      font-size: 0.75rem;
+      font-style: italic;
+      margin: 0 0 spacing.$spacing-04 0;
+    }
+
+    .column-rule-list__rule {
+      border: 1px solid var(--cds-border-subtle-01);
+      border-radius: 2px;
+      padding: spacing.$spacing-04;
+      margin-bottom: spacing.$spacing-04;
+    }
+
+    .column-rule-list__line {
+      display: flex;
+      align-items: flex-end;
+      gap: spacing.$spacing-04;
+      flex-wrap: wrap;
+
+      &--second {
+        margin-top: spacing.$spacing-04;
+        align-items: center;
+      }
+    }
+
+    .column-rule-list__op,
+    .column-rule-list__target {
+      min-width: 10rem;
+    }
+
+    .column-rule-list__value {
+      min-width: 12rem;
+      flex: 1 1 auto;
+    }
+
+    .column-rule-list__reorder {
+      display: flex;
+      align-items: center;
+      gap: 1px;
+      margin-left: auto;
+    }
+
+    .column-rule-list__color {
+      display: flex;
+      align-items: center;
+      gap: spacing.$spacing-03;
+    }
+
+    .column-rule-list__color-label {
+      color: var(--cds-text-secondary);
+      font-size: 0.75rem;
+    }
+
+    // Shows the rule exactly as the grid will paint it, so the author
+    // doesn't have to save and switch to preview to check readability.
+    .column-rule-list__preview {
+      margin-left: auto;
+      padding: spacing.$spacing-02 spacing.$spacing-04;
+      border-radius: 2px;
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .column-rule-list__row-note {
+      margin-top: spacing.$spacing-03;
     }
   }
 }
