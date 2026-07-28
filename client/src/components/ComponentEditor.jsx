@@ -1616,14 +1616,49 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     if (onNestedModalChange) onNestedModalChange(anyNestedModalOpen);
   }, [anyNestedModalOpen, onNestedModalChange]);
 
-  // Update selectedDatasource when ID changes
+  // Resolve selectedDatasource from the loaded connection list when the id
+  // changes.
+  //
+  // The list is NOT authoritative for "which connection is selected" — the
+  // saved component's connection_id is. The list is a cache that can legitimately
+  // not contain the selected connection:
+  //   - it is capped at page_size 100, so connection #101 is never in it;
+  //   - it is fetched once on mount, racing the component load, and its
+  //     failure path only console.errors.
+  // When that happened the editor showed NO connection even though
+  // selectedConnectionId was correct — reopening the editor refetched the list
+  // and it appeared, which is the intermittent "connection not displayed" bug.
+  //
+  // So a miss triggers a single targeted fetch of that ONE connection rather
+  // than clearing the display. Only a genuinely empty id clears it.
   useEffect(() => {
-    if (selectedConnectionId && connections.length > 0) {
-      const ds = connections.find(d => d.id === selectedConnectionId);
-      setSelectedDatasource(ds || null);
-    } else {
+    if (!selectedConnectionId) {
       setSelectedDatasource(null);
+      return;
     }
+    const ds = connections.find(d => d.id === selectedConnectionId);
+    if (ds) {
+      setSelectedDatasource(ds);
+      return;
+    }
+    // Not in the list. Don't blank the selection — fetch the one we need.
+    // `cancelled` guards the async continuation: a mountedRef can't gate this
+    // (see the v0.41.0 zombie-stream fix) and the id can change mid-flight.
+    let cancelled = false;
+    (async () => {
+      try {
+        const conn = await apiClient.getConnection(selectedConnectionId);
+        if (cancelled || !conn?.id) return;
+        setSelectedDatasource(conn);
+        // Merge into the list so the tag row / guidance that read from
+        // `connections` see it too — same merge the picker does on select.
+        setConnections((prev) => (prev.some((c) => c.id === conn.id) ? prev : [...prev, conn]));
+      } catch {
+        // The connection may genuinely be gone (deleted out from under the
+        // component). Leave whatever is displayed rather than thrashing.
+      }
+    })();
+    return () => { cancelled = true; };
   }, [selectedConnectionId, connections]);
 
   // Lazy-load EdgeLake database list when the active connection is
