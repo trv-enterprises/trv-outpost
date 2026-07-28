@@ -16,9 +16,19 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   namespace and leaves you on the list — no editor round-trip, no selector to
   fill in. A repeated copy bumps to `(copy 2)`, `(copy 3)`, and so on.
 
-  Connection duplicates are created **without secrets**: passwords, API keys
-  and tokens are never sent to the browser, so the copy starts blank there and
-  a notification prompts you to re-enter them before using it.
+  Connections duplicate **server-side, credentials included**, so the copy
+  works immediately. This has to happen on the server: the API masks secrets on
+  read, so the browser only ever sees `********` and cannot build a usable copy
+  — and connection types with mandatory credentials (Synology) rightly refuse
+  to be created without them. New endpoint:
+  `POST /api/connections/:id/duplicate`.
+
+  A duplicate always lands in the **source's namespace**, and you can only
+  duplicate a connection you already have a grant on. Duplication is the one
+  write path that moves real secrets, so it deliberately takes no destination
+  parameter — credentials can't be copied out of the namespace holding them.
+  Moving the copy afterwards goes through the normal update path, which
+  requires access to the destination.
 
   This replaces the **From Existing** item in the Create menu for these two
   entities, which needed an extra picker to do the same job and created

@@ -89,6 +89,7 @@ discriminates the three sub-types: `chart` (ECharts visualizations),
 | DELETE | `/api/components/:id/versions/:version`         | Delete a specific version            |
 | GET    | `/api/components/:id/version-info`              | Version chain summary                |
 | GET    | `/api/components/:id/usage`                     | Dashboards referencing this component (shared-component save warning). Refs the caller can't see are returned as `{unauthorized:true}` so the count stays accurate. |
+| POST   | `/api/connections/:id/duplicate`                | Copy a connection under a new name, **secrets included** (the API masks secrets on read, so only the server can make a usable copy). Always lands in the SOURCE's namespace and requires a grant on it — no destination parameter, so credentials can't cross a namespace boundary. |
 | GET    | `/api/components/:id/draft`                     | Get the draft version (if any)       |
 | DELETE | `/api/components/:id/draft`                     | Delete the draft version             |
 | POST   | `/api/controls/:id/execute`                     | Execute a control command            |

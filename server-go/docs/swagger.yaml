@@ -5870,6 +5870,57 @@ paths:
       summary: Save discovered dashboard-variable values for a connection column
       tags:
       - connections
+  /connections/{id}/duplicate:
+    post:
+      consumes:
+      - application/json
+      description: Copy an existing connection under a new name in the SAME namespace,
+        including its secrets — the API masks secrets on read, so only the server
+        can produce a usable copy. Requires a grant on the source's namespace.
+      parameters:
+      - description: Source connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 'New connection name: {\'
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Connection'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Duplicate a connection
+      tags:
+      - connections
   /connections/{id}/edgelake/databases:
     get:
       description: Retrieve all database names from an EdgeLake node's blockchain

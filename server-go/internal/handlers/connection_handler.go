@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trv-enterprises/trve-dashboard/internal/middleware"
@@ -69,6 +70,52 @@ func (h *ConnectionHandler) CreateConnection(c *gin.Context) {
 	}
 
 	// Sanitize sensitive fields and enrich with capabilities before returning
+	c.JSON(http.StatusCreated, enrichWithCapabilities(connection.SanitizeForAPI()))
+}
+
+// DuplicateConnection copies a connection, secrets included
+// @Summary Duplicate a connection
+// @Description Copy an existing connection under a new name in the SAME namespace, including its secrets — the API masks secrets on read, so only the server can produce a usable copy. Requires a grant on the source's namespace.
+// @Tags connections
+// @Accept json
+// @Produce json
+// @Param id path string true "Source connection ID"
+// @Param request body map[string]string true "New connection name: {\"name\": \"...\"}"
+// @Success 201 {object} models.Connection
+// @Failure 400 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Failure 409 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /connections/{id}/duplicate [post]
+func (h *ConnectionHandler) DuplicateConnection(c *gin.Context) {
+	id := c.Param("id")
+
+	var req struct {
+		Name string `json:"name" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	connection, err := h.service.DuplicateConnection(c.Request.Context(), id, req.Name)
+	if err != nil {
+		// Match GetConnection: an unknown id is a 404, not a 500. (A name
+		// collision stays on respondError's 500 for consistency with
+		// CreateConnection, which reports it the same way.)
+		if respondIfNamespaceForbidden(c, err) {
+			return
+		}
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Connection not found"})
+			return
+		}
+		respondError(c, err)
+		return
+	}
+
+	// Same contract as create: the response NEVER carries real secrets,
+	// even though the stored copy now has them.
 	c.JSON(http.StatusCreated, enrichWithCapabilities(connection.SanitizeForAPI()))
 }
 

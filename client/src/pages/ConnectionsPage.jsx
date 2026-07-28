@@ -39,7 +39,7 @@ import SortMenu from '../components/shared/SortMenu';
 import CountListPopover from '../components/shared/CountListPopover';
 import { toUsageItems } from '../utils/usageRefs';
 import CreateMenu from '../components/CreateMenu';
-import { buildConnectionCopy } from '../utils/duplicateEntity';
+import { buildCopyName } from '../utils/duplicateEntity';
 import './ConnectionsPage.scss';
 
 const PAGE_SIZES = [25, 50, 100];
@@ -173,10 +173,13 @@ function ConnectionsPage() {
   };
 
   // Duplicate a connection: copy it under a "(copy)" name in the same namespace
-  // and stay on the list (mirrors the dashboard duplicate). Secrets are never
-  // sent to the frontend — the fetched config carries "********" masks — so the
-  // copy is created WITHOUT credentials and a toast tells the user to re-enter
-  // them. The copy is otherwise ready to edit.
+  // and stay on the list (mirrors the dashboard duplicate).
+  //
+  // The COPY ITSELF happens server-side. Secrets are masked as "********" on
+  // read, so the browser can't build a faithful copy — a client-side duplicate
+  // could only produce a credential-less record, which types with mandatory
+  // credentials (Synology) rightly refuse to create and which is useless
+  // anywhere else. All this sends is the new name.
   const handleDuplicate = async (e, connection) => {
     e.stopPropagation();
     // Ref, not state: state is read from this render's closure, so two clicks
@@ -186,19 +189,10 @@ function ConnectionsPage() {
     duplicatingRef.current = true;
     setDuplicatingId(connection.id);
     try {
-      // The list row omits config; fetch the full record so the copy carries it.
-      const full = await apiClient.getConnection(connection.id);
       const existingNames = new Set((connections || []).map((c) => c?.name).filter(Boolean));
-      const { payload, droppedSecrets } = buildConnectionCopy(full, existingNames);
-      await apiClient.createConnection(payload);
+      const name = buildCopyName(connection.name || 'Connection', existingNames);
+      await apiClient.duplicateConnection(connection.id, name);
       refetch();
-      if (droppedSecrets) {
-        pushToast({
-          kind: 'info',
-          title: 'Re-enter credentials',
-          subtitle: `"${payload.name}" was created without secrets (passwords, API keys, tokens) — open it and re-enter them before use.`,
-        });
-      }
     } catch (err) {
       pushToast({ kind: 'error', title: 'Duplicate failed', subtitle: err.message });
     } finally {

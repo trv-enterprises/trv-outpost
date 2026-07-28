@@ -866,6 +866,9 @@ func main() {
 			connections.GET("/:id", connectionHandler.GetConnection)
 			connections.PUT("/:id", connectionHandler.UpdateConnection)
 			connections.DELETE("/:id", connectionHandler.DeleteConnection)
+			// Server-side copy: only the server can carry secrets into the
+			// duplicate (the API masks them on read).
+			connections.POST("/:id/duplicate", connectionHandler.DuplicateConnection)
 			connections.POST("/test", connectionHandler.TestConnection)
 			connections.POST("/:id/health", connectionHandler.CheckConnectionHealth)
 			connections.POST("/:id/query", connectionHandler.QueryConnection)

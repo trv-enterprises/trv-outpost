@@ -382,6 +382,7 @@ dashboard/
 | PUT | `/api/connections/:id` | Update connection |
 | DELETE | `/api/connections/:id` | Delete connection |
 | POST | `/api/connections/test` | Test connection |
+| POST | `/api/connections/:id/duplicate` | Copy a connection (secrets included; server-side because the API masks secrets on read). Always lands in the source's namespace — no destination param, so credentials can't cross a namespace boundary. |
 | POST | `/api/connections/:id/query` | Execute query |
 | **Controls** |||
 | POST | `/api/controls/:id/execute` | Execute control command |
