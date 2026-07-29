@@ -5751,8 +5751,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Send a command to a datasource that supports write operations (e.g.,
-        stream.websocket-bidir)
+      description: Send a command to a connection that supports write operations (e.g.,
+        stream.websocket-bidir). Requires a grant on the connection's namespace.
       parameters:
       - description: Connection ID
         in: path
@@ -5792,9 +5792,9 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Execute a command on a bidirectional datasource
+      summary: Execute a command on a bidirectional connection
       tags:
-      - datasources
+      - connections
   /connections/{id}/discover-devices:
     post:
       description: Discover devices on an MQTT connection (e.g., via Zigbee2MQTT bridge)
@@ -6572,7 +6572,8 @@ paths:
   /dashboards:
     get:
       description: Get a paginated list of dashboards with optional filtering. Use
-        include_datasources=true to get data source names for each dashboard.
+        include_connections=true to get connection names for each dashboard (returns
+        the DashboardSummary shape).
       parameters:
       - description: Filter by name (partial match)
         in: query
