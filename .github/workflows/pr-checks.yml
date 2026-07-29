@@ -62,7 +62,11 @@ jobs:
     name: Server (go build + vet)
     runs-on: ubuntu-latest
     steps:
+      # Need the merge-base to diff against, so fetch history rather than
+      # the default shallow clone.
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-go@v5
         with:
@@ -76,6 +80,53 @@ jobs:
       - name: go vet
         working-directory: server-go
         run: go vet ./...
+
+      # gofmt, scoped to the Go files THIS PR touches.
+      #
+      # Deliberately not `gofmt -l ./...`: a large number of files predate
+      # this check and differ only in whitespace (gofmt column-aligns struct
+      # fields and trailing comments, and hand-edits drift the padding).
+      # Failing the whole repo would either block every PR or force a
+      # codebase-wide reformat that destroys git blame. Scoping to changed
+      # files means new and edited code is formatted from here on, and the
+      # backlog gets cleaned up incidentally as files are touched.
+      #
+      # Skipped on push-to-main (no PR to diff against); the PR run is the
+      # gate. Deleted files are excluded via --diff-filter=d.
+      - name: gofmt (changed files)
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${{ github.event.pull_request.base.sha }}"
+          # xargs -0 passes each filename as its own argument, so this can't
+          # depend on shell word-splitting. An unquoted "$files" string works
+          # in bash but silently collapses to ONE bogus filename in zsh, and
+          # gofmt then reports nothing — the check would pass everything.
+          # (mapfile -d would also work but needs bash 4+, which macOS lacks,
+          # making this untestable locally.) Don't "simplify" this.
+          files="$(git diff --name-only --diff-filter=d "$base"...HEAD -- '*.go')"
+          if [ -z "$files" ]; then
+            echo "No Go files changed."
+            exit 0
+          fi
+          printf 'Checking:\n'; printf '%s\n' "$files" | sed 's/^/  /'
+          unformatted="$(
+            git diff -z --name-only --diff-filter=d "$base"...HEAD -- '*.go' \
+              | xargs -0 gofmt -l
+          )"
+          if [ -n "$unformatted" ]; then
+            echo
+            echo "::error::Changed Go files are not gofmt-formatted (see diff below)"
+            printf '%s\n' "$unformatted" | sed 's/^/  /'
+            echo
+            echo "Fix with:  gofmt -w $(printf '%s ' $unformatted)"
+            echo
+            echo "--- diff ---"
+            printf '%s\n' "$unformatted" | tr '\n' '\0' | xargs -0 gofmt -d
+            exit 1
+          fi
+          echo "All changed Go files are formatted."
 
   go-tests:
     name: Go tests
