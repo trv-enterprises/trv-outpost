@@ -10,6 +10,23 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Duplicate a panel from the dashboard editor.** The panel edit menu gains
+  **Duplicate**, which copies the panel, the component on it — a fresh
+  `<name> (copy)` — and its border if it has one, placing the copy in the first
+  free space beside the original.
+  The fast way to build a row of near-identical tiles: duplicate, then edit the
+  copy. Because it's a separate component, editing it doesn't touch the panel
+  you copied from. (Use **Select Existing** when you want two panels sharing one
+  component instead.)
+
+- **Panel delete offers to clean up an orphaned component.** Removing a panel
+  leaves its component in the library, which is usually right — but when the
+  panel was the *only* thing using it (no other panel here, no other dashboard),
+  the delete confirmation now offers to remove the component as well. The
+  checkbox is **off by default**: the panel goes either way, and the component
+  is deleted only if you ask. When the component is still used elsewhere, the
+  panel is removed with no prompt at all.
+
 - **Duplicate components and connections.** The component and connection lists
   gain a **Duplicate** action on every row and tile, matching the one
   dashboards already had. It copies the record as `<name> (copy)` in the same

@@ -227,7 +227,7 @@ func (h *DashboardHandler) GetSwapCompatibility(c *gin.Context) {
 
 // ListDashboards retrieves a list of dashboards with pagination
 // @Summary List dashboards
-// @Description Get a paginated list of dashboards with optional filtering. Use include_datasources=true to get data source names for each dashboard.
+// @Description Get a paginated list of dashboards with optional filtering. Use include_connections=true to get connection names for each dashboard (returns the DashboardSummary shape).
 // @Tags dashboards
 // @Produce json
 // @Param name query string false "Filter by name (partial match)"
@@ -266,9 +266,9 @@ func (h *DashboardHandler) ListDashboards(c *gin.Context) {
 		return
 	}
 
-	// If include_datasources is true, use the aggregation method
+	// If include_connections is true, use the aggregation method
 	if params.IncludeConnections {
-		response, err := h.service.ListDashboardsWithDatasources(c.Request.Context(), params)
+		response, err := h.service.ListDashboardsWithConnections(c.Request.Context(), params)
 		if err != nil {
 			respondError(c, err)
 			return

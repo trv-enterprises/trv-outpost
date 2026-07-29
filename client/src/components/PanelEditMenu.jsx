@@ -5,7 +5,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '@carbon/react';
-import { ChevronDown, Edit, Add, Catalog, TextFont, Pin, PinFilled } from '@carbon/icons-react';
+import { ChevronDown, Edit, Add, Catalog, TextFont, Pin, PinFilled, Copy } from '@carbon/icons-react';
 import AiIcon from './icons/AiIcon';
 import { useAIAvailability } from '../context/AIAvailabilityContext';
 import './PanelEditMenu.scss';
@@ -30,6 +30,8 @@ import './PanelEditMenu.scss';
  * @param {Function} onNew - Handler for creating a new component manually
  * @param {Function} onNewWithAI - Handler for creating a component with AI (opens pre-flight modal)
  * @param {Function} onSelectExisting - Handler for selecting an existing component
+ * @param {Function} onDuplicate - Handler for duplicating the panel (and its
+ *   component). Only rendered when supplied AND the panel has content.
  */
 function PanelEditMenu({
   buttonLabel = 'Edit',
@@ -43,6 +45,7 @@ function PanelEditMenu({
   onNew,
   onNewWithAI,
   onSelectExisting,
+  onDuplicate,
   onText,
   // Component-swap rules (dashboard-variable). When showSwapRulesOption is true
   // the menu offers a "Connection-based components…" item that opens the rule
@@ -75,7 +78,9 @@ function PanelEditMenu({
         // The "Edit with AI" and "New with AI" items disappear when
         // AI is disabled, so trim the estimate accordingly.
         const hiddenAiItems = aiEnabled ? 0 : (hasExisting ? 2 : 1);
-        const dropdownHeight = (hasExisting ? 220 : 140) - hiddenAiItems * 36;
+        const dropdownHeight = (hasExisting ? 220 : 140)
+          - hiddenAiItems * 36
+          + (onDuplicate ? 36 : 0); // the Duplicate item
 
         // Position below the button, centered horizontally
         // getBoundingClientRect() returns visual (screen) coordinates, which is what we want for fixed positioning
@@ -122,7 +127,7 @@ function PanelEditMenu({
         window.removeEventListener('resize', handleScroll);
       };
     }
-  }, [isOpen, hasExisting, aiEnabled]);
+  }, [isOpen, hasExisting, aiEnabled, onDuplicate]);
 
   // Close on outside click
   useEffect(() => {
@@ -174,9 +179,21 @@ function PanelEditMenu({
           <span>Edit with AI</span>
         </button>
       )}
+      {/* Duplicate acts on what the panel currently holds, so it sits with the
+          edit actions. Offered for text panels too (nothing to copy but the
+          text), hence onDuplicate rather than hasExisting gating it. */}
+      {onDuplicate && (
+        <button
+          className="panel-edit-menu-item"
+          onClick={() => handleAction(onDuplicate)}
+        >
+          <Copy size={16} />
+          <span>Duplicate</span>
+        </button>
+      )}
 
       {/* Divider between edit and create options */}
-      {hasExisting && <div className="panel-edit-menu-divider" />}
+      {(hasExisting || onDuplicate) && <div className="panel-edit-menu-divider" />}
 
       {/* Create new component options */}
       <button

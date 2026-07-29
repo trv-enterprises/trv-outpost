@@ -18,19 +18,19 @@ import (
 	"github.com/trv-enterprises/trve-dashboard/internal/service"
 )
 
-// CommandHandler handles command execution for bidirectional datasources and controls
+// CommandHandler handles command execution for bidirectional connections and controls
 type CommandHandler struct {
-	connectionService  *service.ConnectionService
-	componentService       *service.ComponentService
-	deviceTypeService  *service.DeviceTypeService
+	connectionService *service.ConnectionService
+	componentService  *service.ComponentService
+	deviceTypeService *service.DeviceTypeService
 }
 
 // NewCommandHandler creates a new command handler
 func NewCommandHandler(connectionService *service.ConnectionService, componentService *service.ComponentService, deviceTypeService *service.DeviceTypeService) *CommandHandler {
 	return &CommandHandler{
-		connectionService:  connectionService,
-		componentService:       componentService,
-		deviceTypeService:  deviceTypeService,
+		connectionService: connectionService,
+		componentService:  componentService,
+		deviceTypeService: deviceTypeService,
 	}
 }
 
@@ -50,9 +50,9 @@ type ExecuteCommandResponse struct {
 }
 
 // ExecuteCommand godoc
-// @Summary Execute a command on a bidirectional datasource
-// @Description Send a command to a datasource that supports write operations (e.g., stream.websocket-bidir)
-// @Tags datasources
+// @Summary Execute a command on a bidirectional connection
+// @Description Send a command to a connection that supports write operations (e.g., stream.websocket-bidir). Requires a grant on the connection's namespace.
+// @Tags connections
 // @Accept json
 // @Produce json
 // @Param id path string true "Connection ID"
@@ -72,8 +72,8 @@ func (h *CommandHandler) ExecuteCommand(c *gin.Context) {
 		return
 	}
 
-	// Get the datasource (enforces namespace grants, issue #4).
-	datasource, err := h.connectionService.GetConnection(c.Request.Context(), id)
+	// Get the connection (enforces namespace grants, issue #4).
+	connection, err := h.connectionService.GetConnection(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, authz.ErrNamespaceForbidden) {
 			respondError(c, err)
@@ -83,8 +83,8 @@ func (h *CommandHandler) ExecuteCommand(c *gin.Context) {
 		return
 	}
 
-	// Create adapter from datasource
-	adapter, err := h.connectionService.CreateAdapter(c.Request.Context(), datasource)
+	// Create adapter from connection
+	adapter, err := h.connectionService.CreateAdapter(c.Request.Context(), connection)
 	if err != nil {
 		respondError(c, err)
 		return
@@ -192,7 +192,7 @@ func (h *CommandHandler) ExecuteControlCommand(c *gin.Context) {
 	// Get the connection (enforces namespace grants on the control's
 	// connection too — component and connection can live in different
 	// namespaces, issue #4).
-	datasource, err := h.connectionService.GetConnection(c.Request.Context(), chart.ConnectionID)
+	connection, err := h.connectionService.GetConnection(c.Request.Context(), chart.ConnectionID)
 	if err != nil {
 		if errors.Is(err, authz.ErrNamespaceForbidden) {
 			respondError(c, err)
@@ -203,7 +203,7 @@ func (h *CommandHandler) ExecuteControlCommand(c *gin.Context) {
 	}
 
 	// Create adapter
-	adapter, err := h.connectionService.CreateAdapter(c.Request.Context(), datasource)
+	adapter, err := h.connectionService.CreateAdapter(c.Request.Context(), connection)
 	if err != nil {
 		respondError(c, err)
 		return

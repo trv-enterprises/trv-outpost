@@ -84,6 +84,8 @@ import { useNamespaces } from '../context/NamespaceContext';
 import DashboardExportModal from '../components/DashboardExportModal';
 import NameErrorBadge from '../components/NameErrorBadge';
 import DiscardChangesModal from '../components/shared/DiscardChangesModal';
+import PanelDeleteModal from '../components/shared/PanelDeleteModal';
+import { buildComponentCopy } from '../utils/duplicateEntity';
 import { useModeGuard } from '../context/ModeGuardContext';
 import useAssistantSurface from '../hooks/useAssistantSurface';
 import { useAIAvailability } from '../context/AIAvailabilityContext';
@@ -2045,6 +2047,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                 }}
                 onNewWithAI={() => openAIPreflightModal(panel.id)}
                 onSelectExisting={() => openComponentPicker(panel.id, 'all')}
+                // Duplicating an empty panel would just clone a blank
+                // rectangle — offer it only when there's content to copy.
+                // Suppressed while a copy is in flight so the menu can't
+                // queue a second one behind the component create.
+                onDuplicate={
+                  hasChart && duplicatingPanelId !== panel.id
+                    ? () => duplicatePanel(panel.id)
+                    : undefined
+                }
                 onText={() => setTextPanel(panel.id)}
                 showSwapRulesOption={(!!dashVariable || !!dashFilterVariable) && hasChart}
                 hasSwapRules={Array.isArray(panel.component_overrides) && panel.component_overrides.length > 0}
@@ -2057,7 +2068,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             size="sm"
             label="Delete panel"
             className="panel-delete-btn"
-            onClick={(e) => { e.stopPropagation(); deletePanel(panel.id); }}
+            onClick={(e) => { e.stopPropagation(); requestDeletePanel(panel.id); }}
             onMouseDown={(e) => e.stopPropagation()}
           >
             <TrashCan size={14} />
@@ -2521,6 +2532,175 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     };
     setEditablePanels(prev => [...prev, newPanel]);
     setEditHasChanges(true);
+  };
+
+  // Find the first free rectangle of w×h, scanning row-major from the source
+  // panel so the copy lands near its original. Falls back to directly below
+  // the source (the grid grows) when the visible canvas is full.
+  const findFreeSlot = (w, h, from, panels) => {
+    const fits = (x, y) => !panels.some(
+      p => p.x < x + w && p.x + p.w > x && p.y < y + h && p.y + p.h > y
+    );
+    for (let y = from.y; y <= maxGridRow - h; y += 1) {
+      // On the source's own row, start scanning to its right.
+      const startX = y === from.y ? from.x + from.w : 0;
+      for (let x = startX; x <= maxGridCol - w; x += 1) {
+        if (fits(x, y)) return { x, y };
+      }
+    }
+    return { x: from.x, y: from.y + from.h };
+  };
+
+  // Duplicate a panel, and its component with it.
+  //
+  // The component copy is created IMMEDIATELY (not deferred to dashboard save),
+  // matching the picker's "create a duplicate" checkbox: the new panel points
+  // at a real component you can open and edit right away. Note the asymmetry
+  // that follows — cancelling the dashboard edit drops the panel but leaves the
+  // component in the library, same as the picker.
+  //
+  // Text panels duplicate their text; empty panels duplicate their geometry.
+  const [duplicatingPanelId, setDuplicatingPanelId] = useState(null);
+  const duplicatingPanelRef = useRef(false);
+  const duplicatePanel = async (panelId) => {
+    if (duplicatingPanelRef.current) return;
+    const src = editablePanels.find(p => p.id === panelId);
+    if (!src) return;
+    duplicatingPanelRef.current = true;
+    setDuplicatingPanelId(panelId);
+    try {
+      let newComponentId = null;
+      if (src.component_id) {
+        const source = chartsMap[src.component_id]
+          || await apiClient.getComponent(src.component_id);
+        // Collision set is the components already loaded for this dashboard —
+        // a server-side (namespace, name) clash still surfaces as an error.
+        const existingNames = new Set(
+          Object.values(chartsMap).map(c => c?.name).filter(Boolean)
+        );
+        const created = await apiClient.createComponent(
+          buildComponentCopy(source, existingNames)
+        );
+        newComponentId = created.id;
+        setChartsMap(prev => ({ ...prev, [created.id]: created }));
+      }
+
+      const slot = findFreeSlot(src.w, src.h, src, editablePanels);
+      const newPanelId = `panel-${Date.now()}`;
+      setEditablePanels(prev => [...prev, {
+        ...src,
+        id: newPanelId,
+        component_id: newComponentId,
+        x: slot.x,
+        y: slot.y,
+        // Swap rules reference this panel's own component; they don't carry
+        // over to a copy pointing at a different one.
+        component_overrides: undefined,
+      }]);
+
+      // Carry the panel's border, if it has one. A panel_border is part of how
+      // the panel LOOKS, so a copy without it isn't really a copy. It binds by
+      // panel_id and derives its geometry from the panel, so the copy just
+      // needs a fresh id pointed at the new panel — the styling (color, width,
+      // line_style) comes across as-is.
+      const srcBorder = editableAdornments.find(
+        a => a.kind === 'panel_border' && a.panel_id === panelId
+      );
+      if (srcBorder) {
+        setEditableAdornments(prev => [...prev, {
+          ...srcBorder,
+          id: `adorn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          panel_id: newPanelId,
+        }]);
+      }
+      setEditHasChanges(true);
+    } catch (err) {
+      console.error('[DashboardViewerPage] Panel duplicate failed:', err);
+      pushToast({
+        kind: 'error',
+        title: 'Duplicate failed',
+        subtitle: err.message || 'Could not duplicate the panel',
+      });
+    } finally {
+      duplicatingPanelRef.current = false;
+      setDuplicatingPanelId(null);
+    }
+  };
+
+  // Panel delete, with an offer to clean up a component the delete would
+  // orphan. Two conditions have to hold before we even ask:
+  //   1. no OTHER panel on this dashboard uses the component, and
+  //   2. no other dashboard references it (server lookup).
+  // Otherwise the delete is unambiguous and runs immediately — a dialog on
+  // every panel delete would be pure friction.
+  const [panelDeleteTarget, setPanelDeleteTarget] = useState(null); // {panelId, componentId, componentName}
+  const [panelDeleteChecking, setPanelDeleteChecking] = useState(false);
+  const requestDeletePanel = async (panelId) => {
+    const panel = editablePanels.find(p => p.id === panelId);
+    const componentId = panel?.component_id;
+    if (!componentId) return deletePanel(panelId);
+
+    // Cheap local check first: another panel here still needs it.
+    const usedElsewhereHere = editablePanels.some(
+      p => p.id !== panelId && p.component_id === componentId
+    );
+    if (usedElsewhereHere) return deletePanel(panelId);
+
+    const name = chartsMap[componentId]?.name || 'this component';
+    setPanelDeleteTarget({ panelId, componentId, componentName: name });
+    setPanelDeleteChecking(true);
+    try {
+      const usage = await apiClient.getComponentUsage(componentId);
+      // Referenced by a dashboard OTHER than this one → not orphaned, so
+      // there's nothing to offer; just delete the panel.
+      const others = (usage?.dashboards || []).filter(
+        d => d.unauthorized || d.id !== id
+      );
+      if (others.length > 0) {
+        setPanelDeleteTarget(null);
+        deletePanel(panelId);
+      }
+    } catch (err) {
+      // Can't confirm it's an orphan → don't offer to delete it. Removing the
+      // panel is still safe and is what the user asked for.
+      console.error('[DashboardViewerPage] usage lookup failed:', err);
+      setPanelDeleteTarget(null);
+      deletePanel(panelId);
+    } finally {
+      setPanelDeleteChecking(false);
+    }
+    return undefined;
+  };
+
+  const confirmDeletePanel = async (alsoDeleteComponent) => {
+    const target = panelDeleteTarget;
+    setPanelDeleteTarget(null);
+    if (!target) return;
+    deletePanel(target.panelId);
+    if (!alsoDeleteComponent) return;
+    try {
+      await apiClient.deleteComponent(target.componentId);
+      setChartsMap(prev => {
+        const next = { ...prev };
+        delete next[target.componentId];
+        return next;
+      });
+      pushToast({
+        kind: 'success',
+        title: 'Component deleted',
+        subtitle: `"${target.componentName}" was removed from the library.`,
+      });
+    } catch (err) {
+      // The panel is already gone (local, undone by cancelling the edit). Say
+      // plainly that the component itself survived rather than implying the
+      // whole delete failed.
+      console.error('[DashboardViewerPage] component delete failed:', err);
+      pushToast({
+        kind: 'error',
+        title: 'Component not deleted',
+        subtitle: `The panel was removed, but "${target.componentName}" could not be deleted: ${err.message}`,
+      });
+    }
   };
 
   // Delete a panel
@@ -4396,6 +4576,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       )}
 
       {/* Chart Editor Modal (edit mode) */}
+      {/* Panel delete — offers to clean up a component the delete orphans */}
+      <PanelDeleteModal
+        open={!!panelDeleteTarget}
+        checking={panelDeleteChecking}
+        componentName={panelDeleteTarget?.componentName}
+        onCancel={() => setPanelDeleteTarget(null)}
+        onConfirm={confirmDeletePanel}
+      />
+
       <ComponentEditorModal
         open={componentEditorOpen}
         onClose={closeComponentEditor}

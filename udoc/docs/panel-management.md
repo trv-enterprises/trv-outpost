@@ -63,6 +63,7 @@ Click the edit icon (pencil for existing components, `+` for empty panels) in th
 | **New Component** | Create a new component in the inline editor |
 | **New with AI** | Launch the AI builder to create a component from scratch |
 | **Select Existing** | Choose from the component library |
+| **Duplicate** | Copy this panel *and* its component (see below) |
 
 After assigning a component, the panel automatically expands to meet the component's minimum size if needed.
 
@@ -71,6 +72,46 @@ selected component** checkbox: confirm with it checked and the panel gets a new
 `<name> (copy)` component instead of the original, so you can edit it without
 affecting other dashboards. See
 [Create a duplicate instead](creating-components.md#create-a-duplicate-instead).
+
+## Duplicating a Panel
+
+**Duplicate** in the panel's edit menu copies the panel *and* the component on
+it. The new panel is placed in the first free space to the right of (or below)
+the original at the same size, holding a fresh `<name> (copy)` component.
+
+If the panel has a [border](dashboard-editor.md#borders-adornments) of its own,
+the copy gets one too, in the same color, width, and line style. A group border
+drawn *around* several panels isn't copied — it frames that group, not this
+panel.
+
+This is the quickest way to build a row of similar tiles: duplicate, then edit
+the copy's query or title. Because the copy is its own component, editing it
+does **not** affect the panel you copied from.
+
+The component copy is created as soon as you click — it appears in the
+component library right away, so it's there even if you then cancel the
+dashboard edit. (Cancelling still discards the *panel*.) If you want two panels
+showing the *same* component instead, use **Select Existing** and pick it.
+
+Empty panels have nothing to copy, so Duplicate isn't offered on them.
+
+## Deleting a Panel
+
+The trash icon removes the panel from the dashboard. The component itself is a
+separate record and normally stays in the library — deleting a panel is not
+meant to destroy the thing it was showing.
+
+When removing the panel would leave its component **completely unused** — no
+other panel on this dashboard, and no other dashboard, references it — a
+confirmation appears offering to delete the component too. The checkbox is off
+by default: the panel goes either way, and the component is only deleted if you
+explicitly ask.
+
+Unlike removing the panel, deleting the component is immediate and is **not**
+undone by cancelling the dashboard edit.
+
+If the component is still used somewhere else, the panel is removed with no
+prompt — there is nothing to clean up.
 
 ## Shared Component Indicator
 

@@ -20,7 +20,7 @@ import (
 
 // DashboardService handles business logic for dashboards.
 //
-// Carries refs to the chart and datasource repos as well so the
+// Carries refs to the chart and connection repos as well so the
 // export/import flows can walk the dashboard → component → connection
 // dependency graph without crossing service boundaries (which would
 // either circular-import or duplicate the graph traversal in two
@@ -403,8 +403,8 @@ func (s *DashboardService) ListDashboardNavRefs(ctx context.Context, params mode
 	}, nil
 }
 
-// ListDashboardsWithDatasources retrieves dashboard summaries with data source names
-func (s *DashboardService) ListDashboardsWithDatasources(ctx context.Context, params models.DashboardQueryParams) (*models.DashboardSummaryListResponse, error) {
+// ListDashboardsWithConnections retrieves dashboard summaries with connection names
+func (s *DashboardService) ListDashboardsWithConnections(ctx context.Context, params models.DashboardQueryParams) (*models.DashboardSummaryListResponse, error) {
 	// Normalize filter tags to match how they're stored.
 	if len(params.Tags) > 0 {
 		params.Tags = models.NormalizeTags(params.Tags)
@@ -425,7 +425,7 @@ func (s *DashboardService) ListDashboardsWithDatasources(ctx context.Context, pa
 
 	summaries, total, err := s.repo.ListWithConnections(ctx, params, s.db)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list dashboards with datasources: %w", err)
+		return nil, fmt.Errorf("failed to list dashboards with connections: %w", err)
 	}
 
 	// Redact ungranted component/connection refs (#4). The dashboard

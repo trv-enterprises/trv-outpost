@@ -2121,7 +2121,7 @@ const docTemplate = `{
         },
         "/connections/{id}/command": {
             "post": {
-                "description": "Send a command to a datasource that supports write operations (e.g., stream.websocket-bidir)",
+                "description": "Send a command to a connection that supports write operations (e.g., stream.websocket-bidir). Requires a grant on the connection's namespace.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2129,9 +2129,9 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "datasources"
+                    "connections"
                 ],
-                "summary": "Execute a command on a bidirectional datasource",
+                "summary": "Execute a command on a bidirectional connection",
                 "parameters": [
                     {
                         "type": "string",
@@ -3214,7 +3214,7 @@ const docTemplate = `{
         },
         "/dashboards": {
             "get": {
-                "description": "Get a paginated list of dashboards with optional filtering. Use include_datasources=true to get data source names for each dashboard.",
+                "description": "Get a paginated list of dashboards with optional filtering. Use include_connections=true to get connection names for each dashboard (returns the DashboardSummary shape).",
                 "produces": [
                     "application/json"
                 ],
