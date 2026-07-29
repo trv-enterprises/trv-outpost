@@ -320,40 +320,40 @@ function DashboardsListPage() {
     setDeleteTarget(dashboard);
   };
 
-  // Duplicate a dashboard: deep-copy its config under a "(copy)" name in the
-  // same namespace. Panels keep their component_id references (components are
-  // shared entities — a dashboard copy points at the same components, it
-  // doesn't clone them). Name uniqueness is per (namespace, name), so if
-  // "<name> (copy)" is taken, bump to "(copy 2)", "(copy 3)", … against the
-  // names already loaded on this page.
+  // Duplicate a dashboard under a "(copy)" name in the same namespace.
+  //
+  // The COPY ITSELF happens server-side. This used to build the create payload
+  // here by listing the fields to carry, which silently dropped adornments —
+  // and would have dropped any field added to the model later. All this sends
+  // is the new name; the server copies the whole record and remaps panel ids.
+  //
+  // Panels keep their component_id references (components are shared entities —
+  // a dashboard copy points at the same components, it doesn't clone them).
+  // Name uniqueness is per (namespace, name), so if "<name> (copy)" is taken,
+  // bump to "(copy 2)", "(copy 3)", … against the names loaded on this page;
+  // a server-side collision still surfaces as an error.
   const [duplicatingId, setDuplicatingId] = useState(null);
+  const duplicatingRef = useRef(false); // synchronous re-entry guard
   const handleDuplicate = async (e, dashboard) => {
     e.stopPropagation();
-    if (duplicatingId) return; // guard double-click
+    // Ref, not state: two clicks dispatched before a re-render would both read
+    // the stale value and create two copies.
+    if (duplicatingRef.current) return;
+    duplicatingRef.current = true;
     setDuplicatingId(dashboard.id);
     try {
-      // The list row is a lightweight summary; fetch the full dashboard so the
-      // copy carries panels + settings, not just the summary fields.
-      const full = await apiClient.getDashboard(dashboard.id);
       const existingNames = new Set((dashboards || []).map((d) => d?.name).filter(Boolean));
-      const base = full.name || dashboard.name || 'Dashboard';
+      const base = dashboard.name || 'Dashboard';
       let copyName = `${base} (copy)`;
       for (let n = 2; existingNames.has(copyName); n += 1) copyName = `${base} (copy ${n})`;
-      await apiClient.createDashboard({
-        namespace: full.namespace,
-        name: copyName,
-        description: full.description || '',
-        panels: full.panels || [],
-        settings: full.settings || {},
-        tags: full.tags || [],
-        metadata: full.metadata || {},
-      });
+      await apiClient.duplicateDashboard(dashboard.id, copyName);
       refetch();
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('[DashboardsListPage] Duplicate failed:', err);
       setDuplicateError(err.message || 'Failed to duplicate dashboard');
     } finally {
+      duplicatingRef.current = false;
       setDuplicatingId(null);
     }
   };

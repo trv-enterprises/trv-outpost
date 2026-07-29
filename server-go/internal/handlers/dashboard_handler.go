@@ -59,6 +59,51 @@ func (h *DashboardHandler) CreateDashboard(c *gin.Context) {
 	c.JSON(http.StatusCreated, dashboard)
 }
 
+// DuplicateDashboard copies a dashboard under a new name
+// @Summary Duplicate a dashboard
+// @Description Copy a dashboard (panels, adornments, settings, tags, metadata) under a new name in the SAME namespace. Panels keep their component_id references — components are shared, so the copy points at the same ones. Panel ids are regenerated and panel_border adornments remapped onto them.
+// @Tags dashboards
+// @Accept json
+// @Produce json
+// @Param id path string true "Source dashboard ID"
+// @Param request body map[string]string true "New dashboard name: {\"name\": \"...\"}"
+// @Success 201 {object} models.Dashboard
+// @Failure 400 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /dashboards/{id}/duplicate [post]
+func (h *DashboardHandler) DuplicateDashboard(c *gin.Context) {
+	id := c.Param("id")
+
+	var req struct {
+		Name string `json:"name" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	dashboard, err := h.service.DuplicateDashboard(c.Request.Context(), id, req.Name)
+	if err != nil {
+		if respondIfNamespaceForbidden(c, err) {
+			return
+		}
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Dashboard not found"})
+			return
+		}
+		// Match CreateDashboard: a name collision is a 400, not a 500.
+		status := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "already exists") {
+			status = http.StatusBadRequest
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, dashboard)
+}
+
 // GetDashboard retrieves a dashboard by ID
 // @Summary Get a dashboard
 // @Description Get a dashboard by ID (includes panels and charts)

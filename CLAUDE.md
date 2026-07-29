@@ -403,6 +403,7 @@ dashboard/
 | **Dashboards** |||
 | GET | `/api/dashboards` | List dashboards |
 | POST | `/api/dashboards` | Create dashboard |
+| POST | `/api/dashboards/:id/duplicate` | Copy a dashboard (incl. adornments) under a new name in the source's namespace. Server-side so no field is missed; panel ids regenerated and panel_border adornments remapped. |
 | GET | `/api/dashboards/:id` | Get dashboard |
 | GET | `/api/dashboards/:id/details` | Get with expanded data |
 | PUT | `/api/dashboards/:id` | Update dashboard |

@@ -1017,6 +1017,9 @@ func main() {
 		dashboards := api.Group("/dashboards")
 		{
 			dashboards.POST("", dashboardHandler.CreateDashboard)
+			// Server-side copy: the whole record, so no field can be
+			// forgotten (the client-side version dropped adornments).
+			dashboards.POST("/:id/duplicate", dashboardHandler.DuplicateDashboard)
 			dashboards.GET("", dashboardHandler.ListDashboards)
 			dashboards.GET("/:id", dashboardHandler.GetDashboard)
 			dashboards.GET("/:id/variable-candidates", dashboardHandler.GetVariableCandidates)

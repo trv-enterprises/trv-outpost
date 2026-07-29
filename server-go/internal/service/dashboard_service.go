@@ -176,6 +176,76 @@ func (s *DashboardService) GetDashboard(ctx context.Context, id string) (*models
 	return s.findAuthorized(ctx, id)
 }
 
+// DuplicateDashboard copies a dashboard under a new name.
+//
+// Server-side so the copy is defined by "everything the record has"
+// rather than a hand-maintained field list on the client. The previous
+// client-side duplicate enumerated fields and silently dropped
+// adornments; anything added to Dashboard later would have been dropped
+// the same way. Building the create request here from the source struct
+// means a new field is carried the moment it exists on the model.
+//
+// Panels keep their component_id references: components are shared
+// entities, so a dashboard copy POINTS AT the same components, it does
+// not clone them. (Cloning a component is a separate, explicit action.)
+//
+// Like the connection duplicate, the copy lands in the SOURCE's
+// namespace — findAuthorized gates the read and CreateDashboard
+// re-checks the grant on the write. Delegating to CreateDashboard also
+// inherits panel-id backfill, adornment sanitizing/orphan-pruning, and
+// variable validation instead of re-implementing them.
+func (s *DashboardService) DuplicateDashboard(ctx context.Context, id, name string) (*models.Dashboard, error) {
+	src, err := s.findAuthorized(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	newName := strings.TrimSpace(name)
+	if newName == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+
+	// Copy the slices: CreateDashboard's ensurePanelIDs / sanitizeAdornments
+	// rewrite ids IN PLACE, so operating on the source's backing arrays would
+	// mutate the values decoded from the source record.
+	panels := append([]models.DashboardPanel(nil), src.Panels...)
+	adornments := append([]models.DashboardAdornment(nil), src.Adornments...)
+
+	// Mint fresh panel ids for the copy — two dashboards sharing panel ids is
+	// a latent trap for anything that keys on them — and REMAP the
+	// panel_border adornments onto the new ids as we go. A panel_border binds
+	// to its panel by PanelID, and pruneOrphanAdornments drops adornments
+	// whose panel is missing, so renaming panels without remapping would
+	// silently delete every panel border on the copy.
+	idRemap := make(map[string]string, len(panels))
+	for i := range panels {
+		oldID := panels[i].ID
+		newID := uuid.New().String()
+		panels[i].ID = newID
+		if oldID != "" {
+			idRemap[oldID] = newID
+		}
+	}
+	for i := range adornments {
+		adornments[i].ID = "" // backfilled by sanitizeAdornments
+		if mapped, ok := idRemap[adornments[i].PanelID]; ok {
+			adornments[i].PanelID = mapped
+		}
+	}
+
+	req := &models.CreateDashboardRequest{
+		Namespace:   src.Namespace,
+		Name:        newName,
+		Description: src.Description,
+		Panels:      panels,
+		Adornments:  adornments,
+		Settings:    src.Settings,
+		Tags:        src.Tags,
+		Metadata:    src.Metadata,
+	}
+	return s.CreateDashboard(ctx, req)
+}
+
 // GetDashboardComponents returns the latest FINAL version of every component a
 // dashboard's panels reference — both each panel's default component and every
 // component named by a component-swap override — in ONE query. This collapses

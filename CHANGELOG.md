@@ -99,6 +99,30 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Switching a dashboard's Panel background back to Default didn't stick.**
+  Setting a dashboard to *Solid* or *Transparent* saved fine, but changing it
+  back to *Default* (inherit the deployment setting) silently reverted: the
+  editor showed the new look, and the dashboard came back with the old one on
+  the next load.
+
+  The editor dropped the field from the save when it was empty, and a settings
+  update only writes the keys the request actually contains — so "back to
+  Default" was indistinguishable from "don't touch it," and the previous choice
+  survived. The editor now sends the empty value explicitly, so all three
+  states round-trip in both directions. (The storage layer already handled the
+  empty value correctly; only the request was missing it.)
+
+- **Duplicating a dashboard dropped its borders.** The copy was assembled in the
+  browser from a hand-listed set of fields, and adornments weren't on the list —
+  so every border you'd drawn was silently missing from the duplicate (and any
+  field added to dashboards later would have gone the same way).
+
+  Duplication now happens server-side and copies the whole record, so borders,
+  panels, settings, variables, tags and metadata all come across. Panel ids are
+  regenerated for the copy and panel-bound borders are remapped onto them, so
+  the two dashboards don't share ids. Panels still reference the **same**
+  components — a dashboard copy points at them rather than cloning them.
+
 - **Aggregations now actually apply on Gauge and Value charts.** Choosing
   **Average** (or Min / Max / Sum / Count) on a single-value chart displayed
   the *first raw reading* instead of the aggregate — the number was computed

@@ -100,6 +100,7 @@ discriminates the three sub-types: `chart` (ECharts visualizations),
 | ------ | ---------------------------- | --------------------------------------------- |
 | GET    | `/api/dashboards`            | List dashboards (filter + page + tags + namespace) |
 | POST   | `/api/dashboards`            | Create                                        |
+| POST   | `/api/dashboards/:id/duplicate` | Copy a dashboard (panels, adornments, settings, tags, metadata) under a new name in the SOURCE's namespace. Server-side so no field is missed — the old client-side copy dropped adornments. Panel ids are regenerated and `panel_border` adornments remapped onto them; `component_id` references are kept (components are shared, not cloned). |
 | GET    | `/api/dashboards/:id`        | Get one                                       |
 | GET    | `/api/dashboards/:id/details`| Get with expanded layout + referenced components |
 | PUT    | `/api/dashboards/:id`        | Update                                        |
