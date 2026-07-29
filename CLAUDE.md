@@ -802,9 +802,19 @@ exhaustive, not prioritized except where noted.
 
 ---
 
-**Last Updated**: 2026-06-02
-**Build**: 1682
-**Version**: 0.26.1
+## Current version / build
+
+Deliberately **not** restated here — a hardcoded version in this file rots the
+moment a release ships (it sat at 0.26.1 / build 1682 for ~22 minor versions
+before anyone noticed). Read it from the source instead:
+
+| What | Where |
+|------|-------|
+| Version | `client/package.json` → `version` |
+| Build number | `client/build.json` → `buildNumber` |
+| Latest release | `git tag --sort=-v:refname \| grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \| head -1` |
+| What shipped in it | [`CHANGELOG.md`](CHANGELOG.md) |
+| What's actually deployed | `GET /version` on the target → `{version, build, git_commit}` |
 
 ## Simulator Services
 
