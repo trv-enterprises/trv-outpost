@@ -2247,9 +2247,17 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         layout_dimension: currentDimension,
         scale_percent: scalePercent,
         refresh_interval: editableRefreshInterval,
-        // Omitted entirely when inheriting, so a dashboard that never opts in
-        // stores nothing and keeps following the global setting.
-        panel_background: editablePanelBackground || undefined,
+        // ALWAYS send this key, including as "" for Default/inherit.
+        //
+        // It used to be `|| undefined`, which JSON.stringify drops — and the
+        // server's partial-settings merge writes only the keys the request
+        // actually contained (models.UpdateDashboardRequest.SettingsFields).
+        // So switching a dashboard from transparent/solid BACK to Default sent
+        // nothing, the old value survived, and the change silently reverted on
+        // the next load. Sending "" explicitly is what makes Default reachable
+        // — the same reason the BSON tag deliberately has no omitempty (see
+        // models.DashboardSettings.PanelBackground).
+        panel_background: editablePanelBackground || '',
         variables_enabled: editableVariablesEnabled || editableRangeEnabled,
         variables: builtVariables,
       };

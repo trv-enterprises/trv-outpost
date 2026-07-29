@@ -99,6 +99,19 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Switching a dashboard's Panel background back to Default didn't stick.**
+  Setting a dashboard to *Solid* or *Transparent* saved fine, but changing it
+  back to *Default* (inherit the deployment setting) silently reverted: the
+  editor showed the new look, and the dashboard came back with the old one on
+  the next load.
+
+  The editor dropped the field from the save when it was empty, and a settings
+  update only writes the keys the request actually contains — so "back to
+  Default" was indistinguishable from "don't touch it," and the previous choice
+  survived. The editor now sends the empty value explicitly, so all three
+  states round-trip in both directions. (The storage layer already handled the
+  empty value correctly; only the request was missing it.)
+
 - **Duplicating a dashboard dropped its borders.** The copy was assembled in the
   browser from a hand-listed set of fields, and adornments weren't on the list —
   so every border you'd drawn was silently missing from the duplicate (and any
