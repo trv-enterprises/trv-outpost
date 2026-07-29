@@ -6833,6 +6833,53 @@ paths:
       summary: Preview orphaned components for a dashboard delete
       tags:
       - dashboards
+  /dashboards/{id}/duplicate:
+    post:
+      consumes:
+      - application/json
+      description: Copy a dashboard (panels, adornments, settings, tags, metadata)
+        under a new name in the SAME namespace. Panels keep their component_id references
+        — components are shared, so the copy points at the same ones. Panel ids are
+        regenerated and panel_border adornments remapped onto them.
+      parameters:
+      - description: Source dashboard ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 'New dashboard name: {\'
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Dashboard'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Duplicate a dashboard
+      tags:
+      - dashboards
   /dashboards/{id}/swap-compatibility:
     post:
       consumes:

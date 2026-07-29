@@ -829,6 +829,19 @@ class APIClient {
     });
   }
 
+  /**
+   * Copy a dashboard under a new name. Server-side so the copy is "everything
+   * the record has" rather than a field list maintained here — the old
+   * client-side version silently dropped adornments. Panels keep their
+   * component_id references (components are shared, not cloned).
+   */
+  async duplicateDashboard(id, name) {
+    return this.request(`/api/dashboards/${id}/duplicate`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  }
+
   // Component versioning endpoints
   async getComponentVersionInfo(id) {
     return this.request(`/api/components/${id}/version-info`);

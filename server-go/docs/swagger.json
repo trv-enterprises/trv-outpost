@@ -3755,6 +3755,71 @@
                 }
             }
         },
+        "/dashboards/{id}/duplicate": {
+            "post": {
+                "description": "Copy a dashboard (panels, adornments, settings, tags, metadata) under a new name in the SAME namespace. Panels keep their component_id references — components are shared, so the copy points at the same ones. Panel ids are regenerated and panel_border adornments remapped onto them.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboards"
+                ],
+                "summary": "Duplicate a dashboard",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Source dashboard ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New dashboard name: {\\",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.Dashboard"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/dashboards/{id}/swap-compatibility": {
             "post": {
                 "description": "Per-panel column-availability check for a candidate connection of a connection_swap variable",

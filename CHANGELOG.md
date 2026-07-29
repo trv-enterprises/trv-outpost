@@ -99,6 +99,17 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Duplicating a dashboard dropped its borders.** The copy was assembled in the
+  browser from a hand-listed set of fields, and adornments weren't on the list —
+  so every border you'd drawn was silently missing from the duplicate (and any
+  field added to dashboards later would have gone the same way).
+
+  Duplication now happens server-side and copies the whole record, so borders,
+  panels, settings, variables, tags and metadata all come across. Panel ids are
+  regenerated for the copy and panel-bound borders are remapped onto them, so
+  the two dashboards don't share ids. Panels still reference the **same**
+  components — a dashboard copy points at them rather than cloning them.
+
 - **Aggregations now actually apply on Gauge and Value charts.** Choosing
   **Average** (or Min / Max / Sum / Count) on a single-value chart displayed
   the *first raw reading* instead of the aggregate — the number was computed

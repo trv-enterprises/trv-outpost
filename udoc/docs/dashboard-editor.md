@@ -164,6 +164,19 @@ allowed, just something to expect.
 If you move a panel on top of a border, the line simply draws across the
 panel. Nothing breaks — move either the panel or the border to fix it.
 
+## Duplicating a Dashboard
+
+The **Duplicate** icon on each row or tile in Design Mode > Dashboards copies a
+dashboard as `<name> (copy)` in the same namespace, carrying its panels,
+**borders**, settings (including [dashboard variables](dashboard-variables.md)),
+tags, and description. You stay on the list; the copy is ready to open and edit.
+
+Panels in the copy point at the **same components** as the original — components
+are shared entities, and a dashboard copy references them rather than cloning
+them. Editing one of those components still changes both dashboards. To vary a
+component on the copy only, duplicate that component (see
+[Create a duplicate instead](creating-components.md#create-a-duplicate-instead)).
+
 ## Dashboard Variables
 
 Click **Variables** (next to the dashboard name) to define a
