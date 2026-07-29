@@ -2586,9 +2586,10 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       }
 
       const slot = findFreeSlot(src.w, src.h, src, editablePanels);
+      const newPanelId = `panel-${Date.now()}`;
       setEditablePanels(prev => [...prev, {
         ...src,
-        id: `panel-${Date.now()}`,
+        id: newPanelId,
         component_id: newComponentId,
         x: slot.x,
         y: slot.y,
@@ -2596,6 +2597,22 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         // over to a copy pointing at a different one.
         component_overrides: undefined,
       }]);
+
+      // Carry the panel's border, if it has one. A panel_border is part of how
+      // the panel LOOKS, so a copy without it isn't really a copy. It binds by
+      // panel_id and derives its geometry from the panel, so the copy just
+      // needs a fresh id pointed at the new panel — the styling (color, width,
+      // line_style) comes across as-is.
+      const srcBorder = editableAdornments.find(
+        a => a.kind === 'panel_border' && a.panel_id === panelId
+      );
+      if (srcBorder) {
+        setEditableAdornments(prev => [...prev, {
+          ...srcBorder,
+          id: `adorn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          panel_id: newPanelId,
+        }]);
+      }
       setEditHasChanges(true);
     } catch (err) {
       console.error('[DashboardViewerPage] Panel duplicate failed:', err);

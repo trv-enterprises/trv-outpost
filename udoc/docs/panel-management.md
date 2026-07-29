@@ -79,6 +79,11 @@ affecting other dashboards. See
 it. The new panel is placed in the first free space to the right of (or below)
 the original at the same size, holding a fresh `<name> (copy)` component.
 
+If the panel has a [border](dashboard-editor.md#borders-adornments) of its own,
+the copy gets one too, in the same color, width, and line style. A group border
+drawn *around* several panels isn't copied — it frames that group, not this
+panel.
+
 This is the quickest way to build a row of similar tiles: duplicate, then edit
 the copy's query or title. Because the copy is its own component, editing it
 does **not** affect the panel you copied from.

@@ -11,8 +11,9 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **Duplicate a panel from the dashboard editor.** The panel edit menu gains
-  **Duplicate**, which copies the panel *and* the component on it — a fresh
-  `<name> (copy)` — and places it in the first free space beside the original.
+  **Duplicate**, which copies the panel, the component on it — a fresh
+  `<name> (copy)` — and its border if it has one, placing the copy in the first
+  free space beside the original.
   The fast way to build a row of near-identical tiles: duplicate, then edit the
   copy. Because it's a separate component, editing it doesn't touch the panel
   you copied from. (Use **Select Existing** when you want two panels sharing one
