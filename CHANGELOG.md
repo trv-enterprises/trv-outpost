@@ -116,6 +116,16 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Border edges now snap to the cell edge you're pointing at.** Dragging a
+  border's edge meant overshooting the target by most of a cell before it
+  would move — the edge visibly lagged the cursor. Worst at the canvas edge,
+  where there was no further cell to drag into, so the outermost column and
+  row were the hardest of all to land on.
+
+  An edge now snaps to the nearest cell boundary, and counts as arrived once
+  the cursor is within a few pixels of it, so it tracks your pointer instead
+  of trailing a cell behind. Applies to all four edge grips and the corner.
+
 - **Switching a dashboard's Panel background back to Default didn't stick.**
   Setting a dashboard to *Solid* or *Transparent* saved fine, but changing it
   back to *Default* (inherit the deployment setting) silently reverted: the
