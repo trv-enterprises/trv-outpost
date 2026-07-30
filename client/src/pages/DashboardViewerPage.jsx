@@ -2786,6 +2786,40 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     };
   }, [gridCellGeometry, maxGridCol]);
 
+  // Snap a border edge to the NEAREST cell boundary rather than flooring into
+  // whatever cell the pointer happens to be inside.
+  //
+  // Flooring makes an edge feel like it lags the cursor: to place a right edge
+  // at the end of column 6 you had to drag all the way to the START of column
+  // 6's successor — roughly a full 36px stride PAST the edge you were aiming
+  // at. Worst at the canvas edge, where there is no next cell to reach into,
+  // so the last column/row was the hardest of all to land on.
+  //
+  // `kind` picks which boundary the grip owns:
+  //   'far'  (right/bottom) — the edge is the END of a cell, at k*S + CELL
+  //   'near' (left/top)     — the edge is the START of a cell, at k*S
+  //
+  // TOL gives 4px of grace on the APPROACHING side, so being a hair short of
+  // the line still snaps to it — landing exactly on a 1px boundary is not a
+  // reasonable ask of a mouse. Anywhere else in the stride resolves to
+  // whichever boundary is nearer.
+  const EDGE_SNAP_TOL = 4;
+  const snapEdgeToCell = useCallback((px, origin, stride, kind) => {
+    const rel = px - origin;
+    const k = Math.floor(rel / stride);
+    const frac = rel - k * stride;
+    // Cell body is CELL_SIZE of the stride; the remainder is the gutter.
+    const body = stride * (32 / 36);
+    if (kind === 'far') {
+      if (frac >= body - EDGE_SNAP_TOL) return k;      // on/near this cell's end
+      if (frac <= EDGE_SNAP_TOL) return k - 1;         // just past the previous end
+      return frac >= stride / 2 ? k : k - 1;           // nearest
+    }
+    if (frac <= EDGE_SNAP_TOL) return k;               // on/just past this start
+    if (frac >= stride - EDGE_SNAP_TOL) return k + 1;  // near the next start
+    return frac >= stride / 2 ? k + 1 : k;             // nearest
+  }, []);
+
   const startDragging = (e, panel) => {
     // A shift-press is the marquee gesture and must reach the grid handler.
     // Panels normally claim their own presses, so without this passthrough a
@@ -3596,12 +3630,20 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         }
         const edge = resizingAdornment.edge;
 
-        // Subtract the grab offset before flooring to a cell, so the edge
+        // Subtract the grab offset before resolving to a cell, so the edge
         // tracks the pointer smoothly instead of snapping on mousedown.
         const g = gridCellGeometry();
         if (!g) return;
-        const gridX = Math.floor((e.clientX - (resizingAdornment.offsetX || 0) - g.originX) / g.cellW);
-        const gridY = Math.floor((e.clientY - (resizingAdornment.offsetY || 0) - g.originY) / g.cellH);
+        const px = e.clientX - (resizingAdornment.offsetX || 0);
+        const py = e.clientY - (resizingAdornment.offsetY || 0);
+        // Far grips (right/bottom) own a cell's END boundary; near grips
+        // (left/top) own its START. snapEdgeToCell rounds to whichever
+        // boundary is closest instead of flooring into the containing cell,
+        // so the edge lands where the cursor is rather than a stride later.
+        const farX = snapEdgeToCell(px, g.originX, g.cellW, 'far');
+        const farY = snapEdgeToCell(py, g.originY, g.cellH, 'far');
+        const nearX = snapEdgeToCell(px, g.originX, g.cellW, 'near');
+        const nearY = snapEdgeToCell(py, g.originY, g.cellH, 'near');
 
         const next = { x: a.x, y: a.y, w: a.w, h: a.h };
 
@@ -3609,20 +3651,20 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         // edge stays anchored (x and w both change, x+w constant) — the same
         // model the panel resize uses.
         if (edge === 'right' || edge === 'corner') {
-          next.w = Math.max(ADORNMENT_MIN_CELLS, Math.min(gridX - a.x + 1, boundCols - a.x));
+          next.w = Math.max(ADORNMENT_MIN_CELLS, Math.min(farX - a.x + 1, boundCols - a.x));
         }
         if (edge === 'bottom' || edge === 'corner') {
-          next.h = Math.max(ADORNMENT_MIN_CELLS, Math.min(gridY - a.y + 1, boundRows - a.y));
+          next.h = Math.max(ADORNMENT_MIN_CELLS, Math.min(farY - a.y + 1, boundRows - a.y));
         }
         if (edge === 'left') {
           const rightEdge = a.x + a.w;
-          const newX = Math.max(0, Math.min(gridX, rightEdge - ADORNMENT_MIN_CELLS));
+          const newX = Math.max(0, Math.min(nearX, rightEdge - ADORNMENT_MIN_CELLS));
           next.x = newX;
           next.w = rightEdge - newX;
         }
         if (edge === 'top') {
           const bottomEdge = a.y + a.h;
-          const newY = Math.max(0, Math.min(gridY, bottomEdge - ADORNMENT_MIN_CELLS));
+          const newY = Math.max(0, Math.min(nearY, bottomEdge - ADORNMENT_MIN_CELLS));
           next.y = newY;
           next.h = bottomEdge - newY;
         }
@@ -3692,7 +3734,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     isEditMode, adornmentMode, draggingAdornment, resizingAdornment, drawingAdornment,
     editableAdornments, editBudgetCols, editBudgetRows, getGridPosition, gridCellGeometry,
     updateAdornment, lastAdornmentStyle, maxGridCol, maxGridRow,
-    attachPanelBorder,
+    attachPanelBorder, snapEdgeToCell,
   ]);
 
   // Delete / Escape on the selected border. Ignored while typing in a field
