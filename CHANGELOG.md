@@ -153,6 +153,25 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   or set to a column the chart doesn't display, which aggregated data you
   never see.
 
+### Changed
+
+- **CI now checks `gofmt` on the Go files each pull request touches.** A new
+  step in the existing server job; a PR that leaves an edited `.go` file
+  unformatted fails with the filenames, the exact `gofmt -w` command, and the
+  diff. Deliberately scoped to *changed* files rather than the whole tree —
+  a large number of files predate the check and differ only in whitespace, so
+  gating the repo would either block every PR or force a codebase-wide
+  reformat that destroys `git blame`. New and edited code is formatted from
+  here on, and the backlog clears as files get touched.
+
+- **The last "datasource" naming is gone from the API surface.** The
+  `POST /api/connections/{id}/command` endpoint was still grouped under a
+  `datasources` tag in Swagger UI — a one-endpoint leftover from the
+  connection rename — and now groups under `connections` with the rest.
+  Alongside it, `GET /api/dashboards`' description told callers to use
+  `include_datasources=true`, **a parameter that does not exist**; the real
+  one is `include_connections`. No request or response shape changed.
+
 ## [0.48.0] — 2026-07-28
 
 ### Added
