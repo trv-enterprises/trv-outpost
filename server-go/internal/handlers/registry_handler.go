@@ -168,9 +168,9 @@ func (h *RegistryHandler) GetConnectionType(c *gin.Context) {
 	info, ok := registry.GetTypeInfo(typeID)
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{
-			"error":      "type not found",
-			"type_id":    typeID,
-			"available":  registry.Categories(),
+			"error":     "type not found",
+			"type_id":   typeID,
+			"available": registry.Categories(),
 		})
 		return
 	}
@@ -222,6 +222,8 @@ func legacyToRegistryTypeID(in string) string {
 		return "api.prometheus"
 	case "edgelake":
 		return "api.edgelake"
+	case "synology":
+		return "api.synology"
 	case "mqtt":
 		return "stream.mqtt"
 	case "frigate":

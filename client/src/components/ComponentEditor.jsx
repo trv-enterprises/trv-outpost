@@ -578,6 +578,25 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // rejects it with error 120. Round-tripping the loaded value preserves it
   // until a type gets a real editor surface.
   const [passthroughQueryParams, setPassthroughQueryParams] = useState(null);
+
+  // Query surfaces declared by connection adapters, keyed by the legacy short
+  // connection type ('synology'), from GET /api/registry/connections.
+  //
+  // An adapter is the only place that knows what a valid query for it looks
+  // like, so it declares that surface next to its own registration and the
+  // editor renders whatever it gets. That's how a type whose params carry
+  // required dispatch fields becomes authorable from scratch without this file
+  // growing another hardcoded per-type branch. Types that declare nothing are
+  // absent from this map and keep the plain raw box.
+  const [querySurfaces, setQuerySurfaces] = useState({});
+  // The catalog preset the user picked, for kind === 'catalog' surfaces. Holds
+  // the whole preset (not just an id) so its params travel with it into the
+  // preview / save / live-preview paths.
+  const [selectedQueryPreset, setSelectedQueryPreset] = useState(null);
+  // A loaded component's stored {raw, params}, waiting to be matched against a
+  // catalog preset. Held rather than resolved inline because the surfaces load
+  // async — a component can finish loading before its type's surface arrives.
+  const [pendingPresetMatch, setPendingPresetMatch] = useState(null);
   // Ref to the raw-query TextArea so a variable pill can insert its token at the
   // cursor position rather than only appending.
   const queryRawRef = useRef(null);
@@ -824,6 +843,24 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     }
     return { query_type: 'range', start: `now-${promTimeRange}`, end: 'now', step: promStep };
   }, [promQueryType, promTimeRange, promStep]);
+
+  // Assemble query_config.params for a connection type that declared a query
+  // surface, falling back to the stored params when nothing is selected.
+  //
+  // Single source of truth for the preview, save, and live-preview paths. Those
+  // three had already drifted once — the live preview kept sending `{}` where
+  // the other two had learned to preserve stored params — which is exactly the
+  // bug class this consolidates away.
+  const buildSurfaceParams = useCallback(() => {
+    if (selectedQueryPreset?.params) {
+      return { ...selectedQueryPreset.params };
+    }
+    // No preset selected: either the type declares no surface, or this is a
+    // component authored before the catalog. Either way the stored params are
+    // the only correct thing to send — dropping to {} sends the query bare,
+    // which for Synology means DSM error 120.
+    return passthroughQueryParams ? { ...passthroughQueryParams } : {};
+  }, [selectedQueryPreset, passthroughQueryParams]);
 
   // EdgeLake query configuration (for raw mode database param)
   const [edgelakeDatabase, setEdgelakeDatabase] = useState('');
@@ -1092,7 +1129,28 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // Fetch datasources on mount
   useEffect(() => {
     fetchDatasources();
+    fetchQuerySurfaces();
   }, []);
+
+  // Resolve a loaded component's stored query back to the catalog preset it
+  // came from, once BOTH the surfaces and the connection are known. Runs on
+  // either arriving, since their order isn't guaranteed.
+  //
+  // No match (a pre-catalog component, or an API outside the catalog) leaves
+  // the preset unset on purpose: buildSurfaceParams then falls through to the
+  // stored params, so the component keeps running exactly as saved.
+  // Looks the surface up from state rather than closing over the derived
+  // activeQuerySurface — that const is declared far below this effect, and
+  // referencing it here is a temporal-dead-zone crash that blanks the editor.
+  useEffect(() => {
+    if (!pendingPresetMatch) return;
+    const connType = connections.find((c) => c.id === selectedConnectionId)?.type;
+    const surface = connType ? querySurfaces[connType] : null;
+    if (!surface) return;
+    const match = findMatchingPreset(surface, pendingPresetMatch.raw, pendingPresetMatch.params);
+    if (match) setSelectedQueryPreset(match);
+    setPendingPresetMatch(null);
+  }, [pendingPresetMatch, querySurfaces, connections, selectedConnectionId]);
 
   // Pull the admin default for value-chart value size so new charts
   // render at the deployment's preferred size instead of a hard-coded
@@ -1134,6 +1192,14 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       setQueryRaw(chart.query_config?.raw || '');
       setQueryType(chart.query_config?.type || 'sql');
       setPassthroughQueryParams(chart.query_config?.params || null);
+      // Re-select the catalog preset this component was authored from, so the
+      // picker shows the right entry instead of reading as unset. Resolved in
+      // an effect rather than here because the surfaces are fetched async and
+      // may not have arrived yet when a component loads.
+      setPendingPresetMatch({
+        raw: chart.query_config?.raw || '',
+        params: chart.query_config?.params || null,
+      });
       setXAxisColumn(chart.data_mapping?.x_axis || '');
       setXAxisLabel(chart.data_mapping?.x_axis_label || '');
       setXAxisFormat(chart.data_mapping?.x_axis_format || 'auto'); // pre-'auto' charts w/o a stored format now adapt to span
@@ -1789,6 +1855,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const isSocket = selectedDatasource?.type === 'socket';
   const isMQTT = selectedDatasource?.type === 'mqtt';
   const isAPI = selectedDatasource?.type === 'api';
+  // The adapter-declared query surface for the selected connection, if it
+  // declared one. Undefined for every type that didn't — those keep the raw box.
+  const activeQuerySurface = selectedDatasource?.type
+    ? querySurfaces[selectedDatasource.type]
+    : undefined;
 
   // RAW socket/mqtt have no query API (only a live stream), so a discovered
   // value list is captured live + persisted on the connection (design authority)
@@ -1859,6 +1930,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     // nothing to a SQL connection), so a connection switch must NOT carry the
     // previous connection's passthrough params over.
     setPassthroughQueryParams(null);
+    // Same reasoning for the catalog preset — a DSM API is meaningless to a
+    // SQL connection, and a stale preset would keep injecting its params.
+    setSelectedQueryPreset(null);
+    setPendingPresetMatch(null);
 
     // Resolve the connection: an explicitly-passed object (from the picker
     // modal, which may know connections beyond the editor's capped list) wins;
@@ -1943,6 +2018,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           case 'prometheus':
             setQueryType('prometheus');
             setQueryMode('visual');
+            break;
+          case 'synology':
+            // 'api' rather than a synology-specific value: query_config.type is
+            // documentary here (the adapter dispatches on params, and the type
+            // field is dropped before it ever reaches one), and models.QueryType
+            // has no synology constant. The catalog picker below renders from
+            // the adapter's declared surface, not from this.
+            setQueryType('api');
+            setQueryMode('raw');
             break;
         }
       }
@@ -2161,6 +2245,30 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     }
   };
 
+  // Load adapter-declared query surfaces once. Keyed by the SHORT connection
+  // type because that's what connection records carry ('synology'), while the
+  // registry keys on the dotted adapter id ('api.synology') — registryTypeIdToLegacy
+  // bridges the two, mirroring legacyToRegistryTypeID on the server.
+  //
+  // A failure here is non-fatal on purpose: the map stays empty, every type
+  // falls back to the raw query box, and the editor works exactly as it did
+  // before query surfaces existed. Losing a nicer picker should never block
+  // authoring a component.
+  const fetchQuerySurfaces = async () => {
+    try {
+      const data = await apiClient.getRegistryConnectionTypes();
+      const surfaces = {};
+      for (const t of data?.types || []) {
+        if (t?.query_surface?.kind) {
+          surfaces[registryTypeIdToLegacy(t.type_id)] = t.query_surface;
+        }
+      }
+      setQuerySurfaces(surfaces);
+    } catch (err) {
+      console.error('Failed to fetch connection query surfaces:', err);
+    }
+  };
+
   // fetchPreviewData runs the preview query. variableValueOverride lets the
   // value-picker re-invoke it with the chosen value directly (state updates are
   // async, so we can't rely on previewVariableValue being set yet on re-entry).
@@ -2371,15 +2479,14 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         queryParams = buildPrometheusParams();
       } else if (selectedDatasource?.type === 'edgelake' && edgelakeDatabase) {
         queryParams = { database: edgelakeDatabase };
-      } else if (passthroughQueryParams && Object.keys(passthroughQueryParams).length > 0) {
-        // Types with no dedicated params UI (synology, and any future adapter
-        // whose params carry required dispatch fields) must send their STORED
-        // params on preview too. Without this the fetch goes out bare and the
-        // adapter rejects it — for Synology, DSM returns error 120 — so the
-        // preview shows an error and availableColumns is never refreshed,
-        // which in turn makes the dataview column list look permanently stuck
-        // at the saved subset. Same root cause as the save-path fix.
-        queryParams = { ...passthroughQueryParams };
+      } else {
+        // Adapter-declared surface (the selected catalog preset's params), or
+        // the STORED params for a type with no surface. Sending neither makes
+        // the fetch go out bare and the adapter reject it — for Synology, DSM
+        // returns error 120 — so the preview errors and availableColumns is
+        // never refreshed, which in turn makes the dataview column list look
+        // permanently stuck at the saved subset.
+        queryParams = buildSurfaceParams();
       }
 
       // Must go through apiClient — raw fetch() sends no auth headers
@@ -2712,10 +2819,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
             ? buildPrometheusParams()
             : selectedDatasource?.type === 'edgelake' && edgelakeDatabase
               ? { database: edgelakeDatabase }
-              // Types with no dedicated params UI keep whatever was stored.
-              // Dropping to {} here destroys required dispatch params — see
-              // passthroughQueryParams.
-              : (passthroughQueryParams || {})
+              // Adapter-declared surface, else whatever was stored. Dropping
+              // to {} here destroys required dispatch params — see
+              // buildSurfaceParams / passthroughQueryParams.
+              : buildSurfaceParams()
       } : null,
       data_mapping: selectedConnectionId ? {
         x_axis: xAxisColumn,
@@ -3973,6 +4080,62 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       initialQuery={queryRaw}
                       initialDatabase={edgelakeDatabase}
                     />
+                  ) : activeQuerySurface?.kind === 'catalog' ? (
+                    /* Catalog surface — the adapter declared a fixed set of
+                       named queries, so the user picks WHAT TO LOOK AT and the
+                       preset carries the dispatch params (for Synology DSM:
+                       method / version / result_path / additional).
+                       Those are mechanics, not knobs: getting one wrong makes
+                       the API error or return an unchartable shape, so they are
+                       deliberately never rendered as inputs. Keyed on the
+                       declared surface rather than on a connection type, so the
+                       next adapter to declare one renders here for free. */
+                    <div className="query-catalog-section">
+                      <Select
+                        id="query-catalog-preset"
+                        labelText={activeQuerySurface.label || 'Query'}
+                        value={selectedQueryPreset?.id || ''}
+                        helperText={
+                          selectedQueryPreset?.description || activeQuerySurface.description || ''
+                        }
+                        onChange={(e) => {
+                          const preset = (activeQuerySurface.presets || []).find(
+                            (p) => p.id === e.target.value
+                          );
+                          setSelectedQueryPreset(preset || null);
+                          // Raw and params both come from the preset. Clearing
+                          // the passthrough is what lets a user CHANGE the API
+                          // on an existing component — otherwise the stored
+                          // params would keep overriding the new choice.
+                          setQueryRaw(preset?.raw || '');
+                          setPassthroughQueryParams(null);
+                          // Columns belong to the previous API's shape.
+                          setPreviewData(null);
+                          setPreviewError(null);
+                          setAvailableColumns([]);
+                        }}
+                      >
+                        <SelectItem value="" text="Select a query…" />
+                        {(activeQuerySurface.presets || []).map((preset) => (
+                          <SelectItem key={preset.id} value={preset.id} text={preset.label} />
+                        ))}
+                      </Select>
+                      {/* A component authored before this catalog existed (or
+                          against an API outside it) matches no preset. Say so
+                          plainly instead of showing an empty picker that looks
+                          like data loss — its stored query still round-trips
+                          and still runs. */}
+                      {!selectedQueryPreset && queryRaw && (
+                        <InlineNotification
+                          kind="info"
+                          lowContrast
+                          hideCloseButton
+                          title="Custom query"
+                          subtitle={`This component queries "${queryRaw}", which isn't one of the presets. It keeps working as saved; picking a preset above replaces it.`}
+                          style={{ marginTop: '0.5rem', maxWidth: '100%' }}
+                        />
+                      )}
+                    </div>
                   ) : (
                     <>
                       {/* EdgeLake Raw mode needs a database parameter
@@ -5427,7 +5590,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                             ? buildPrometheusParams()
                             : selectedDatasource?.type === 'edgelake' && edgelakeDatabase
                               ? { database: edgelakeDatabase }
-                              : {}
+                              // Had been `{}`, which sent the live preview out
+                              // bare while the preview + save paths preserved
+                              // params — so a Synology custom-code preview
+                              // failed with DSM error 120 even when Fetch Data
+                              // above it succeeded.
+                              : buildSurfaceParams()
                       } : null}
                       dataMapping={selectedConnectionId ? {
                         connection_id: selectedConnectionId,
@@ -6047,6 +6215,44 @@ ${categoriesCode}
     </div>
   );
 };`;
+}
+
+// registryTypeIdToLegacy converts a registry adapter id ("api.synology",
+// "store.tsstore") to the short connection.type string this editor and the
+// connection records use ("synology", "tsstore").
+//
+// Mirrors legacyToRegistryTypeID in server-go/internal/handlers/registry_handler.go,
+// in the other direction. The general rule — drop the category prefix — is right
+// for every current type; sql.* is the one family that collapses many registry
+// ids onto one legacy type, and it's spelled out rather than left to chance.
+function registryTypeIdToLegacy(typeId) {
+  if (!typeId) return '';
+  if (typeId.startsWith('sql.') || typeId.startsWith('db.')) return 'sql';
+  if (typeId === 'stream.websocket' || typeId === 'stream.websocket-bidir') return 'socket';
+  if (typeId === 'api.rest') return 'api';
+  if (typeId === 'file.csv') return 'csv';
+  const dot = typeId.indexOf('.');
+  return dot === -1 ? typeId : typeId.slice(dot + 1);
+}
+
+// findMatchingPreset locates the catalog preset a stored query_config came
+// from, so re-opening a saved component selects the right entry in the picker.
+//
+// Matches on raw + the params the preset actually declares, ignoring extra
+// stored keys. A component saved before the catalog existed, or hand-built
+// against an API not in the catalog, simply matches nothing — the caller then
+// falls back to passthroughQueryParams and the query round-trips untouched.
+function findMatchingPreset(surface, raw, params) {
+  if (!surface?.presets?.length) return null;
+  const stored = params || {};
+  return surface.presets.find((preset) => {
+    if ((preset.raw || '') !== (raw || '')) return false;
+    return Object.entries(preset.params || {}).every(
+      // Loose compare: version round-trips through JSON as a number but may
+      // have been stored as a string by an older hand-edited record.
+      ([key, value]) => String(stored[key] ?? '') === String(value ?? '')
+    );
+  }) || null;
 }
 
 function getQueryLabelForType(type) {

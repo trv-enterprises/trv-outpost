@@ -10,6 +10,28 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Synology components can be built from scratch.** Previously the only way to
+  get a working Synology component was to duplicate an existing one. Building a
+  new one always produced a query that failed, and the two looked *identical* in
+  the editor — they differed only in fields the editor never showed, which is
+  what made it hard to spot.
+
+  The component editor now has a **DSM API** picker for Synology connections:
+  choose what you want to read — System Info, System Utilization, Installed
+  Packages, Services, Storage Disks — and the call is assembled for you. The
+  dispatch details that have to be exactly right (method, version, result path,
+  and the `additional` fields that packages need or every status comes back
+  null) are supplied by the connection type rather than typed by hand.
+
+  Existing Synology components are unaffected and now show which API they use.
+  One saved with an unrecognized query keeps working and is labelled *Custom
+  query*, so a component broken this way can be repaired by picking a preset.
+
+  Under the hood this is a general mechanism, not a Synology special case: a
+  connection adapter can now **declare its query-authoring surface** alongside
+  its registration, and the editor renders whatever it finds. Synology is the
+  first adopter; every other connection type is untouched.
+
 - **Mobile view mode: Stacked or Fit.** On a phone the dashboard stacks into a
   single readable column. Some boards are built to be read *as a whole* —
   a wall display, a status board where the arrangement carries the meaning —

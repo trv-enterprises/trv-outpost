@@ -2145,33 +2145,21 @@ func (s *ConnectionService) getTSStoreSchema(ctx context.Context, ds *models.Con
 	}, nil
 }
 
-// synologySchemaProbes are the DSM APIs sampled to build an inferred schema.
-//
 // Unlike ts-store — where a single "newest" query describes the whole store —
 // a Synology connection has no one probe that characterizes it: each component
 // targets a different DSM API, and the columns depend on which one plus the
-// result_path. So we sample a small fixed set of the APIs the adapter is
-// actually useful for and return each as its own "table".
+// result_path. So we sample the DSM catalog the adapter ships (see
+// connection.SynologyCatalog) and return each API as its own "table".
 //
-// Deliberately NOT the full API surface: these are the ones that carry
-// dashboard-worthy data, need no per-component parameters, and are cheap. An
-// author targeting some other API still discovers its columns the same way
-// anyone does — run the query (the editor's Fetch Data, or the agent's query
-// tool) and read result_set.columns.
-var synologySchemaProbes = []struct {
-	Table      string
-	API        string
-	Version    int
-	Method     string
-	ResultPath string
-	Additional string
-}{
-	{"system.utilization", "SYNO.Core.System.Utilization", 1, "get", "", ""},
-	{"system.info", "SYNO.Core.System", 1, "info", "", ""},
-	{"storage.disks", "SYNO.Storage.CGI.Storage", 1, "load_info", "disks", ""},
-	{"services", "SYNO.Core.Service", 3, "get", "service", ""},
-	{"packages", "SYNO.Core.Package", 2, "list", "packages", `["status","description"]`},
-}
+// The catalog is deliberately NOT the full DSM API surface: it holds the APIs
+// that carry dashboard-worthy data, need no per-component parameters, and are
+// cheap. An author targeting some other API still discovers its columns the
+// same way anyone does — run the query (the editor's Fetch Data, or the agent's
+// query tool) and read result_set.columns.
+//
+// Sourcing the probes from the catalog rather than a second hardcoded list
+// means the editor's query picker and this schema prober can never disagree
+// about how an API is called.
 
 // getSynologySchema builds an inferred schema for a Synology DSM connection by
 // sampling a handful of DSM APIs and reading the columns off each ResultSet.
@@ -2207,29 +2195,20 @@ func (s *ConnectionService) getSynologySchema(ctx context.Context, ds *models.Co
 	}
 	defer adapter.Close()
 
-	tables := make([]models.TableInfo, 0, len(synologySchemaProbes))
+	tables := make([]models.TableInfo, 0, len(connection.SynologyCatalog))
 	var skipped []string
 
-	for _, probe := range synologySchemaProbes {
-		params := map[string]interface{}{
-			"method":      probe.Method,
-			"version":     probe.Version,
-			"result_path": probe.ResultPath,
-		}
-		if probe.Additional != "" {
-			params["additional"] = probe.Additional
-		}
-
-		rs, err := adapter.Query(ctx, models.Query{Raw: probe.API, Params: params})
+	for _, probe := range connection.SynologyCatalog {
+		rs, err := adapter.Query(ctx, models.Query{Raw: probe.API, Params: probe.Params()})
 		if err != nil || rs == nil || len(rs.Columns) == 0 {
 			// Most commonly DSM error 105 (this account lacks privilege for
 			// that API). Record it so the caller knows the schema is partial.
-			skipped = append(skipped, probe.Table)
+			skipped = append(skipped, probe.ID)
 			continue
 		}
 
 		tables = append(tables, models.TableInfo{
-			Name:    probe.Table,
+			Name:    probe.ID,
 			Columns: inferColumnsFromResultSet(rs),
 		})
 	}
@@ -2245,7 +2224,7 @@ func (s *ConnectionService) getSynologySchema(ctx context.Context, ds *models.Co
 
 	if len(skipped) > 0 {
 		log.Printf("synology schema: %d/%d probes returned no data (skipped: %v) — schema is partial",
-			len(skipped), len(synologySchemaProbes), skipped)
+			len(skipped), len(connection.SynologyCatalog), skipped)
 	}
 
 	return &models.SchemaResponse{

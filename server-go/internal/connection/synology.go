@@ -31,6 +31,129 @@ func init() {
 			return newSynologyAdapterFromConfig(config)
 		},
 	)
+	registry.RegisterQuerySurface("api.synology", synologyQuerySurface())
+}
+
+// SynologyAPI is one entry in the DSM catalog: an API the adapter knows
+// how to call, together with the exact dispatch tuple that call needs.
+//
+// DSM is not a query language — it is a fixed set of RPC-ish APIs, each
+// with its own method name, version, and envelope shape. Get any of the
+// four wrong and DSM either errors (120 = no such method) or returns a
+// shape nothing can chart. That makes them adapter knowledge, not user
+// input, which is why they live here and are never rendered as fields.
+type SynologyAPI struct {
+	ID          string // Stable id, also the schema-probe table name
+	Label       string // Human-readable, shown in the editor picker
+	Description string // What this API returns
+	API         string // DSM API name — becomes Query.Raw
+	Method      string
+	Version     int
+	ResultPath  string // Dot path into `data`; empty = whole object
+	Additional  string // JSON array string, verbatim passthrough; empty = omit
+}
+
+// SynologyCatalog is the set of DSM APIs this adapter ships knowing how
+// to call. It is the SINGLE source of truth for the dispatch tuples: the
+// editor's query picker (via the registry query surface) and the schema
+// prober both derive from it, so a new API is added in exactly one place.
+//
+// Deliberately NOT the full DSM API surface: these are the ones carrying
+// dashboard-worthy data that need no per-component parameters and are
+// cheap to call. Every entry here has been run against a live DSM 7 box.
+//
+// Shape note: Package/Service/Storage resolve to ARRAYS (tall — one row
+// per package, service, or disk), while System and Utilization resolve to
+// OBJECTS (wide — a single row of flattened fields). See Query's doc for
+// the rule.
+//
+// Exported so the schema prober in the service layer derives its probes
+// from the same list the editor picker is built from.
+var SynologyCatalog = []SynologyAPI{
+	{
+		ID:          "system.info",
+		Label:       "System Info",
+		Description: "Model, serial, firmware, CPU and uptime — one row.",
+		API:         "SYNO.Core.System",
+		Method:      "info",
+		Version:     1,
+	},
+	{
+		ID:          "system.utilization",
+		Label:       "System Utilization",
+		Description: "Live CPU, memory, network and disk load — one row.",
+		API:         "SYNO.Core.System.Utilization",
+		Method:      "get",
+		Version:     1,
+	},
+	{
+		ID:          "packages",
+		Label:       "Installed Packages",
+		Description: "Installed packages with running status — one row per package.",
+		API:         "SYNO.Core.Package",
+		Method:      "list",
+		Version:     2,
+		ResultPath:  "packages",
+		// Without this, status and description come back null — the
+		// single most common reason a package chart renders empty.
+		Additional: `["status","description"]`,
+	},
+	{
+		ID:          "services",
+		Label:       "Services",
+		Description: "DSM services and whether each is enabled — one row per service.",
+		API:         "SYNO.Core.Service",
+		Method:      "get",
+		Version:     3,
+		ResultPath:  "service",
+	},
+	{
+		ID:          "storage.disks",
+		Label:       "Storage Disks",
+		Description: "Physical disks with health, temperature and capacity — one row per disk.",
+		API:         "SYNO.Storage.CGI.Storage",
+		Method:      "load_info",
+		Version:     1,
+		ResultPath:  "disks",
+	},
+}
+
+// Params returns the Query.Params tuple for this API, in the shape the
+// adapter's Query parses. Kept next to the struct so the catalog, the
+// query surface, and the schema prober cannot drift in how they spell it.
+func (s SynologyAPI) Params() map[string]interface{} {
+	params := map[string]interface{}{
+		"method":      s.Method,
+		"version":     s.Version,
+		"result_path": s.ResultPath,
+	}
+	if s.Additional != "" {
+		params["additional"] = s.Additional
+	}
+	return params
+}
+
+// synologyQuerySurface exposes the catalog to the editor as a set of
+// selectable presets, so a Synology component can be authored from
+// scratch by picking what to look at rather than by knowing DSM's
+// dispatch mechanics.
+func synologyQuerySurface() registry.QuerySurface {
+	presets := make([]registry.QueryPreset, 0, len(SynologyCatalog))
+	for _, api := range SynologyCatalog {
+		presets = append(presets, registry.QueryPreset{
+			ID:          api.ID,
+			Label:       api.Label,
+			Description: api.Description,
+			Raw:         api.API,
+			Params:      api.Params(),
+		})
+	}
+	return registry.QuerySurface{
+		Kind:        registry.QuerySurfaceCatalog,
+		Label:       "DSM API",
+		Description: "Pick the DSM API to read. Method, version and result path are set automatically.",
+		Presets:     presets,
+	}
 }
 
 // synologyConfigSchema returns configuration fields for the Synology DSM adapter.

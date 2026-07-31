@@ -15,19 +15,49 @@ import (
 type Registry struct {
 	factories map[string]AdapterFactory
 	metadata  map[string]TypeInfo
-	mu        sync.RWMutex
+	// querySurfaces holds surfaces declared by RegisterQuerySurface so a
+	// declaration that arrives before its Register (init() order across
+	// files is unspecified) still lands on the TypeInfo.
+	querySurfaces map[string]QuerySurface
+	mu            sync.RWMutex
 }
 
 // global is the default registry instance
 var global = &Registry{
-	factories: make(map[string]AdapterFactory),
-	metadata:  make(map[string]TypeInfo),
+	factories:     make(map[string]AdapterFactory),
+	metadata:      make(map[string]TypeInfo),
+	querySurfaces: make(map[string]QuerySurface),
 }
 
 // Register adds an adapter factory to the global registry
 // TypeID format: "category.name" (e.g., "db.postgres", "stream.websocket")
 func Register(typeID string, displayName string, caps Capabilities, schema []ConfigField, factory AdapterFactory) {
 	global.register(typeID, displayName, caps, schema, factory)
+}
+
+// RegisterQuerySurface attaches a query-authoring surface to a type,
+// letting an adapter declare how its queries are composed alongside the
+// Register call in its own init().
+//
+// Deliberately a separate call rather than another Register parameter:
+// most types have no surface to declare, and threading a nil through
+// eleven existing call sites buys nothing. Order-independent — init()
+// ordering across files is unspecified, so this records the surface even
+// if it lands before the matching Register and re-attaches it there.
+func RegisterQuerySurface(typeID string, surface QuerySurface) {
+	global.registerQuerySurface(typeID, surface)
+}
+
+func (r *Registry) registerQuerySurface(typeID string, surface QuerySurface) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.querySurfaces[typeID] = surface
+	if info, ok := r.metadata[typeID]; ok {
+		s := surface
+		info.QuerySurface = &s
+		r.metadata[typeID] = info
+	}
 }
 
 // Get retrieves an adapter factory from the global registry
@@ -62,13 +92,19 @@ func (r *Registry) register(typeID string, displayName string, caps Capabilities
 	}
 
 	r.factories[typeID] = factory
-	r.metadata[typeID] = TypeInfo{
+	info := TypeInfo{
 		TypeID:       typeID,
 		DisplayName:  displayName,
 		Category:     category,
 		Capabilities: caps,
 		ConfigSchema: schema,
 	}
+	// Pick up a surface declared ahead of this Register call.
+	if surface, ok := r.querySurfaces[typeID]; ok {
+		s := surface
+		info.QuerySurface = &s
+	}
+	r.metadata[typeID] = info
 }
 
 // get retrieves an adapter factory by type ID

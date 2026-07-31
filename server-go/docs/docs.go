@@ -12743,6 +12743,56 @@ const docTemplate = `{
                 }
             }
         },
+        "registry.QueryPreset": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "description": "Optional one-liner about what it returns",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "Stable identifier, unique within the surface",
+                    "type": "string"
+                },
+                "label": {
+                    "description": "Human-readable, shown in the picker",
+                    "type": "string"
+                },
+                "params": {
+                    "description": "Query.Params to send",
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "raw": {
+                    "description": "Query.Raw to send",
+                    "type": "string"
+                }
+            }
+        },
+        "registry.QuerySurface": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "description": "Optional helper text under the control",
+                    "type": "string"
+                },
+                "kind": {
+                    "description": "One of the QuerySurface* constants",
+                    "type": "string"
+                },
+                "label": {
+                    "description": "Field label for the picker (e.g. \"DSM API\")",
+                    "type": "string"
+                },
+                "presets": {
+                    "description": "Kind == \"catalog\": the selectable queries",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/registry.QueryPreset"
+                    }
+                }
+            }
+        },
         "registry.TypeInfo": {
             "type": "object",
             "properties": {
@@ -12765,6 +12815,14 @@ const docTemplate = `{
                 "integration": {
                     "description": "Optional: groups types under a named integration (e.g., \"frigate\", \"casita\")",
                     "type": "string"
+                },
+                "query_surface": {
+                    "description": "QuerySurface is nil for types that have no declared authoring\nsurface — the editor renders its raw query box for those, which\nis the behavior every type had before this field existed.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/registry.QuerySurface"
+                        }
+                    ]
                 },
                 "type_id": {
                     "type": "string"

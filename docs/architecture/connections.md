@@ -34,6 +34,46 @@ init time with `internal/registry/`. Each adapter supplies:
   options, description) — used by the frontend to render the editor
   form without hard-coding per-type UI
 - A **factory function** `(config map[string]interface{}) (Adapter, error)`
+- Optionally, a **query surface** (`registry.RegisterQuerySurface`)
+  describing how queries for the type are AUTHORED — see below
+
+### Query surfaces
+
+Most types are authored through a raw query box plus, for a few, a
+bespoke builder component hardcoded in `ComponentEditor.jsx`. That
+works while the raw string is the whole query, but it breaks down for
+an adapter whose `query_config.params` carry **required dispatch
+fields**: the editor renders no input for them, so a component built
+from scratch sends them empty and the query fails. (This was issue
+#226 for Synology, where a bare call returns DSM error 120.)
+
+A `QuerySurface` lets the adapter declare its own authoring UI as
+data, next to its `Register` call:
+
+```go
+registry.RegisterQuerySurface("api.synology", registry.QuerySurface{
+    Kind:    registry.QuerySurfaceCatalog,
+    Label:   "DSM API",
+    Presets: []registry.QueryPreset{{
+        ID: "packages", Label: "Installed Packages",
+        Raw: "SYNO.Core.Package",
+        Params: map[string]interface{}{"method": "list", "version": 2, ...},
+    }},
+})
+```
+
+The adapter is the only place that knows what a valid query for it
+looks like, so it is where that gets said. `TypeInfo.query_surface`
+then rides along on `GET /api/registry/connections`, and the editor
+renders whichever surface it finds — keyed on "this type declared
+one," not on a type name, so a new adopter needs no editor change.
+
+`Kind` is the forward-compatibility seam. Today only
+`catalog` exists (a fixed list of named presets, each carrying the
+full raw+params tuple so dispatch mechanics are never rendered as user
+inputs). A type with modes or dependent fields can declare a new kind
+and grow its own renderer without disturbing what already ships.
+Types that declare nothing serve a nil field and keep the raw box.
 
 The adapter interface is deliberately small. An adapter implements
 whichever of these fit its capabilities:
@@ -102,6 +142,35 @@ EdgeLake / AnyLog distributed-database adapter.
   `/.../tables`, `/.../schema`
 - **Editor**: `EdgeLakeQueryBuilder.jsx` drives a visual builder for
   SELECT queries against discovered tables
+
+### `api.synology`
+
+Synology DSM adapter — reads system, package, service and storage
+state off a NAS.
+
+- **Config**: DSM base URL (including port), username, password,
+  timeout, `insecure_skip_verify` (DSM ships a self-signed cert).
+  Deliberately **no** `session` field: DSM 7 validates that parameter
+  against known app names and answers 402 for anything else.
+- **Capabilities**: read, stream (polled), schema discovery
+- **Session handling**: DSM issues a SID that expires on an
+  unpublished schedule. Rather than predict expiry, a call that fails
+  with a session error triggers exactly one re-login + retry. The SID
+  is runtime state and is never persisted.
+- **Query**: `raw` is the DSM API name (e.g. `SYNO.Core.Package`);
+  `params` carry the dispatch tuple `method` / `version` /
+  `result_path` / `additional`. All four must be right or DSM errors
+  or returns an unchartable shape — so they are supplied by the
+  catalog, never typed by a user.
+- **Editor**: a **query surface** of kind `catalog` (see above). The
+  author picks a DSM API by name; the preset supplies the tuple.
+- **Catalog**: `connection.SynologyCatalog` in `synology.go` is the
+  single source of truth. Both the editor picker (via the query
+  surface) and the schema prober in `connection_service.go` derive
+  from it, so they cannot drift. Adding an API is a one-place edit.
+- **Result shape**: a `result_path` resolving to an ARRAY gives one
+  row per element (tall); an OBJECT gives a single wide row with
+  dot-joined column names.
 
 ### `file.csv`
 
