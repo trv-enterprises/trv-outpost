@@ -138,6 +138,37 @@ Connect to an EdgeLake distributed database network.
 
 **Usage**: Edge computing and IoT data aggregation dashboards.
 
+## Synology DSM
+
+Connect to a Synology NAS to chart its system, package, service, and storage state.
+
+**Configuration**:
+- DSM base URL, including the port (e.g. `https://nas.example:5001`)
+- Username and password
+- Query timeout
+- **Skip TLS verification** — usually required, since DSM ships a self-signed certificate
+
+The account needs administrator privilege for `SYNO.Core.*` reads. A plain user gets a permission error (DSM code 105) on most APIs.
+
+**Features**:
+- Schema discovery across the supported DSM APIs
+- **DSM API picker** — choose what to read by name; the method, version, and result path are filled in for you
+- Polled streaming for live tiles
+
+**Usage**: Home-lab and NAS status dashboards — CPU and memory load, disk health and temperature, which packages and services are running.
+
+**Choosing a query**: Pick an entry from the **DSM API** dropdown in the component editor:
+
+| DSM API | What it returns |
+|---|---|
+| System Info | Model, serial, firmware, CPU, uptime — one row |
+| System Utilization | Live CPU, memory, network, and disk load — one row |
+| Installed Packages | Installed packages with running status — one row per package |
+| Services | DSM services and whether each is enabled — one row per service |
+| Storage Disks | Physical disks with health, temperature, capacity — one row per disk |
+
+A component saved before this picker existed, or one pointing at a DSM API outside this list, keeps working exactly as saved and is labelled **Custom query** in the editor. Selecting a preset replaces it.
+
 ## Parser Config (WebSocket / TCP)
 
 WebSocket and TCP socket connections expose a connection-level

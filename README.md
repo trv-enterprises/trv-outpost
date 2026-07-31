@@ -23,9 +23,10 @@ in most any environment.
   build-and-deploy cycle for new components
 - **AI Component Builder** for generating chart components via
   Anthropic Claude with SSE streaming
-- **Real-time data** over SSE from 10 built-in connection types:
+- **Real-time data** over SSE from 11 built-in connection types:
   SQL, REST API, CSV, WebSocket (read-only or bidirectional),
-  TCP, MQTT, Prometheus, EdgeLake, ts-store, Frigate NVR
+  TCP, MQTT, Prometheus, EdgeLake, ts-store, Synology DSM,
+  Frigate NVR
 - **Type availability gating** — admins enable / disable connection
   and component types (and bundled integrations like Frigate or
   Weather) per deployment from the Settings UI, propagating to
