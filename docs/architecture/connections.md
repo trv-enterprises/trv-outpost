@@ -172,6 +172,48 @@ state off a NAS.
   row per element (tall); an OBJECT gives a single wide row with
   dot-joined column names.
 
+#### DSM API limits
+
+Observed against a live DSM 7 box on 2026-07-31. These are properties
+of DSM, not of the adapter — re-verify after a DSM major upgrade.
+
+- **`additional` is per-API, and failure is silent.**
+  `SYNO.Core.Package` honors it: without `["status","description"]`
+  a package row carries only `additional.install_type`; with it, the
+  `additional` object gains `status` and `description`.
+  `SYNO.Core.Service` ignores it entirely — same request with and
+  without the parameter returns byte-identical data, no error, no
+  `additional` key on any row. Passing it there is a no-op, so a
+  missing `Additional` on the services catalog entry is correct
+  rather than an oversight.
+- **`SYNO.Core.Service` version changes the name field.** v1 does not
+  exist (error 103). v2 and v3 both return the same 20 rows and the
+  same `enable_status`, but differ in one column:
+
+  | version | name column                | `ssh-shell` value                     |
+  |---------|----------------------------|---------------------------------------|
+  | v3      | `display_name_section_key` | `firewall:firewall_service_opt_ssh`   |
+  | v2      | `display_name`             | `SSH`                                 |
+
+  v3's value is an i18n lookup key that needs DSM's translation
+  tables to resolve; v2 returns the label already resolved. The
+  catalog currently dispatches v3. Switching to v2 trades the key for
+  a human-readable label but **renames the column**, which breaks
+  components binding `display_name_section_key`.
+- **`method` is per-API too.** Package uses `list`; Service uses
+  `get` and answers 103 for `list`. Don't assume a method carries
+  across APIs.
+- **`enable_status` is configuration, not run-state.** Values are
+  `enabled` / `disabled` / `static`, where `static` means "not
+  user-togglable" — **not** "running". DSM exposes no per-service
+  run-state anywhere in this API family: `SYNO.Core.Service.Info`
+  does not exist (confirmed against the full 632-API
+  `SYNO.API.Info` enumeration), `SYNO.Core.Service.PortInfo` rejects
+  both `get` and `list`, and `SYNO.Core.Service.Conf` returns a
+  single global `service_fw_target_interface` field. Determining
+  whether a daemon is actually up requires probing it off-box — see
+  [synology-service-runstate.md](../design-notes/synology-service-runstate.md).
+
 ### `file.csv`
 
 Local file or HTTP URL CSV reader.
