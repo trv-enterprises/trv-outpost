@@ -644,10 +644,15 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
         // inline controls, so constrain them.
         .adornment-style-select {
           width: auto;
-          min-width: 5.5rem;
+          min-width: 6.25rem;
 
+          // Room for the chevron. At spacing-06 (24px) the longest option
+          // ("Hidden", ~46px at 14px Plex Sans) left only ~2px of clearance in
+          // the 5.5rem box and its final letter collided with the chevron.
+          // spacing-07 (32px) clears it, with min-width raised to match so the
+          // field doesn't just squeeze the text instead.
           .cds--select-input {
-            padding-right: spacing.$spacing-06;
+            padding-right: spacing.$spacing-07;
           }
         }
 

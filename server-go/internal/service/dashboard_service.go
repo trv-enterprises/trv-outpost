@@ -1134,7 +1134,8 @@ func sanitizeAdornments(adornments []models.DashboardAdornment) {
 		}
 
 		switch a.LineStyle {
-		case models.AdornmentLineSolid, models.AdornmentLineDashed, models.AdornmentLineDotted:
+		case models.AdornmentLineSolid, models.AdornmentLineDashed,
+			models.AdornmentLineDotted, models.AdornmentLineHidden:
 			// ok
 		default:
 			a.LineStyle = models.AdornmentLineSolid

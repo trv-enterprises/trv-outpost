@@ -6,6 +6,45 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Borders group panels for mobile flow order.** On a phone the dashboard is
+  stacked into one column, and a plain reading-order sort loses the clustering
+  you expressed on the grid: two side-by-side groups interleave row by row, and
+  a visually-single row whose panels have staggered tops splits apart.
+
+  A border already means "these panels belong together," so it now decides
+  mobile order — panels inside one flow as a unit before anything outside it.
+  Groups nest: a border inside a border flows as a nested unit, and a group
+  sorts against its neighbours by where it sits on the grid.
+
+  Nothing about a group is drawn on mobile; this changes sequence only.
+
+- **Hidden border style.** A fourth line style, alongside solid / dashed /
+  dotted. A hidden border draws nothing on the dashboard but still exists and
+  still groups the panels it encloses — so you can control mobile order without
+  putting a box on the desktop layout.
+
+  It stays visible as a faint hairline **throughout edit mode** (not only while
+  the Borders tool is active) so you can see one is there while moving panels
+  in and out of it. It disappears entirely in view mode. Colour and width
+  controls are dropped for it, since neither has anything to paint.
+
+### Fixed
+
+- **Dashboard thumbnails no longer capture only the top-left corner.** A
+  dashboard larger than the browser window — a 2K/4K canvas, or any board at a
+  high scale percent — produced a thumbnail with content in one corner and
+  black everywhere else.
+
+  The capture laid the page out in a clone sized to the *browser viewport*, so
+  anything past the window edge was never rendered. It now sizes the clone to
+  the dashboard. This looked intermittent because it depended on the browser
+  window: the same dashboard captured correctly on a wide window and badly on a
+  narrow one.
+
 ## [0.49.0] — 2026-07-30
 
 ### Added

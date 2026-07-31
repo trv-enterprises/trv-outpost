@@ -102,6 +102,26 @@ stop responding to clicks, so every mouse action applies to borders.
 | **Delete** | Press <kbd>Delete</kbd>, or click the trash icon in the style controls |
 | **Deselect** | Press <kbd>Esc</kbd>, or click empty grid space |
 
+### Hidden borders
+
+The line-style dropdown includes **Hidden** alongside Solid, Dashed and
+Dotted. A hidden border draws nothing on the dashboard, but it still exists
+and still groups the panels it surrounds — which is what decides their
+[order on a phone](viewing-dashboards.md#viewing-on-mobile).
+
+Use it when you want to control mobile order without putting a box on the
+desktop layout.
+
+While you're editing, a hidden border shows as a **dotted grey outline** so
+you can see it's there and still select, move, resize or delete it. That
+marker appears throughout edit mode — not just while the Borders tool is
+active — so you don't accidentally drag a panel in or out of a group without
+realising. It disappears completely in view mode.
+
+Colour and width don't apply to a hidden border (there's no line to paint),
+so those controls are hidden for it. Switch back to a visible style and your
+previous colour and width return.
+
 ### Building a border by clicking
 
 Dragging a rectangle is the quickest way to box in panels that are already

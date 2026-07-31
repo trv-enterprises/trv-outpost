@@ -76,10 +76,19 @@ const (
 )
 
 // Adornment line styles.
+//
+// "hidden" is a real style, not an absence: the border still exists, still
+// occupies its rect, and still groups the panels it encloses for mobile flow
+// order (#180) — it simply isn't painted in either view surface. The editor
+// draws it as a faint hairline so it stays findable and selectable; without
+// that it would be an object that can never be restyled, moved, or deleted.
+// Named "hidden" rather than "none" because CSS's `none` reads as "there is no
+// border", which is the opposite of what this means.
 const (
 	AdornmentLineSolid  = "solid"
 	AdornmentLineDashed = "dashed"
 	AdornmentLineDotted = "dotted"
+	AdornmentLineHidden = "hidden"
 )
 
 // AdornmentWidths are the accepted widths for a gutter `border`. The line

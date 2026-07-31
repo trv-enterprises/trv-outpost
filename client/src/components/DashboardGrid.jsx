@@ -458,6 +458,13 @@ function DashboardGrid({
           <AdornmentLayer
             adornments={rectAdornments}
             interactive={adornmentMode}
+            // A `hidden` border paints nothing on the dashboard, so without a
+            // marker the author has no way to know it's there while laying out
+            // panels — and moving a panel out of one silently changes mobile
+            // grouping. Reveal it across the WHOLE editor, not just adornment
+            // mode: same visibility a normal border gets. `interactive` still
+            // gates hit-testing, so it stays unclickable until adornment mode.
+            revealHidden={editMode}
             selectedId={selectedAdornmentId}
             onSelect={onAdornmentMouseDown}
             renderChrome={renderAdornmentChrome}
