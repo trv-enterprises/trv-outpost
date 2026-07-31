@@ -16,6 +16,7 @@ import { useDashboardData } from '../hooks/useDashboardData';
 import { useDashboardVariable } from '../hooks/useDashboardVariable';
 import useRangeConnectionTypes from '../hooks/useRangeConnectionTypes';
 import { derivePanelProps } from '../utils/derivePanelProps';
+import { orderPanelsForMobile } from '../utils/mobilePanelOrder';
 import { candidateLabel } from '../utils/tagValueByPrefix';
 import StreamConnectionManager from '../utils/streamConnectionManager';
 import apiClient from '../api/client';
@@ -27,8 +28,13 @@ import './MobileDashboardViewer.scss';
  * The desktop viewer lays panels on a fixed 32×32-px cell grid scaled to fit by
  * a single CSS transform; on a narrow screen that's illegible. This surface
  * instead DISCARDS the author's grid geometry and stacks every panel
- * vertically, full-width, one per row, ordered by (y, x) — so any existing
+ * vertically, full-width, one per row, in reading order — so any existing
  * dashboard is readable on a phone with no re-authoring.
+ *
+ * Reading order is (y, x), except that a rect border adornment groups the
+ * panels it encloses so they flow together instead of interleaving with a
+ * neighbouring cluster (see utils/mobilePanelOrder, issue #180). Groups are
+ * invisible here — they change sequence only.
  *
  * It deliberately reuses the same leaf the desktop grid renders — <PanelContent>
  * — so a streaming chart keeps its StreamConnectionManager subscription (streams
@@ -145,12 +151,16 @@ function MobileDashboardViewer({ canControl = false }) {
     refetch();
   }, [refetch]);
 
-  // Panels stacked in reading order: top-to-bottom (y), then left-to-right (x).
-  // The author's x/w/h are otherwise ignored — every panel renders full-width.
-  const orderedPanels = useMemo(() => {
-    const panels = dashboard?.panels || [];
-    return [...panels].sort((a, b) => (a.y - b.y) || (a.x - b.x));
-  }, [dashboard]);
+  // Panels stacked in reading order: top-to-bottom (y), then left-to-right (x),
+  // EXCEPT that a border adornment groups the panels it encloses so they flow
+  // together (#180). The author's x/w/h are otherwise ignored — every panel
+  // renders full-width. Grouping affects ORDER ONLY; nothing about a group is
+  // drawn on mobile (whether it should be is issue #232).
+  const orderedPanels = useMemo(
+    () => orderPanelsForMobile(dashboard?.panels, dashboard?.adornments)
+      .map((entry) => entry.panel),
+    [dashboard]
+  );
 
   const refreshInterval = dashboard?.settings?.refresh_interval > 0
     ? dashboard.settings.refresh_interval * 1000

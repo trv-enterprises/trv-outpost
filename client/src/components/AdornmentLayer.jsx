@@ -112,6 +112,10 @@ export function adornmentRect(a) {
 function AdornmentLayer({
   adornments,
   interactive = false,
+  // Show `hidden`-style borders as a faint hairline. Separate from
+  // `interactive` because visibility and hit-testing want different scopes:
+  // visible across the whole editor, clickable only in adornment mode.
+  revealHidden = false,
   selectedId = null,
   onSelect = null,
   renderChrome = null,
@@ -122,7 +126,17 @@ function AdornmentLayer({
 
   return (
     <div className={`adornment-layer ${interactive ? 'is-interactive' : ''}`}>
-      {adornments.map((a) => {
+      {adornments.map((rawAdornment) => {
+        // A hidden border's editor marker is a fixed 2px dotted line
+        // (.is-hidden-style), so its GEOMETRY has to be computed at 2px too —
+        // adornmentRect offsets the element by the line width to keep the
+        // line's inner edge flush against the panel, and a mismatch there
+        // pushes the marker up to 2px off the panels it encloses. The author's
+        // stored width is irrelevant for it (the width control is disabled),
+        // so normalize once, here, rather than special-casing every consumer.
+        const a = rawAdornment.line_style === 'hidden'
+          ? { ...rawAdornment, width: 2 }
+          : rawAdornment;
         const line = a.width || 2;
         // Correct only the ASYMMETRY between axes, not the overall scale.
         //
@@ -151,15 +165,41 @@ function AdornmentLayer({
         const top = rect.top + line - lineY;
         const isSelected = interactive && selectedId === a.id;
 
+        // A "hidden" border still EXISTS — it holds its rect and groups the
+        // panels it encloses for mobile flow order (#180) — it just isn't
+        // painted. In the editor it must stay findable and grabbable, or the
+        // author creates an object they can never select, restyle, move, or
+        // delete again. So: a faint 1px hairline while interactive, nothing at
+        // all in view mode.
+        //
+        // Grabbability needs no extra work: the edge hit strips are a fixed
+        // 9px regardless of line width (AdornmentLayer.scss), and this layer
+        // already sits ABOVE panel bodies at z-index 8, so the hairline is on
+        // top rather than buried under a panel.
+        // Revealed across the whole editor (revealHidden), not only while
+        // adornment mode is active — otherwise a hidden border is invisible
+        // exactly when the author is moving panels in and out of it, which is
+        // when its grouping is most likely to change by accident. `interactive`
+        // still gates hit-testing, so it stays unclickable outside adornment
+        // mode; this only makes it VISIBLE.
+        const hiddenInEditor = a.line_style === 'hidden' && (revealHidden || interactive);
+
         return (
           <div
             key={a.id}
-            className={`adornment adornment--${a.kind || 'border'} ${isSelected ? 'is-selected' : ''}`}
+            className={`adornment adornment--${a.kind || 'border'}`
+              + `${isSelected ? ' is-selected' : ''}`
+              + `${hiddenInEditor ? ' is-hidden-style' : ''}`}
             style={{
               left: `${left}px`,
               top: `${top}px`,
               width: `${rect.width}px`,
               height: `${rect.height}px`,
+              // 'hidden' is a real CSS border-style that paints nothing, so
+              // view mode needs no special case at all — it simply doesn't
+              // draw. The editor's marker treatment (dotted, 2px, neutral)
+              // lives entirely in .is-hidden-style rather than being split
+              // between here and the stylesheet.
               borderStyle: a.line_style || 'solid',
               // Per-axis widths: left/right counter-scale on X, top/bottom on Y.
               borderLeftWidth: `${lineX}px`,
@@ -168,6 +208,8 @@ function AdornmentLayer({
               borderBottomWidth: `${lineY}px`,
               // Carbon red50 — matches ADORNMENT_DEFAULT_COLOR in
               // DashboardViewerPage. Distinct from the blue edit chrome.
+              // A hidden border has no user-facing colour (the picker is
+              // dropped for it); .is-hidden-style supplies a neutral one.
               borderColor: a.color || '#fa4d56',
             }}
             onMouseDown={
@@ -234,6 +276,7 @@ AdornmentLayer.propTypes = {
   ),
   // Edit-mode only: allow selection + chrome. View/kiosk pass nothing.
   interactive: PropTypes.bool,
+  revealHidden: PropTypes.bool,
   selectedId: PropTypes.string,
   onSelect: PropTypes.func,
   renderChrome: PropTypes.func,

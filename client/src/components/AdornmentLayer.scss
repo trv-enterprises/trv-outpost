@@ -88,4 +88,31 @@
     outline: 1px dashed var(--cds-focus);
     outline-offset: 2px;
   }
+
+  // A `line_style: hidden` border, shown ONLY in the editor (the component
+  // renders nothing at all in view mode). It paints nothing on the dashboard
+  // but still holds its rect and groups the panels it encloses for mobile flow
+  // order, so the author has to be able to SEE and grab it.
+  //
+  // DOTTED, not dashed. In this editor `1px dashed` is the established
+  // vocabulary for TRANSIENT chrome — panel hover, the shift-extend preview,
+  // the adornment selection outline, the panel_border selection ring (see
+  // DashboardGrid.scss and .adornment.is-selected above). A hidden border is
+  // none of those: it's a persistent object the author created. Reusing dashed
+  // made a selected hidden border draw two 1px dashed rectangles 2px apart,
+  // distinguishable only by hue.
+  //
+  // Dotted at 2px is unused elsewhere, reads clearly as a deliberate marker
+  // rather than a hover artifact, and stays visually distinct from the dashed
+  // selection ring that surrounds it when selected.
+  //
+  // NO opacity dimming. An earlier attempt used border-strong-01 at 0.45, which
+  // computes to rgb(62,62,62) on the #161616 canvas — 1.69:1 contrast against a
+  // 3:1 minimum for non-text UI. It was invisible until clicked. text-secondary
+  // at full strength measures 10.6:1.
+  .adornment.is-hidden-style {
+    border-style: dotted !important;
+    border-width: 2px !important;
+    border-color: var(--cds-text-secondary) !important;
+  }
 }

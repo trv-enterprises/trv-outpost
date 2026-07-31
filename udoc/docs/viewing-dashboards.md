@@ -114,6 +114,14 @@ the dashboard as a **single vertical column**:
 - Every panel is shown **full-width, one per row**, and you scroll down
   through them. Panels appear in reading order (top-to-bottom, then
   left-to-right) based on where they sit on the desktop layout.
+- **Borders group panels.** If a panel sits inside a
+  [border](dashboard-editor.md#borders-adornments) on the desktop layout,
+  it flows with the rest of that border's panels as a block, rather than
+  interleaving with whatever else happens to be at the same height. Groups
+  nest, and a group takes its position from where the border sits. Use a
+  **Hidden** border to control this order without drawing a box on the
+  desktop layout. Nothing about a group is drawn on the phone — it only
+  affects the order.
 - The design-time grid arrangement (side-by-side panels, exact sizes) is
   **not** preserved on mobile — the column layout is chosen for
   legibility. You don't need to re-author anything; any existing

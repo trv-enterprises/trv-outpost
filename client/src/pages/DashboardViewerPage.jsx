@@ -120,7 +120,11 @@ const ADORNMENT_WIDTHS = [1, 2, 3, 4];
 // to center in and no parity constraint — odd widths are fine. Mirrors
 // models.PanelBorderWidths in server-go.
 const PANEL_BORDER_WIDTHS = [1, 2, 3];
-const ADORNMENT_LINE_STYLES = ['solid', 'dashed', 'dotted'];
+// 'hidden' paints nothing in either view surface but the border still EXISTS —
+// it holds its rect and still groups the panels it encloses for mobile flow
+// order (#180). The editor draws it as a faint hairline so it stays findable
+// and selectable. Mirrors models.AdornmentLine* in server-go.
+const ADORNMENT_LINE_STYLES = ['solid', 'dashed', 'dotted', 'hidden'];
 // Carbon red50. Deliberately NOT blue60: edit mode outlines panels in
 // `--cds-focus` (blue), so a blue 1px adornment was almost impossible to
 // distinguish from ordinary edit chrome — the thing the author just added
@@ -1651,6 +1655,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       const gridNativeW = captureCols * CELL_WIDTH + (captureCols - 1) * GAP;
       const gridNativeH = captureRows * CELL_HEIGHT + (captureRows - 1) * GAP;
 
+      // The element's own position in the page. html2canvas clones the document
+      // and lays it out inside a virtual window; anything outside that window
+      // is never laid out and renders as bare background.
+      const gridBox = grid.getBoundingClientRect();
+
       return await html2canvas(grid, {
         backgroundColor: '#161616',
         scale,
@@ -1662,6 +1671,30 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         scrollY: 0,
         windowScrollX: 0,
         windowScrollY: 0,
+        // Size the CLONE WINDOW to hold the whole grid, not the real viewport.
+        //
+        // These default to window.innerWidth/innerHeight. A dashboard bigger
+        // than the browser window — a 2K/4K canvas, or any board at a high
+        // scale percent — is then only PARTLY inside the clone, and the
+        // overflow is captured as background: the thumbnail shows content in
+        // the top-left corner and black everywhere else.
+        //
+        // Observed: a 3056x1652 grid at offset 260,108 cloned into a 1464x554
+        // window — 39% of the width and 27% of the height on screen, ~11% of
+        // the area. That is exactly the partial fill users reported, and it
+        // explains why it looked intermittent: it depends on the browser window
+        // size versus the dashboard's, so the SAME dashboard captures fine on a
+        // large window and badly on a small one.
+        //
+        // Include the element's own offset so a grid pushed right/down by the
+        // app chrome still fits.
+        //
+        // If a partial-fill report ever recurs, html2canvas's own console
+        // output diagnoses it: compare "Starting document clone with size
+        // WxH" against "element located at X,Y with size WxH". If the element
+        // doesn't fit inside the clone, it's this bug again.
+        windowWidth: Math.ceil(gridBox.left + gridNativeW + 1),
+        windowHeight: Math.ceil(gridBox.top + gridNativeH + 1),
         onclone: (clonedDoc) => {
           const clonedGrid = clonedDoc.querySelector('.dashboard-grid');
           if (clonedGrid) {
@@ -2145,8 +2178,16 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
               return { left: r.left, top: r.top, width: r.width, height: r.height };
             })(),
             borderColor: lastAdornmentStyle.color,
-            borderWidth: `${lastAdornmentStyle.width}px`,
-            borderStyle: lastAdornmentStyle.line_style,
+            // A `hidden` border paints nothing once committed, but the DRAG
+            // must always be visible — you cannot size a box you can't see.
+            // Preview it as the same 1px dashed hairline the editor uses for a
+            // committed hidden border, so the drag looks like what it makes.
+            borderWidth: lastAdornmentStyle.line_style === 'hidden'
+              ? '1px'
+              : `${lastAdornmentStyle.width}px`,
+            borderStyle: lastAdornmentStyle.line_style === 'hidden'
+              ? 'dashed'
+              : lastAdornmentStyle.line_style,
           }}
         />
       )}
@@ -4198,22 +4239,34 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
               {adornmentMode && selectedAdornment && (
                 <div className="adornment-style-bar">
                   {/* Popover picker, not an inline swatch row — the toolbar
-                      has no room for the full palette laid out flat. */}
-                  <ColorSwatchPicker
-                    value={selectedAdornment.color || lastAdornmentStyle.color}
-                    onChange={(hex) => applyAdornmentStyle({ color: hex })}
-                    palette={TEXT_THRESHOLD_COLOR_PALETTE}
-                    // A border must have a color, so "Auto" has no meaning here.
-                    allowAuto={false}
-                    allowCustom
-                    label="Border color"
-                  />
+                      has no room for the full palette laid out flat.
+                      Dropped entirely for a `hidden` border: it paints nothing
+                      on the dashboard, so a colour would only ever tint the
+                      editor's own hairline — a control whose only effect is on
+                      the chrome that reveals it. The stored colour survives, so
+                      switching back to a visible style restores it. */}
+                  {selectedAdornment.line_style !== 'hidden' && (
+                    <ColorSwatchPicker
+                      value={selectedAdornment.color || lastAdornmentStyle.color}
+                      onChange={(hex) => applyAdornmentStyle({ color: hex })}
+                      palette={TEXT_THRESHOLD_COLOR_PALETTE}
+                      // A border must have a color, so "Auto" has no meaning here.
+                      allowAuto={false}
+                      allowCustom
+                      label="Border color"
+                    />
+                  )}
                   <Select
                     id="adornment-width"
                     labelText=""
                     hideLabel
                     size="sm"
                     className="adornment-style-select"
+                    // A hidden border paints no line, so a width would do
+                    // nothing. Disable rather than leave a live control with no
+                    // effect — the stored value still round-trips, so switching
+                    // back to a visible style restores the author's width.
+                    disabled={selectedAdornment.line_style === 'hidden'}
                     value={selectedAdornment.width || selectedAdornmentWidths[0]}
                     onChange={(e) => applyAdornmentStyle({ width: Number(e.target.value) })}
                   >
