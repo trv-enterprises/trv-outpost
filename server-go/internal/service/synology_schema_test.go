@@ -7,6 +7,7 @@ package service
 import (
 	"testing"
 
+	"github.com/trv-enterprises/trve-dashboard/internal/connection"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 )
 
@@ -97,32 +98,33 @@ func TestInferColumnsShortRow(t *testing.T) {
 	}
 }
 
-// TestSynologySchemaProbesAreWellFormed guards the probe table itself. These
+// TestSynologySchemaProbesAreWellFormed guards the DSM catalog itself. These
 // are the exact API/method/version triples verified against DSM 7.3.2; a typo
-// here silently drops a table from every Synology schema response.
+// here silently drops a table from every Synology schema response AND breaks
+// the matching entry in the editor's query picker, since both derive from it.
 func TestSynologySchemaProbesAreWellFormed(t *testing.T) {
-	if len(synologySchemaProbes) == 0 {
-		t.Fatal("no Synology schema probes defined")
+	if len(connection.SynologyCatalog) == 0 {
+		t.Fatal("no Synology catalog entries defined")
 	}
 
 	seenTable := map[string]bool{}
-	for _, p := range synologySchemaProbes {
-		if p.Table == "" {
-			t.Errorf("probe for %s has no table name", p.API)
+	for _, p := range connection.SynologyCatalog {
+		if p.ID == "" {
+			t.Errorf("catalog entry for %s has no id", p.API)
 		}
-		if seenTable[p.Table] {
-			t.Errorf("duplicate table name %q — tables would collide in the response", p.Table)
+		if seenTable[p.ID] {
+			t.Errorf("duplicate id %q — tables would collide in the response and presets in the picker", p.ID)
 		}
-		seenTable[p.Table] = true
+		seenTable[p.ID] = true
 
 		if p.API == "" {
-			t.Errorf("probe %q has no API name", p.Table)
+			t.Errorf("catalog entry %q has no API name", p.ID)
 		}
 		if p.Method == "" {
-			t.Errorf("probe %q has no method — DSM requires one", p.Table)
+			t.Errorf("catalog entry %q has no method — DSM requires one", p.ID)
 		}
 		if p.Version < 1 {
-			t.Errorf("probe %q has version %d, must be >= 1", p.Table, p.Version)
+			t.Errorf("catalog entry %q has version %d, must be >= 1", p.ID, p.Version)
 		}
 	}
 }
@@ -138,7 +140,7 @@ func TestSynologyProbeVersionsMatchDSM(t *testing.T) {
 		Version int
 		Method  string
 	}{}
-	for _, p := range synologySchemaProbes {
+	for _, p := range connection.SynologyCatalog {
 		byAPI[p.API] = struct {
 			Version int
 			Method  string
@@ -159,7 +161,7 @@ func TestSynologyProbeVersionsMatchDSM(t *testing.T) {
 	for _, c := range cases {
 		got, ok := byAPI[c.api]
 		if !ok {
-			t.Errorf("probe for %s missing", c.api)
+			t.Errorf("catalog entry for %s missing", c.api)
 			continue
 		}
 		if got.Version != c.version {
@@ -175,7 +177,7 @@ func TestSynologyProbeVersionsMatchDSM(t *testing.T) {
 // DSM returns a null status for every package, which silently produces a
 // useless "packages" table. Guard the one probe that needs it.
 func TestSynologyPackageProbeRequestsAdditional(t *testing.T) {
-	for _, p := range synologySchemaProbes {
+	for _, p := range connection.SynologyCatalog {
 		if p.API != "SYNO.Core.Package" {
 			continue
 		}
@@ -191,7 +193,7 @@ func TestSynologyPackageProbeRequestsAdditional(t *testing.T) {
 		}
 		return
 	}
-	t.Fatal("no SYNO.Core.Package probe found")
+	t.Fatal("no SYNO.Core.Package catalog entry found")
 }
 
 func containsSub(s, sub string) bool {
