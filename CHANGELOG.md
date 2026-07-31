@@ -8,6 +8,8 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.50.0] — 2026-07-31
+
 ### Added
 
 - **Synology components can be built from scratch.** Previously the only way to
