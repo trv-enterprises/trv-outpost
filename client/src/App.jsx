@@ -86,6 +86,8 @@ import AboutDialog from './components/AboutDialog';
 import AssistantSidecard from './components/assistant/AssistantSidecard';
 import useAssistantSidecardState from './hooks/useAssistantSidecardState';
 import useIsMobile from './hooks/useIsMobile';
+import useMobileViewMode, { MOBILE_VIEW_FLOW } from './hooks/useMobileViewMode';
+import { MobileViewModeProvider } from './context/MobileViewModeContext';
 import { ModeGuardProvider, useModeGuard } from './context/ModeGuardContext';
 import NotificationPanel from './components/NotificationPanel';
 import ToastStack from './components/ToastStack';
@@ -187,6 +189,11 @@ function AppContent({ onDisconnect }) {
   const electronMode = isElectron();
   // Phone viewport → slim, view-only shell (mobile header + stacked viewer).
   const isMobile = useIsMobile();
+  // Mobile view mode (#180). Read HERE rather than via the context provider
+  // below, because this component decides which viewer to mount and so can't
+  // consume a provider it renders. The provider re-shares this same value with
+  // the viewers so the toggle and the route can never disagree.
+  const { mode: mobileViewMode, setMode: setMobileViewMode } = useMobileViewMode();
 
   // Dashboard Assistant sidecard state. Render-gated by the
   // chatAgentEnabled flag from /api/ai/availability (step 0 of the
@@ -809,6 +816,7 @@ function AppContent({ onDisconnect }) {
 
   return (
     <NamespaceProvider currentUserGuid={currentUser?.guid || null}>
+    <MobileViewModeProvider mode={mobileViewMode} setMode={setMobileViewMode}>
     <AssistantSurfaceProvider>
     <ResourceNavigatorProvider>
     <div className={electronMode ? 'electron-mode' : ''}>
@@ -1034,15 +1042,31 @@ function AppContent({ onDisconnect }) {
           {/* View Mode Routes */}
           <Route path="/view/dashboards" element={<DashboardTileViewPage canDesign={userCapabilities.can_design} />} />
           {/* Phone viewport gets the stacked, view-only mobile viewer; desktop
-              keeps the full grid viewer (which also carries edit mode). */}
+              keeps the full grid viewer (which also carries edit mode).
+              EXCEPT in mobile "fit" mode (#180): the user has asked to see the
+              whole dashboard scaled down rather than stacked, and that IS the
+              desktop viewer — its fit-to-screen transform already does exactly
+              this. So the swap is mode-aware, not purely width-aware. Borders
+              render in fit for the same reason: the real geometry is intact, so
+              a border still describes the actual arrangement. */}
           <Route path="/view/dashboards/:id" element={
-            isMobile
+            isMobile && mobileViewMode === MOBILE_VIEW_FLOW
               ? (
                 <Suspense fallback={null}>
                   <MobileDashboardViewer canControl={userCapabilities.can_control} />
                 </Suspense>
               )
-              : <DashboardViewerPage canDesign={userCapabilities.can_design} canControl={userCapabilities.can_control} />
+              : (
+                <DashboardViewerPage
+                  // Mobile "fit" mode renders this viewer on a phone. Editing
+                  // is a desktop activity — the grid editor wants drag,
+                  // resize, marquee and a toolbar that assumes room — so the
+                  // design affordances stay off there regardless of the user's
+                  // capability. Fit is for READING a dashboard whole.
+                  canDesign={isMobile ? false : userCapabilities.can_design}
+                  canControl={userCapabilities.can_control}
+                />
+              )
           } />
           {/* /kiosk is handled by an early return above (it bypasses the app
               shell entirely), so no Route entry is needed here. */}
@@ -1076,6 +1100,7 @@ function AppContent({ onDisconnect }) {
     </div>
     </ResourceNavigatorProvider>
     </AssistantSurfaceProvider>
+    </MobileViewModeProvider>
     </NamespaceProvider>
   );
 }

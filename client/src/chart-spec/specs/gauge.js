@@ -108,6 +108,34 @@ export function buildOption(values, data) {
   const startAngle = toNumber(styleOpt(opts, 'gaugeStartAngle'), CLASSIC_GAUGE_STYLE.gaugeStartAngle);
   const endAngle = toNumber(styleOpt(opts, 'gaugeEndAngle'), CLASSIC_GAUGE_STYLE.gaugeEndAngle);
   const radiusPct = toNumber(styleOpt(opts, 'gaugeRadius'), CLASSIC_GAUGE_STYLE.gaugeRadius);
+
+  // Nudge the dial down to reclaim part of the empty wedge beneath it.
+  //
+  // A gauge sweeps startAngle→endAngle and leaves the rest of the circle empty
+  // — 90° on Classic (225→-45), 140° on Modern (200→-20). ECharts reserves the
+  // whole circle and centres THAT, so the unused wedge becomes dead space under
+  // the dial: ~15% of the diameter on Classic, ~33% on Modern, which is why the
+  // Modern preset in particular reads as floating high in its panel.
+  //
+  // Geometrically, centring the INK means shifting down by (cos(gap/2) − 1)/2
+  // of the radius — 57.3% / 66.4%. That is mathematically right and visually
+  // WRONG: a gauge's visual mass is its upper arc, so true bounding-box
+  // centring drops the dial too low. Tried it; it looked worse than the dead
+  // space it fixed.
+  //
+  // So apply 40% of that correction (Classic 52.9%, Modern 56.6%): enough to
+  // take the edge off the gap on wide-gap arcs, small enough that Classic
+  // barely moves and existing dashboards aren't disturbed. Tuned by eye —
+  // 100% sat far too low, 33% was very slightly under.
+  //
+  // Self-correcting: a full 360° gauge has gap 0, cos(0) = 1, and the offset
+  // collapses to 0 — the expression returns the default 50%, so an arc this
+  // doesn't apply to can never be misplaced.
+  const ARC_CENTER_CORRECTION = 0.4;
+  const arcGapDeg = 360 - Math.abs(startAngle - endAngle);
+  const centerYPct = arcGapDeg > 0 && arcGapDeg < 360
+    ? 50 - ((Math.cos((arcGapDeg / 2) * (Math.PI / 180)) - 1) / 2) * 50 * ARC_CENTER_CORRECTION
+    : 50;
   const showSplitLine = styleOpt(opts, 'gaugeShowSplitLine') !== false;
   const showAxisLabel = styleOpt(opts, 'gaugeShowAxisLabel') !== false;
   const showPointer = styleOpt(opts, 'gaugeShowPointer') !== false;
@@ -177,6 +205,9 @@ export function buildOption(values, data) {
       startAngle,
       endAngle,
       radius: `${radiusPct}%`,
+      // See centerYPct above — a partial shift down so a wide-gap arc doesn't
+      // sit high with dead space beneath it.
+      center: ['50%', `${centerYPct.toFixed(1)}%`],
       progress: isProgress
         ? { show: true, width: axisWidth, itemStyle: { color: arcColor } }
         : { show: false },

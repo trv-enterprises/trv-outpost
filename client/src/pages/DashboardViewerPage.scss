@@ -1396,15 +1396,42 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
 .fit-mode-item-with-info {
   display: inline-flex;
   align-items: center;
-  gap: spacing.$spacing-03;
   width: 100%;
 
+  // NO `gap` on the row. A flex gap applies between EVERY child, so it also
+  // landed between the check column and the label — indenting this row's text
+  // ~8px further than every other item in the menu, which was visible as a
+  // misalignment. The separation is only wanted before the info icon, so put
+  // the space there instead.
   .fit-mode-info-icon {
     flex-shrink: 0;
+    margin-inline-start: spacing.$spacing-03;
     block-size: 14px;
     inline-size: 14px;
     color: var(--cds-icon-secondary);
     cursor: help;
+  }
+}
+
+// Fit-mode overflow menu: same 13rem cap problem as the actions menu below.
+// Every row spends 1.1rem on the check column before the label starts, so the
+// longest entries ("Stretch to fill" + its info icon, "Stacked (mobile)") wrap
+// onto a second line — worst on a landscape phone, where the extra rows push
+// the last item off screen. Size to the widest label instead.
+//
+// Global scope because the menu portals to document.body (see the
+// .fit-mode-item comment above).
+.fit-mode-menu-options.cds--overflow-menu-options {
+  inline-size: max-content;
+  min-inline-size: 13rem; // keep Carbon's default as the floor
+  max-inline-size: 20rem;
+
+  // Carbon ellipsizes on __option-content, not __btn — let it size to its
+  // text so the container's max-content width can actually take effect.
+  .cds--overflow-menu-options__option-content {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
   }
 }
 

@@ -86,6 +86,8 @@ import NameErrorBadge from '../components/NameErrorBadge';
 import DiscardChangesModal from '../components/shared/DiscardChangesModal';
 import PanelDeleteModal from '../components/shared/PanelDeleteModal';
 import { buildComponentCopy } from '../utils/duplicateEntity';
+import useIsMobile from '../hooks/useIsMobile';
+import { useMobileViewModeContext, MOBILE_VIEW_FLOW } from '../context/MobileViewModeContext';
 import { useModeGuard } from '../context/ModeGuardContext';
 import useAssistantSurface from '../hooks/useAssistantSurface';
 import { useAIAvailability } from '../context/AIAvailabilityContext';
@@ -173,6 +175,11 @@ const PNG_DOWNLOAD_ENABLED = false;
  */
 function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const { id } = useParams();
+  // This viewer also serves mobile "fit" mode (#180), where it renders on a
+  // phone. Used only to offer the way back to the stacked layout — everything
+  // else about the viewer is identical in both cases.
+  const isMobileViewport = useIsMobile();
+  const { setMode: setMobileViewMode } = useMobileViewModeContext();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1689,12 +1696,20 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         // Include the element's own offset so a grid pushed right/down by the
         // app chrome still fits.
         //
+        // Size from the MEASURED box, not just the cell math. The two can
+        // disagree: gridNative* is the panel extent in cells, while the element
+        // also carries borders/padding and can hold rows past that extent — a
+        // capture came back 36px (exactly one 32+4 cell stride) short because
+        // the element measured 1292 tall where the cell math predicted 1256,
+        // and html2canvas clipped to the smaller clone. Taking the max of the
+        // two means neither can under-size the window.
+        //
         // If a partial-fill report ever recurs, html2canvas's own console
         // output diagnoses it: compare "Starting document clone with size
         // WxH" against "element located at X,Y with size WxH". If the element
         // doesn't fit inside the clone, it's this bug again.
-        windowWidth: Math.ceil(gridBox.left + gridNativeW + 1),
-        windowHeight: Math.ceil(gridBox.top + gridNativeH + 1),
+        windowWidth: Math.ceil(gridBox.left + Math.max(gridNativeW, gridBox.width) + 1),
+        windowHeight: Math.ceil(gridBox.top + Math.max(gridNativeH, gridBox.height) + 1),
         onclone: (clonedDoc) => {
           const clonedGrid = clonedDoc.querySelector('.dashboard-grid');
           if (clonedGrid) {
@@ -4497,17 +4512,34 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                 flipped
                 direction="bottom"
                 className="fit-mode-menu"
+                // The width rule has to land on the portaled OPTIONS list, not
+                // the trigger — className only styles the button (which has
+                // its own icon-sizing rules). Distinct name so the two don't
+                // collide. Same mechanism the actions menu below uses.
+                menuOptionsClass="fit-mode-menu-options"
               >
-                <OverflowMenuItem
-                  itemText={
-                    <span className="fit-mode-item">
-                      <span className="fit-mode-check">{fitMode === 'actual' ? '✓' : ''}</span>
-                      Actual size
-                    </span>
-                  }
-                  onClick={() => selectFitMode('actual')}
-                  isDelete={false}
-                />
+                {/* "Actual size" is 1:1 pixels — a design-time check that the
+                    board reads right at its native scale. On a phone it shows
+                    a corner of the dashboard and nothing else useful, so it's
+                    dropped there.
+
+                    Kept when it's the ACTIVE mode: fit mode persists per
+                    dashboard, so a board last viewed at actual size on desktop
+                    opens that way on the phone. Hiding the row outright would
+                    show a menu where nothing is checked, with no way to see
+                    what's actually in effect. */}
+                {(!isMobileViewport || fitMode === 'actual') && (
+                  <OverflowMenuItem
+                    itemText={
+                      <span className="fit-mode-item">
+                        <span className="fit-mode-check">{fitMode === 'actual' ? '✓' : ''}</span>
+                        Actual size
+                      </span>
+                    }
+                    onClick={() => selectFitMode('actual')}
+                    isDelete={false}
+                  />
+                )}
                 <OverflowMenuItem
                   itemText={
                     <span className="fit-mode-item">
@@ -4545,6 +4577,26 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                   onClick={() => selectFitMode('stretch')}
                   hasDivider
                 />
+                {/* Way back to the stacked mobile layout. Only on a phone
+                    viewport — on desktop there is no "flow" mode to return to,
+                    and this viewer is simply the normal one (#180). This is the
+                    "add a mode to the fit-screen dropdown" the issue asked for:
+                    on mobile the choice is Fit (these options) vs Flow. */}
+                {isMobileViewport && (
+                  <OverflowMenuItem
+                    itemText={
+                      <span className="fit-mode-item">
+                        <span className="fit-mode-check" />
+                        Stacked (mobile)
+                      </span>
+                    }
+                    onClick={() => setMobileViewMode(MOBILE_VIEW_FLOW)}
+                    // No divider on mobile: it adds height to a menu that
+                    // already struggles to fit a landscape phone, and the item
+                    // is last so the grouping it would express is obvious.
+                    hasDivider={false}
+                  />
+                )}
               </OverflowMenu>
               <OverflowMenu
                 renderIcon={() => <OverflowMenuVertical size={20} />}

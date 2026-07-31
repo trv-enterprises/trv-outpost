@@ -493,6 +493,24 @@ button.cds--overflow-menu {
   &::after {
     display: none; // Hide the arrow if any
   }
+
+  // Never run off the bottom of the screen. Carbon positions these menus with
+  // a fixed `direction` and does not re-place them when they don't fit, so on
+  // a SHORT viewport — a phone in landscape is ~390px tall before browser
+  // chrome — the last item of a 5-item menu lands below the fold and is
+  // simply unreachable. Reported against the fit-mode menu, whose last item
+  // ("Stacked (mobile)") is the way back out of fit mode: unreachable there
+  // means stuck.
+  //
+  // Bounding the height and letting it scroll fixes every such menu rather
+  // than just that one, and is a no-op whenever the menu already fits.
+  // dvh, not vh: on mobile browsers 100vh is the LARGEST viewport height
+  // (URL bar hidden), so a vh-based cap still overflows while the bar is
+  // showing — exactly the state a user is in when they open a menu. dvh
+  // tracks the current height. vh first as the fallback for older engines.
+  max-block-size: calc(100vh - 5rem);
+  max-block-size: calc(100dvh - 5rem);
+  overflow-y: auto;
 }
 
 .cds--overflow-menu-options__btn {

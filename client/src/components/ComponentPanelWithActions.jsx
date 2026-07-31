@@ -285,7 +285,13 @@ function ChartPanelActions({ chart, onOpenModal, captureRef, showDataModalAction
           <DataTable size={14} />
         </IconButton>
       )}
-      <span ref={menuWrapRef} style={{ display: 'inline-flex' }}>
+      {/* align-items:center, not the default stretch: this span wraps an
+          OverflowMenu (which adds its own .cds--overflow-menu__wrapper) while
+          the sibling IconButton is bare, so the two nest to different depths
+          and stretch to different heights — the download icon sat visibly
+          higher than the table icon. Centring the button inside its wrapper
+          makes both icons share a centre line regardless of wrapper depth. */}
+      <span ref={menuWrapRef} style={{ display: 'inline-flex', alignItems: 'center' }}>
         <OverflowMenu
           renderIcon={() => <Download size={14} />}
           iconDescription="Download"

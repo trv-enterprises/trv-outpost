@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { Loading, Button } from '@carbon/react';
-import { Renew, ChevronLeft, Maximize, Close, Settings } from '@carbon/icons-react';
+import { Renew, ChevronLeft, Maximize, Close, Settings, FitToScreen } from '@carbon/icons-react';
 import PanelContent from '../components/PanelContent';
 import ConnectionSwapPicker from '../components/ConnectionSwapPicker';
 import FilterVariablePicker from '../components/FilterVariablePicker';
@@ -17,6 +17,7 @@ import { useDashboardVariable } from '../hooks/useDashboardVariable';
 import useRangeConnectionTypes from '../hooks/useRangeConnectionTypes';
 import { derivePanelProps } from '../utils/derivePanelProps';
 import { orderPanelsForMobile } from '../utils/mobilePanelOrder';
+import { useMobileViewModeContext, MOBILE_VIEW_FIT } from '../context/MobileViewModeContext';
 import { candidateLabel } from '../utils/tagValueByPrefix';
 import StreamConnectionManager from '../utils/streamConnectionManager';
 import apiClient from '../api/client';
@@ -52,6 +53,7 @@ function MobileDashboardViewer({ canControl = false }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { addNotification } = useNotifications();
+  const { setMode: setMobileViewMode } = useMobileViewModeContext();
 
   const {
     dashboard,
@@ -292,6 +294,18 @@ function MobileDashboardViewer({ canControl = false }) {
               onClick={() => setVariablesOpen((v) => !v)}
             />
           )}
+          {/* Switch to "fit": show the whole dashboard scaled down instead of
+              stacked. Routes to the desktop viewer, whose fit-to-screen
+              transform already does exactly this (#180). The choice is a
+              per-user preference and sticks until changed. */}
+          <Button
+            hasIconOnly
+            size="sm"
+            kind="ghost"
+            iconDescription="Fit whole dashboard to screen"
+            renderIcon={FitToScreen}
+            onClick={() => setMobileViewMode(MOBILE_VIEW_FIT)}
+          />
           <Button
             hasIconOnly
             size="sm"
