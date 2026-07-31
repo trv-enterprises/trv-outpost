@@ -133,9 +133,32 @@
   overflow: hidden;
 
   // The inner PanelContent tree expects a sized flex parent.
+  //
+  // Exclude the fullscreen button. It is position:absolute — visually out of
+  // flow — but Carbon wraps it in a `.cds--popover-container` tooltip span,
+  // and THAT span is a static, in-flow child of this row. `> *` made it a
+  // flex ITEM, so it claimed ~29px of the row's height and the chart wrapper
+  // got that much less: measured 378x201.78 on the wrapper vs a 378x173
+  // canvas, i.e. exactly the button's height missing (201.78 - 28.78 = 173).
+  //
+  // The gauge then sized its dial to 75% of the SMALLER canvas dimension —
+  // that shrunken height — so it rendered small with wide dead margins, while
+  // the same gauge on desktop (no such sibling; wrapper and canvas both
+  // 302x234) filled its panel correctly.
   > * {
     flex: 1 1 auto;
     min-height: 0;
+  }
+
+  // Take the tooltip wrapper out of flow entirely rather than sizing it to
+  // zero: a zero-height flex item still occupies a slot and would offset the
+  // chart. The button inside is already position:absolute, so the wrapper has
+  // nothing to lay out — it only ever needed to stop being a flex item.
+  > .cds--popover-container:has(.mobile-panel__fullscreen-btn) {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 3;
   }
 
   // Row heights use `min(<width-relative>, <height-relative>)` as the preferred
@@ -167,12 +190,20 @@
     }
   }
 
-  // Number tiles are compact — no need for a tall box.
+  // Value tiles are compact — no need for a tall box.
   // container-type lives HERE (not on .mobile-panel) because size containment
   // computes height 0 for any row without an explicit height — it silently
   // vanished display rows (no height rule) and squashed text rows. Only the
-  // number tile needs a container context (its cqmin-relative font below),
+  // value tile needs a container context (its cqmin-relative font below),
   // and its height is explicit, so containment is safe on this row alone.
+  //
+  // `--value` is the live chart_type; `--number` is the pre-v0.47.0 name kept
+  // as an alias. This stylesheet was missed by that rename, so a value tile
+  // matched NO height rule: it fell through to the generic --chart box AND
+  // lost `container-type`, which the cqmin font sizing below depends on — so
+  // the digits sized against the viewport instead of the tile and overflowed
+  // their row.
+  &--value,
   &--number {
     height: clamp(140px, min(44vw, 50vh), 240px);
     container-type: size;
@@ -188,6 +219,13 @@
   // Round charts (gauge, pie) draw an axis/labels around a circle and need a
   // near-square, roomy box or the internal tick labels collide with the center
   // value (a full-width short row squeezes the gauge into an unreadable knot).
+  //
+  // NOTE: do NOT make this row square with `aspect-ratio: 1/1`. Tried that to
+  // recover the horizontal dead space, and it made things worse: the ROW grew
+  // to ~421px tall, but ECharts still sizes the dial to `radius: 75%` of the
+  // canvas's SMALLER dimension, so the dial stayed the same while the panel
+  // gained large empty bands above and below. The dial's size is governed by
+  // the gauge option, not by giving the row more height.
   &--gauge,
   &--pie {
     height: clamp(240px, min(78vw, 72vh), 360px);
@@ -286,5 +324,30 @@
 // container above). `!important` is required to beat the inline style; scoping
 // to .mobile-panel keeps every other surface on the original inline px.
 .mobile-panel .value-view__value {
-  font-size: clamp(2rem, 22cqmin, 5rem) !important;
+  // 40cqmin, not 22. The old multiplier was tuned while the value row matched
+  // NO height rule (it was still selected as `--number` after the chart_type
+  // rename to `value`), so `container-type` never applied and cqmin resolved
+  // against a much larger ancestor — 22 was compensating for a broken unit.
+  // With containment working, 22cqmin rendered the value at ~22% of the row
+  // height and left ~160px of the tile empty.
+  //
+  // 40cqmin fills the tile at every row height in the clamp range (140-240px)
+  // while still leaving room for the title band and padding — 96px is roughly
+  // where a 240px row runs out.
+  font-size: clamp(2rem, 40cqmin, 6rem) !important;
+}
+
+// Panel action icons (view-as-table, download) inside a stacked row.
+//
+// The same rule exists in DashboardGrid.scss, but it's nested under
+// `.dashboard-grid-container` — an ancestor the mobile viewer never renders —
+// so it doesn't reach here. Without it the row defaults to `align-items:
+// stretch` and each child sizes to its own wrapper depth: the plain
+// IconButton is 2 elements deep, while the OverflowMenu adds
+// `.cds--overflow-menu__wrapper` on top of the same tooltip chain. The deeper
+// one rode visibly higher than its neighbour.
+.mobile-panel .chart-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }

@@ -114,6 +114,16 @@ the dashboard as a **single vertical column**:
 - Every panel is shown **full-width, one per row**, and you scroll down
   through them. Panels appear in reading order (top-to-bottom, then
   left-to-right) based on where they sit on the desktop layout.
+- **Stacked or Fit.** Stacked (the default) is the column layout described
+  here. Some dashboards are built to be read *as a whole* — a wall display, a
+  status board where the arrangement itself carries meaning — and for those,
+  tap the **fit-to-screen** button in the top bar to switch to **Fit**: the
+  real layout, borders and all, scaled down to the screen. The fit-mode menu
+  there offers **Stacked (mobile)** to switch back.
+
+  Your choice is remembered and applies to every dashboard until you change
+  it. Editing is a desktop activity, so the design controls stay hidden on a
+  phone in either mode.
 - **Borders group panels.** If a panel sits inside a
   [border](dashboard-editor.md#borders-adornments) on the desktop layout,
   it flows with the rest of that border's panels as a block, rather than

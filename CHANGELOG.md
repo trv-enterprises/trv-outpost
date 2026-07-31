@@ -10,6 +10,20 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Mobile view mode: Stacked or Fit.** On a phone the dashboard stacks into a
+  single readable column. Some boards are built to be read *as a whole* —
+  a wall display, a status board where the arrangement carries the meaning —
+  so the fit-mode menu now offers **Stacked (mobile)** alongside the fit
+  options, and the stacked view has a fit-to-screen button.
+
+  The choice is remembered **per user** and applies to every dashboard until
+  you change it. Fit mode shows borders and preserves the real layout, exactly
+  as on a desktop; stacked mode doesn't. Editing stays a desktop activity — the
+  design controls are hidden on a phone in either mode.
+
+  **Actual size** is dropped from the menu on a phone (1:1 pixels shows a
+  corner of the board and little else), unless it's the mode already in effect.
+
 - **Borders group panels for mobile flow order.** On a phone the dashboard is
   stacked into one column, and a plain reading-order sort loses the clustering
   you expressed on the grid: two side-by-side groups interleave row by row, and
@@ -33,6 +47,38 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   controls are dropped for it, since neither has anything to paint.
 
 ### Fixed
+
+- **Gauges and value tiles fill their panel on a phone.** In the stacked mobile
+  view a gauge rendered small with wide empty margins, and a value tile's
+  digits overflowed their row.
+
+  Two separate causes. The fullscreen button's tooltip wrapper was an in-flow
+  child of the panel row, so it silently claimed ~29px of height that the chart
+  never received — and a gauge sizes its dial to the *smaller* canvas
+  dimension, so losing height shrank the dial. Separately, the value tile's
+  height rule still matched the pre-v0.47.0 `number` type name, so a `value`
+  tile matched no rule at all and lost the container its font sizing depends
+  on.
+
+- **Gauge dials sit slightly lower, using more of their panel.** A gauge draws
+  a partial arc — 270° on Classic, 220° on Modern — but the empty remainder was
+  still reserved beneath it, leaving dead space that was most obvious on the
+  Modern preset. The dial now shifts down by part of that gap. Full-circle
+  gauges are unaffected.
+
+- **Number fields in the component editor can be cleared again.** Emptying a
+  numeric setting — End Angle was where this showed up — immediately refilled
+  it with the default, so you couldn't backspace past the existing digits; you
+  had to type the new value first and then delete the leftovers. Affected every
+  spec-driven number field.
+
+- **Panel action icons line up.** The download and view-as-table icons sat at
+  different heights, in both the dashboard grid and the mobile stacked view.
+
+- **The fit-mode menu fits on a phone.** Its longest options wrapped onto two
+  lines, and in landscape the last item could sit below the bottom of the
+  screen where it couldn't be reached. Overflow menus are now capped to the
+  visible viewport height and scroll internally.
 
 - **Dashboard thumbnails no longer capture only the top-left corner.** A
   dashboard larger than the browser window — a 2K/4K canvas, or any board at a

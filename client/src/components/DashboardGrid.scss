@@ -400,6 +400,10 @@
           opacity: 0;
           transition: opacity 0.15s ease;
           display: flex;
+          // Without this the default `stretch` lets each child size to its own
+          // wrapper depth — the OverflowMenu carries an extra wrapper span, so
+          // its icon rode higher than the plain IconButton beside it.
+          align-items: center;
           gap: 2px;
         }
 
