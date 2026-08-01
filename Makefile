@@ -1,4 +1,4 @@
-.PHONY: help build build-client build-server build-docs tarballs docker-push release release-tag clean version-bump api-docs api-docs-check gh-release test security-scan outdated version-check
+.PHONY: help build build-client build-server build-docs build-electron tarballs docker-push release release-tag clean version-bump api-docs api-docs-check gh-release test security-scan outdated version-check
 
 # Configuration
 REGISTRY := ghcr.io
@@ -33,6 +33,34 @@ build-docs: ## Build Docusaurus docs site
 	@echo "Building docs..."
 	cd udoc && npm ci && npm run build
 	@echo "✓ Docs built"
+
+build-electron: ## Build + package the Electron desktop app (macOS). MANUAL — deliberately NOT part of `release`.
+	@echo "Building Electron desktop app..."
+	@# DELIBERATELY NOT WIRED INTO `release`. Two reasons, both measured
+	@# 2026-08-01:
+	@#   1. Cost. A full `electron-builder --mac` is ~2min on top of an already
+	@#      slow release. `npm ci` itself is cheap (~3s warm).
+	@#   2. It does not currently succeed. The universal (x64+arm64) mac target
+	@#      fails on node-pty:
+	@#        "Detected file .../node-pty/prebuilds/darwin-arm64/pty.node that's
+	@#         the same in both x64 and arm64 builds and not covered by the
+	@#         x64ArchFiles rule"
+	@#      node-pty ships per-arch prebuilds that electron-builder's universal
+	@#      merge step can't reconcile. Fixing it means either an x64ArchFiles
+	@#      rule in the build config or dropping to single-arch (`--mac --dir`
+	@#      packages fine, which is why a --dir smoke test does NOT catch this).
+	@# Until that is resolved, run this by hand when cutting a desktop build.
+	@#
+	@# `npm ci` runs the postinstall that rebuilds node-pty (the one native
+	@# module) against the pinned Electron ABI — skipping it produces an .app
+	@# that launches but whose sidebar terminal fails to load.
+	@if [ "$(VERSION)" != "dev" ] && [ -n "$(VERSION)" ]; then \
+		PKG_VERSION=$$(echo $(VERSION) | sed 's/^v//'); \
+		echo "  Setting electron/package.json to $$PKG_VERSION..."; \
+		(cd electron && npm version --no-git-tag-version --allow-same-version $$PKG_VERSION >/dev/null); \
+	fi
+	cd electron && npm ci && npx electron-builder --mac
+	@echo "✓ Electron app built → electron/dist/"
 
 build-server: ## Build server binaries (multi-arch)
 	@echo "Building server binaries..."
@@ -75,19 +103,28 @@ security-scan: ## Run dependency + secret scans (gitleaks/npm-audit block; govul
 	else \
 		echo "✗ gitleaks not installed (brew install gitleaks). Release blocked; set SECURITY_SCAN_ALLOW_MISSING=1 to override locally."; exit 1; \
 	fi
-	@# 2. npm audit — client JS deps. BLOCKS on CRITICAL only; reports the rest.
-	@if [ -d client/node_modules ] || [ -f client/package-lock.json ]; then \
-		echo "→ npm audit (client deps)..."; \
-		crit=$$(cd client && npm audit --json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('metadata',{}).get('vulnerabilities',{}).get('critical',0))" 2>/dev/null || echo 0); \
-		summary=$$(cd client && npm audit --json 2>/dev/null | python3 -c "import sys,json; v=json.load(sys.stdin).get('metadata',{}).get('vulnerabilities',{}); print('critical=%s high=%s moderate=%s low=%s' % (v.get('critical',0),v.get('high',0),v.get('moderate',0),v.get('low',0)))" 2>/dev/null || echo "unknown"); \
-		echo "  npm audit: $$summary"; \
-		if [ "$$crit" -gt 0 ] 2>/dev/null; then \
-			echo "✗ SECURITY: npm audit found $$crit CRITICAL vulnerabilit(ies) — release blocked. Run 'cd client && npm audit' for detail."; exit 1; \
+	@# 2. npm audit — EVERY npm workspace, not just client. BLOCKS on CRITICAL
+	@#    only; reports the rest. udoc and electron were historically unscanned,
+	@#    which let 2 criticals sit in udoc unnoticed (cleared 2026-08-01) and
+	@#    Electron drift ~15 majors behind on Chromium CVEs. A workspace with no
+	@#    lockfile is skipped; an uninstalled one warns rather than failing, so a
+	@#    fresh clone can still cut a release.
+	@for ws in client udoc electron; do \
+		if [ ! -f $$ws/package-lock.json ]; then continue; fi; \
+		if [ ! -d $$ws/node_modules ]; then \
+			echo "⚠ $$ws/node_modules absent — run 'cd $$ws && npm install' to audit; skipped"; \
+			continue; \
 		fi; \
-		echo "✓ npm audit: 0 critical (non-critical findings reported above, not blocking)"; \
-	else \
-		echo "⚠ client/node_modules absent — run 'cd client && npm install' to audit; skipped"; \
-	fi
+		echo "→ npm audit ($$ws deps)..."; \
+		crit=$$(cd $$ws && npm audit --json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('metadata',{}).get('vulnerabilities',{}).get('critical',0))" 2>/dev/null || echo 0); \
+		summary=$$(cd $$ws && npm audit --json 2>/dev/null | python3 -c "import sys,json; v=json.load(sys.stdin).get('metadata',{}).get('vulnerabilities',{}); print('critical=%s high=%s moderate=%s low=%s' % (v.get('critical',0),v.get('high',0),v.get('moderate',0),v.get('low',0)))" 2>/dev/null || echo "unknown"); \
+		echo "  npm audit ($$ws): $$summary"; \
+		(cd $$ws && npm audit --json 2>/dev/null) | python3 security/reconcile-scan.py --scanner npm-audit --label "npm audit ($$ws deps)" || true; \
+		if [ "$$crit" -gt 0 ] 2>/dev/null; then \
+			echo "✗ SECURITY: npm audit found $$crit CRITICAL vulnerabilit(ies) in $$ws — release blocked. Run 'cd $$ws && npm audit' for detail."; exit 1; \
+		fi; \
+	done
+	@echo "✓ npm audit: 0 critical across all workspaces (non-critical findings reported above, not blocking)"
 	@# 3. govulncheck — Go module + stdlib. REPORTS only (reconciled against the
 	@#    accepted-vulns registry so known-accepted findings don't clutter the
 	@#    actionable list). Symbol-reachable findings only. Never blocks the

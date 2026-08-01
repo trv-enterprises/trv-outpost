@@ -12,9 +12,16 @@ The codebase is scanned with three tools:
 
 | Tool | Scope | How to run |
 |---|---|---|
-| `npm audit` | `client/` JS dependencies (vulnerable npm packages) | `cd client && npm audit` |
+| `npm audit` | **every** npm workspace — `client/`, `udoc/`, `electron/` | `cd <workspace> && npm audit` |
 | `govulncheck` | `server-go/` Go module + reachable-symbol vulns in stdlib + imports | `cd server-go && govulncheck ./...` |
 | `gitleaks` | Repo tree + full git history (committed secrets) | `gitleaks detect --no-banner` |
+
+`make security-scan` audits all three npm workspaces and reconciles each
+against the registry separately. It historically scanned only `client/`,
+which let two criticals sit unnoticed in `udoc/` and let `electron/`
+drift ~15 majors behind on Chromium CVEs — both cleared 2026-08-01. A
+workspace with no lockfile is skipped; one that is merely uninstalled
+warns rather than failing, so a fresh clone can still cut a release.
 
 These run automatically as part of the release gate — `make release`
 calls `make security-scan` (after the test suite, before tagging).

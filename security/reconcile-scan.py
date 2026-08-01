@@ -220,6 +220,7 @@ def main():
     ap.add_argument("--scanner", required=True, choices=["govulncheck", "npm-audit"])
     ap.add_argument("--input", help="read scanner output from file instead of stdin")
     ap.add_argument("--registry", default=REGISTRY)
+    ap.add_argument("--label", help="override the report header (e.g. the npm workspace being audited)")
     args = ap.parse_args()
 
     registry, reg_errors = load_registry(args.registry)
@@ -244,7 +245,9 @@ def main():
         else:
             actionable.append(f)
 
-    label = "govulncheck (Go deps + stdlib)" if args.scanner == "govulncheck" else "npm audit (client deps)"
+    label = args.label or (
+        "govulncheck (Go deps + stdlib)" if args.scanner == "govulncheck" else "npm audit"
+    )
     print(f"── {label} — reconciled against accepted-vulns registry ──")
 
     if accepted:
