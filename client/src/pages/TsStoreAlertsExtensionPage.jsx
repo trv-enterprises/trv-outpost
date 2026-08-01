@@ -121,12 +121,6 @@ function TsStoreAlertsExtensionPage() {
     }
   };
 
-  // Group rules by alert_id so the confirmation modal can warn when
-  // deleting an alert nukes more than one rule (ts-store delete is
-  // alert-level, not rule-level).
-  const siblingRuleCount = (alertId) =>
-    rules.filter((r) => r.alert_id === alertId).length;
-
   // Build a dashboard deep-link, appending the rule's variable pre-scoping as
   // ?var_<name>=<value> so the list link opens the dashboard scoped exactly like
   // the bell "Open dashboard" action (#125). Empty vars → bare URL.
@@ -345,15 +339,6 @@ function TsStoreAlertsExtensionPage() {
                 kind="info"
                 title="Shared across multiple connections"
                 subtitle={`This alert lives on a ts-store backend reachable through ${confirmDelete.connections.length} dashboard connections: ${confirmDelete.connections.map((c) => c.connection_name).join(', ')}. Deleting it removes the alert for all of them.`}
-                hideCloseButton
-                lowContrast
-              />
-            )}
-            {siblingRuleCount(confirmDelete.alert_id) > 1 && (
-              <InlineNotification
-                kind="warning"
-                title="This alert has multiple rules"
-                subtitle={`Deleting will remove all ${siblingRuleCount(confirmDelete.alert_id)} rules on this alert. ts-store does not support per-rule delete.`}
                 hideCloseButton
                 lowContrast
               />

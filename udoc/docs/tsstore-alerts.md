@@ -24,8 +24,8 @@ connections still render normally.
   and store name).
 - **Open** a rule's detail view (read-only) by clicking its row's
   view icon.
-- **Delete** an entire alert (which removes all its rules; ts-store
-  has no per-rule delete — see the note below).
+- **Delete** an alert — one alert is one rule, so this removes
+  exactly the row you clicked (see [below](#one-alert-one-rule)).
 - **Create new rules** via the **+ New rule** button, which opens a
   wizard at `/design/extensions/tsstore-alerts/new`.
 
@@ -56,17 +56,21 @@ doesn't pass ts-store's auth middleware, the submit button is
 disabled with an explanation — saves you from a 401 surprise after
 filling out the whole form.
 
-## Why "delete the whole alert" instead of "delete one rule"?
+## One alert, one rule
 
-In ts-store, alerts live as a **list of rules under a single alert
-record**. A single alert can have several rules — same condition,
-different transports, different cooldowns. ts-store doesn't expose
-per-rule delete; the smallest deletable unit is the entire alert.
+In ts-store, an **alert carries exactly one rule** — a condition —
+and exactly one sink. Deleting a row therefore deletes precisely
+what you clicked; there are no sibling rules to take with it.
 
-When you click **delete** on a row, the confirmation modal counts
-the sibling rules under the same alert and warns you. If the alert
-has rules besides the one you clicked, deleting nukes all of them
-together.
+To send the same condition to more than one destination, create
+one alert per destination.
+
+:::note
+Before ts-store issue #4 (post-v0.15.0), an alert held a *list* of
+rules and deleting one removed all of them, so this page warned you
+about siblings. That is no longer how it works, and the warning is
+gone.
+:::
 
 ## Where the rule list comes from
 
