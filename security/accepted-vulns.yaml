@@ -109,3 +109,67 @@ exceptions:
     remediation: >
       Upgrade to react-router-dom >=8.3.0 when the v8 migration is undertaken.
       No 7.x fix exists — the range is unpatched through 8.2.x.
+
+  # ── udoc/ (Docusaurus docs site) ────────────────────────────────────────────
+  # All three below share the same blast-radius argument, restated per entry so
+  # each stands on its own in an audit. udoc is `"private": true` — a static
+  # Docusaurus site built locally by `make build-docs` and served by the Go
+  # server from a bundled /app/udoc/build. It is NOT an npm-published package
+  # and has no server-side runtime of its own. All three findings are in
+  # BUILD-TIME tooling (webpack/terser/docusaurus internals) that runs on a
+  # developer machine or in CI over first-party markdown we author ourselves —
+  # never over attacker-supplied input, and never in the deployed artifact.
+  # `npm audit fix` already took every semver-safe fix here (38 -> 21 findings,
+  # clearing both criticals: shell-quote and websocket-driver). What remains is
+  # reachable ONLY via a DOWNGRADE of @docusaurus/core 3.7.0 -> 3.5.2, which npm
+  # itself flags semver-major. We decline to move backwards to silence them.
+  - id: GHSA-5c6j-r48x-rmvq
+    scanner: npm-audit
+    module: serialize-javascript (transitive, via @docusaurus/core -> terser-webpack-plugin)
+    accepted_by: Tom Viviano
+    accepted_on: 2026-08-01
+    expires_on: 2026-11-01
+    reason: >
+      RCE via RegExp.flags / Date.prototype.toISOString() in serialize-javascript
+      <=7.0.2. Reached only through @docusaurus/core's webpack minification
+      chain, which serializes OUR OWN build output at docs-build time on a
+      developer machine or in CI. No attacker-controlled value reaches
+      serialize-javascript, and the package is not present in the deployed
+      artifact (the docs ship as pre-rendered static HTML). The only fix npm
+      offers is a downgrade to @docusaurus/core 3.5.2.
+    remediation: >
+      Resolves when Docusaurus bumps its terser-webpack-plugin pin to a
+      serialize-javascript >=7.0.5. Re-check on the next Docusaurus minor.
+
+  - id: GHSA-qj8w-gfj5-8c6v
+    scanner: npm-audit
+    module: serialize-javascript (transitive, via @docusaurus/core -> terser-webpack-plugin)
+    accepted_by: Tom Viviano
+    accepted_on: 2026-08-01
+    expires_on: 2026-11-01
+    reason: >
+      CPU-exhaustion DoS via crafted array-like objects in serialize-javascript
+      >=5.0.0 <7.0.5. Same reachability as GHSA-5c6j-r48x-rmvq — build-time
+      minification of our own first-party docs content, on a developer machine
+      or in CI. A DoS against our own build is self-inflicted at worst, needs
+      attacker-controlled input we never supply, and cannot affect a running
+      deployment because the package is absent from the shipped static site.
+    remediation: >
+      Same as GHSA-5c6j-r48x-rmvq — a Docusaurus-side pin bump to
+      serialize-javascript >=7.0.5.
+
+  - id: GHSA-w5hq-g745-h8pq
+    scanner: npm-audit
+    module: uuid (transitive, via @docusaurus/core)
+    accepted_by: Tom Viviano
+    accepted_on: 2026-08-01
+    expires_on: 2026-11-01
+    reason: >
+      Missing buffer bounds check in uuid v3/v5/v6 when an explicit `buf`
+      argument is provided (uuid <11.1.1). Docusaurus uses uuid internally for
+      build-time id generation and does not pass a caller-supplied buffer; our
+      own code does not import uuid in udoc at all. Build-time only, not in the
+      deployed static output. Fix is gated on a Docusaurus downgrade.
+    remediation: >
+      Resolves when @docusaurus/core pins uuid >=11.1.1. Re-check on the next
+      Docusaurus minor.
