@@ -74,3 +74,38 @@ exceptions:
       Bump @clerk/clerk-react / @clerk/shared once Clerk ships a release that
       pins a patched js-cookie (>=3.0.6). Do NOT force it via npm overrides —
       that breaks Clerk's cookie handling.
+
+  - id: GHSA-qwww-vcr4-c8h2
+    scanner: npm-audit
+    module: react-router / react-router-dom (7.18.2)
+    accepted_by: Tom Viviano
+    accepted_on: 2026-08-01
+    expires_on: 2026-11-01
+    reason: >
+      "RSC Mode CSRF Bypass Allows Action Execution Before 400 Response". The
+      vulnerable path requires react-router running SERVER-SIDE in RSC mode,
+      dispatching actions on POST. Neither condition exists here, for two
+      independent reasons. (1) The source uses BrowserRouter/HashRouter from
+      react-router-dom in a client-only Vite SPA — no RSC or SSR imports
+      anywhere in client/src. (2) The deployed client image cannot execute
+      react-router at all: client/Dockerfile builds to static assets and then
+      DISCARDS the Node stage, shipping `FROM caddy:2-alpine` + /srv. Caddy
+      either reverse-proxies to the Go server (/api, /health, /swagger, /mcp,
+      /docs) or serves files via `try_files {path} /index.html` — the SPA
+      fallback returns index.html as a STATIC FILE, so a POST to an app route
+      never reaches a react-router action handler. Routing happens in the
+      browser after the bundle loads.
+      Note the advisory range (>=7.12.0 <8.3.0) has NO fixed 7.x release; npm's
+      only offered "fix" is a DOWNGRADE to react-router-dom 7.11.0, seven minors
+      back and flagged semver-major. We deliberately went the other way and
+      upgraded 7.17.0 -> 7.18.2, which clears the four other react-router
+      advisories (GHSA-wrjc-x8rr-h8h6 open redirect, GHSA-h8fp-f39c-q6mh
+      RSCErrorHandler XSS, GHSA-337j-9hxr-rhxg deserializeErrors constructor
+      injection, GHSA-chx6-hx7r-mcp5 route-matching DoS — all fixed in 7.18.0).
+      RE-REVIEW TRIGGER: this acceptance is contingent on the deployment
+      topology. If the app ever adopts SSR/RSC mode, or is served by a Node
+      runtime that dispatches react-router actions instead of Caddy static
+      hosting, this advisory becomes LIVE and must be re-evaluated immediately.
+    remediation: >
+      Upgrade to react-router-dom >=8.3.0 when the v8 migration is undertaken.
+      No 7.x fix exists — the range is unpatched through 8.2.x.
