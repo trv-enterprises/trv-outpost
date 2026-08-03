@@ -60,7 +60,20 @@ function writeMirror(mode) {
   }
 }
 
-export default function useMobileViewMode() {
+/**
+ * @param {boolean} sessionReady  Whether the session bootstrap (POST
+ *   /api/auth/session) has completed. The config read MUST wait for it:
+ *   apiClient attaches the access token, which doesn't exist until
+ *   createSession() resolves, so firing earlier is a guaranteed 401.
+ *
+ *   A GUID in localStorage is NOT proof of a session — on a fresh sign-on
+ *   the GUID is restored synchronously while the token is still in flight,
+ *   which is exactly the window this hook used to fire in. The failure was
+ *   invisible (the .catch below swallows it and the mirrored mode still
+ *   renders), so the only symptom was a pair of red 401s in the console on
+ *   every reload.
+ */
+export default function useMobileViewMode(sessionReady = false) {
   // Seed from the mirror so the first paint is already correct.
   const [mode, setModeState] = useState(readMirror);
   // Guard against a late server response clobbering a choice the user made
@@ -69,6 +82,7 @@ export default function useMobileViewMode() {
 
   useEffect(() => {
     let cancelled = false;
+    if (!sessionReady) return undefined;
     const guid = apiClient.getCurrentUserGuid();
     if (!guid) return undefined;
 
@@ -86,7 +100,7 @@ export default function useMobileViewMode() {
       });
 
     return () => { cancelled = true; };
-  }, []);
+  }, [sessionReady]);
 
   const setMode = useCallback((next) => {
     if (!isValid(next)) return;

@@ -242,9 +242,24 @@ export default function DataViewGrid({
   // position survive streaming buffer slices.
   const latestRowObjs = useMemo(() => {
     if (!data?.rows) return [];
+    // Key the cells off data.columns DIRECTLY, not the loading-gated
+    // allColumns.
+    //
+    // allColumns is `(!loading && !error && data?.columns) || []`, so while
+    // loading it is EMPTY even when data.rows is already populated — which
+    // is exactly the state a streaming backfill produces (rows arrive, the
+    // hook is still "loading" until the live subscription is up). Building
+    // rows against [] yields objects carrying only __id and no field keys,
+    // so every valueGetter reads undefined and the grid renders four
+    // correctly-sized but completely BLANK rows.
+    //
+    // initialRowDataRef then latches those keyless objects as the grid's
+    // one-shot rowData and never revisits them, so the table stayed empty
+    // until a live record forced a fresh batch through applyTransaction.
+    const cols = data.columns || [];
     return data.rows.map((row, idx) => {
       const o = {};
-      allColumns.forEach((c, i) => { o[c] = row[i]; });
+      cols.forEach((c, i) => { o[c] = row[i]; });
       let h = 0;
       for (let i = 0; i < row.length; i++) {
         const s = row[i] == null ? '' : String(row[i]);
@@ -253,19 +268,28 @@ export default function DataViewGrid({
       o.__id = String(h) + '-' + idx;
       return o;
     });
+    // data.columns is a dep in its own right: columnsKey is derived from the
+    // loading-gated allColumns, so it is "" during the very window this memo
+    // has to rebuild in.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.rows, columnsKey]);
+  }, [data?.rows, data?.columns, columnsKey]);
 
   // Grid mount strategy: feed only the first snapshot as rowData, then
   // switch to imperative applyTransaction() so the grid stays mounted
   // and open filter menus don't close on every streaming batch.
   const gridRef = useRef(null);
   const initialRowDataRef = useRef(null);
+  // Flipped by onGridReady. Exists purely so the seeding effect below can
+  // re-run once the grid api actually exists — see the comment there.
+  const [gridReady, setGridReady] = useState(false);
   // Live px readout while an editor drag is in flight: { colId, width }.
   // Editor-only — view mode never sets it, so view-mode renders are
   // unaffected.
   const [liveResize, setLiveResize] = useState(null);
-  if (initialRowDataRef.current === null && latestRowObjs.length > 0) {
+  // Latch only once the snapshot has COLUMNS as well as rows — this is a
+  // one-shot that never revisits, so latching a keyless snapshot would pin
+  // the grid to blank rows permanently.
+  if (initialRowDataRef.current === null && latestRowObjs.length > 0 && (data?.columns?.length || 0) > 0) {
     initialRowDataRef.current = latestRowObjs;
   }
 
@@ -330,6 +354,23 @@ export default function DataViewGrid({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columnWidthsKey, editable]);
 
+  // Seeding vs. streaming. The grid is fed ONCE via rowData (the
+  // initialRowDataRef latch) and every later batch arrives here as an
+  // applyTransaction, so the grid stays mounted and open filter menus
+  // survive. That split has a hole on the seeding side:
+  //
+  // A backfill resolves while the component is still returning the
+  // `loading` chrome below, so there is no grid yet — gridRef.current.api
+  // is null and this effect bails, dropping the whole seed. The latch
+  // can't cover for it either: it snapshotted the EMPTY latestRowObjs
+  // before the backfill landed, so rowData stays []. latestRowObjs then
+  // keeps its identity until the next live message, so nothing re-runs
+  // and the table sits empty until a record happens to push — the
+  // "no rows until something arrives" symptom on every streaming table.
+  //
+  // gridReady is the missing edge: flipped by onGridReady, it re-runs this
+  // effect the moment the api exists so an already-resolved backfill gets
+  // applied. Live batches are unaffected (they arrive with the grid up).
   useEffect(() => {
     const api = gridRef.current?.api;
     if (!api || latestRowObjs.length === 0) return;
@@ -346,7 +387,7 @@ export default function DataViewGrid({
     if (toAdd.length || toRemove.length) {
       api.applyTransaction({ add: toAdd, remove: toRemove });
     }
-  }, [latestRowObjs]);
+  }, [latestRowObjs, gridReady]);
 
   const columnDefs = useMemo(() => {
     return orderedColumns.map((col) => {
@@ -486,6 +527,35 @@ export default function DataViewGrid({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columnsKey, userLayout, columnWidthsKey, hiddenSet]);
+
+  // Re-measure the unsized columns against the FORMATTED cell text.
+  //
+  // autoSizeStrategy (below) is a MOUNT-TIME option: it runs when the grid
+  // first renders data, which on the seeding path is while rowData is still
+  // [] — the backfill hasn't landed yet. So it measures headers, not
+  // content, and the rows that do arrive come in via applyTransaction,
+  // which never re-autosizes. Columns end up sized for the raw magnitude
+  // instead of the "7.8T" the valueFormatter actually paints.
+  //
+  // autoSizeColumns measures RENDERED cells, so running it once the grid is
+  // up gets the formatted width. Explicitly-sized columns are excluded
+  // (autoSizeColIds already filters them), so author/user widths still win.
+  //
+  // Deliberately NOT tied to a ResizeObserver or to the displayed row count:
+  // this writes column widths, and anything that re-measures in response to
+  // its own write loops. The format/alias keys are deps because they change
+  // the rendered text width; gridReady is the mount edge.
+  // hasRows (not latestRowObjs) is the trigger: it flips false→true ONCE,
+  // when content first exists to measure. Depending on latestRowObjs would
+  // re-autosize on every streaming batch and fight a viewer's column drag.
+  const hasRows = latestRowObjs.length > 0;
+  useEffect(() => {
+    if (!gridReady || !hasRows) return;
+    const api = gridRef.current?.api;
+    if (!api || autoSizeColIds.length === 0) return;
+    const live = autoSizeColIds.filter((c) => api.getColumn?.(c));
+    if (live.length > 0) api.autoSizeColumns(live);
+  }, [gridReady, hasRows, autoSizeColIds, columnFormatsKey, columnAliasesKey]);
 
   // No default flex — columns size to their content via the grid's
   // autoSizeStrategy=fitCellContents. A default flex=1 would cause AG Grid
@@ -647,6 +717,9 @@ export default function DataViewGrid({
           // View mode keeps the default height.
           headerHeight={editable ? 56 : undefined}
           maintainColumnOrder
+          // Lets the seeding effect above re-run once the api exists, so a
+          // backfill that resolved before mount still paints.
+          onGridReady={() => setGridReady(true)}
           onColumnResized={handleColumnResized}
           onColumnMoved={handleColumnMoved}
         />
