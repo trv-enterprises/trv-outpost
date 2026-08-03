@@ -193,7 +193,10 @@ function AppContent({ onDisconnect }) {
   // below, because this component decides which viewer to mount and so can't
   // consume a provider it renders. The provider re-shares this same value with
   // the viewers so the toggle and the route can never disagree.
-  const { mode: mobileViewMode, setMode: setMobileViewMode } = useMobileViewMode();
+  // Gated on currentUser: it's set only after createSession() resolves, so it
+  // doubles as the "session bootstrap finished" signal. Passing it keeps the
+  // preference read from firing pre-token and 401ing (see the hook's doc).
+  const { mode: mobileViewMode, setMode: setMobileViewMode } = useMobileViewMode(!!currentUser);
 
   // Dashboard Assistant sidecard state. Render-gated by the
   // chatAgentEnabled flag from /api/ai/availability (step 0 of the
