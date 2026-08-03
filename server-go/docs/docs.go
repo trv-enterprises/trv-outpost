@@ -8414,6 +8414,14 @@ const docTemplate = `{
                     "description": "Column for labels",
                     "type": "string"
                 },
+                "latest_by": {
+                    "description": "Newest row per distinct key value (\"current state per series\"). Client-side twin of ts-store's latest_by param; applied in dataTransforms.js. Multi-series views only (dataview/bar/line/area/scatter) — single-value views use a filter + last aggregation instead.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.LatestBy"
+                        }
+                    ]
+                },
                 "limit": {
                     "description": "Max rows to return",
                     "type": "integer"
@@ -10604,6 +10612,20 @@ const docTemplate = `{
                 },
                 "target_namespace": {
                     "description": "The namespace the importer will write into (after fallbacks)",
+                    "type": "string"
+                }
+            }
+        },
+        "models.LatestBy": {
+            "description": "Newest-row-per-key reduction for multi-series components",
+            "type": "object",
+            "properties": {
+                "key_col": {
+                    "description": "Column whose distinct values define the series",
+                    "type": "string"
+                },
+                "timestamp_col": {
+                    "description": "Column deciding which row is newest; empty = last-arrived wins (correct for append-ordered stream buffers)",
                     "type": "string"
                 }
             }
