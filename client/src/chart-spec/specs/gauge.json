@@ -19,7 +19,8 @@
     "has_visible_columns": false,
     "has_filters": true,
     "has_aggregation": true,
-    "has_sliding_window": true
+    "has_sliding_window": true,
+    "has_latest_by": false
   },
   "sections": [
     {

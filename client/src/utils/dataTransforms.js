@@ -143,6 +143,77 @@ function applySlidingWindow(rows, columns, slidingWindow) {
 }
 
 /**
+ * Keep only the newest row per distinct value of a key column — "current
+ * state per series."
+ *
+ * This is the CLIENT-SIDE TWIN of ts-store's server-side `latest_by` query
+ * param: same semantics, different tier. A REST ts-store component pushes
+ * the reduction down to the source (cheaper — less data over the wire); a
+ * streaming component has no such option, so it reduces the buffered stream
+ * here at render time. The stream buffer itself is left intact — this only
+ * shapes what the component draws.
+ *
+ * The timestamp column is OPTIONAL. Without one, "newest" means last-arrived,
+ * which is correct for an append-ordered stream buffer and saves the author a
+ * config step in the common case.
+ *
+ * @param {Array} rows - Array of row arrays
+ * @param {Array} columns - Column names
+ * @param {Object} latestBy - { keyCol, timestampCol }
+ * @returns {Array} One row per distinct keyCol value
+ */
+function applyLatestBy(rows, columns, latestBy) {
+  if (!latestBy || !latestBy.keyCol) {
+    return rows;
+  }
+
+  const keyIndex = columns.indexOf(latestBy.keyCol);
+  if (keyIndex === -1) {
+    console.warn(`latest_by key column "${latestBy.keyCol}" not found`);
+    return rows;
+  }
+
+  const tsIndex = latestBy.timestampCol ? columns.indexOf(latestBy.timestampCol) : -1;
+  if (latestBy.timestampCol && tsIndex === -1) {
+    console.warn(`latest_by timestamp column "${latestBy.timestampCol}" not found — falling back to arrival order`);
+  }
+
+  // keyValue -> { row, ts }. Insertion order is first-seen key order, which
+  // makes the output deterministic; an explicit sort transform can reorder.
+  const best = new Map();
+
+  for (const row of rows) {
+    const key = row[keyIndex];
+    if (key === null || key === undefined) continue;
+    const mapKey = String(key);
+
+    // parseTimestamp (not a hand-rolled scale check) — epoch SECONDS parsed
+    // as milliseconds land in 1970 and silently lose every comparison.
+    let ts = null;
+    if (tsIndex !== -1) {
+      const parsed = parseTimestamp(row[tsIndex]);
+      ts = parsed ? parsed.getTime() : null;
+    }
+
+    const prev = best.get(mapKey);
+    if (!prev) {
+      best.set(mapKey, { row, ts });
+      continue;
+    }
+
+    // A real timestamp always beats a null one. Ties and all-null cases fall
+    // through to arrival order (later row wins), matching buffer append order.
+    if (ts === null && prev.ts === null) {
+      best.set(mapKey, { row, ts });
+    } else if (ts !== null && (prev.ts === null || ts >= prev.ts)) {
+      best.set(mapKey, { row, ts });
+    }
+  }
+
+  return Array.from(best.values(), entry => entry.row);
+}
+
+/**
  * Sort rows by a column
  * @param {Array} rows - Array of row arrays
  * @param {Array} columns - Column names
@@ -256,6 +327,7 @@ function applyAggregation(rows, columns, aggregation) {
  * @param {Object} data - Data from useData hook { columns, rows, metadata }
  * @param {Object} transforms - Transform configuration
  * @param {Object} transforms.slidingWindow - { duration: seconds, timestampCol: columnName } - time-based window
+ * @param {Object} transforms.latestBy - { keyCol, timestampCol } - newest row per distinct keyCol value
  * @param {Array} transforms.filters - Array of { field, op, value }
  * @param {Object} transforms.aggregation - { type, sortBy, field }
  * @param {string} transforms.sortBy - Column to sort by
@@ -270,7 +342,7 @@ export function transformData(data, transforms = {}) {
 
   // Handle null transforms (default param only works for undefined, not null)
   const safeTransforms = transforms || {};
-  const { filters, aggregation, sortBy, sortOrder, limit, slidingWindow } = safeTransforms;
+  const { filters, aggregation, sortBy, sortOrder, limit, slidingWindow, latestBy } = safeTransforms;
 
   let rows = [...data.rows];
   const columns = data.columns;
@@ -278,20 +350,25 @@ export function transformData(data, transforms = {}) {
   // 1. Apply sliding window (time-based filter) - do this first to reduce data volume
   rows = applySlidingWindow(rows, columns, slidingWindow);
 
-  // 2. Apply filters
+  // 2. Reduce to the newest row per key. AFTER the window (so it bounds the
+  //    scan) but BEFORE filters/sort/limit — a limit applied ahead of the
+  //    dedupe would truncate the buffer and silently drop whole series.
+  rows = applyLatestBy(rows, columns, latestBy);
+
+  // 3. Apply filters
   rows = applyFilters(rows, columns, filters);
 
-  // 3. Apply sorting (if not part of aggregation)
+  // 4. Apply sorting (if not part of aggregation)
   if (sortBy && (!aggregation || !aggregation.sortBy)) {
     rows = sortRows(rows, columns, sortBy, sortOrder || 'desc');
   }
 
-  // 4. Apply limit (if not part of aggregation)
+  // 5. Apply limit (if not part of aggregation)
   if (limit && (!aggregation || aggregation.type !== 'limit')) {
     rows = rows.slice(0, limit);
   }
 
-  // 4. Apply aggregation
+  // 6. Apply aggregation
   const { rows: aggRows, value: aggregatedValue } = applyAggregation(rows, columns, aggregation);
   rows = aggRows;
 
@@ -740,18 +817,24 @@ export function stripRangePredicate(rawQuery = '') {
 export function buildTransformsFromMapping(dataMapping, dashboardVariableValue = null, rangeFilter = null, rangeActive = false) {
   if (!dataMapping) return null;
 
-  const { filters, aggregation, sort_by, sort_order, limit, sliding_window } = dataMapping;
+  const { filters, aggregation, sort_by, sort_order, limit, sliding_window, latest_by } = dataMapping;
   // An ACTIVE dashboard range OVERRIDES the authored sliding window: the range
   // IS the effective window now, and the backfill already fetched exactly that
   // span. Leaving the sliding window on would re-clip the range data to the
   // (usually shorter) authored duration — e.g. a 1h window silently trimming a
   // 24h range to nothing. So suppress it while a range drives this panel.
   const hasSlidingWindow = !rangeActive && sliding_window?.duration > 0 && sliding_window?.timestamp_col;
+  // latest_by is NOT suppressed by an active range (unlike the sliding window
+  // above). A range bounds WHICH records are in scope; latest_by reduces those
+  // records to one per series. They compose: "the newest row per disk, within
+  // the selected range" is exactly what an author ranging a current-state view
+  // means. Suppressing it would dump the full history back into the view.
+  const hasLatestBy = !!latest_by?.key_col;
   // rangeFilter = { column, from, to } (absolute instants) for client-side
   // parity on streaming panels: clamp `column` to [from, to] the same way the
   // server's range expansion clamps the batch query.
   const hasRangeFilter = rangeFilter?.column && rangeFilter?.from && rangeFilter?.to;
-  const hasTransforms = (filters?.length > 0) || aggregation?.type || sort_by || (limit > 0) || hasSlidingWindow || hasRangeFilter;
+  const hasTransforms = (filters?.length > 0) || aggregation?.type || sort_by || (limit > 0) || hasSlidingWindow || hasLatestBy || hasRangeFilter;
 
   if (!hasTransforms) return null;
 
@@ -791,6 +874,10 @@ export function buildTransformsFromMapping(dataMapping, dashboardVariableValue =
     slidingWindow: hasSlidingWindow ? {
       duration: sliding_window.duration,
       timestampCol: sliding_window.timestamp_col
+    } : null,
+    latestBy: hasLatestBy ? {
+      keyCol: latest_by.key_col,
+      timestampCol: latest_by.timestamp_col || ''
     } : null,
     filters: builtFilters,
     aggregation: aggregation?.type ? aggregation : null,

@@ -250,6 +250,7 @@ const CHART_TYPE_CONFIG = {
     hasXAxisFormat: true,
     hasTimeBucket: true,
     hasSortLimit: true,
+    hasLatestBy: true,
     xAxisLabel: 'X-Axis (Categories)',
     yAxisLabel: 'Y-Axis (Values)',
   },
@@ -262,6 +263,7 @@ const CHART_TYPE_CONFIG = {
     hasXAxisFormat: true,
     hasTimeBucket: true,
     hasSortLimit: true,
+    hasLatestBy: true,
     xAxisLabel: 'X-Axis (Categories)',
     yAxisLabel: 'Y-Axis (Values)',
   },
@@ -274,6 +276,7 @@ const CHART_TYPE_CONFIG = {
     hasXAxisFormat: true,
     hasTimeBucket: true,
     hasSortLimit: true,
+    hasLatestBy: true,
     xAxisLabel: 'X-Axis (Categories)',
     yAxisLabel: 'Y-Axis (Values)',
   },
@@ -286,6 +289,7 @@ const CHART_TYPE_CONFIG = {
     hasXAxisFormat: true,
     hasTimeBucket: false,
     hasSortLimit: true,
+    hasLatestBy: false,
     xAxisLabel: 'Category Column',
     yAxisLabel: 'Value Column',
   },
@@ -298,6 +302,7 @@ const CHART_TYPE_CONFIG = {
     hasXAxisFormat: false,
     hasTimeBucket: false,
     hasSortLimit: true,
+    hasLatestBy: true,
     xAxisLabel: 'X-Axis (Numeric)',
     yAxisLabel: 'Y-Axis (Numeric)',
   },
@@ -317,6 +322,7 @@ const CHART_TYPE_CONFIG = {
     // (sort+limit: row 0 is row 0).
     hasTimeBucket: false,
     hasSortLimit: false,
+    hasLatestBy: false,
     xAxisLabel: '',
     yAxisLabel: 'Value Column',
   },
@@ -335,6 +341,7 @@ const CHART_TYPE_CONFIG = {
     // Same single-value rationale as gauge above.
     hasTimeBucket: false,
     hasSortLimit: false,
+    hasLatestBy: false,
     xAxisLabel: '',
     yAxisLabel: 'Value Column',
   },
@@ -347,6 +354,7 @@ const CHART_TYPE_CONFIG = {
     hasXAxisFormat: false,
     hasTimeBucket: false,
     hasSortLimit: true,
+    hasLatestBy: true,
     hasVisibleColumns: true,
     xAxisLabel: '',
     yAxisLabel: '',
@@ -365,6 +373,7 @@ const CHART_TYPE_CONFIG = {
     hasXAxisFormat: true,
     hasTimeBucket: false,
     hasSortLimit: false,
+    hasLatestBy: false,
     hasAggregation: false,
     xAxisLabel: 'Timestamp Column',
     yAxisLabel: '',
@@ -378,6 +387,7 @@ const CHART_TYPE_CONFIG = {
     hasXAxisFormat: true,
     hasTimeBucket: true,
     hasSortLimit: true,
+    hasLatestBy: false,
     xAxisLabel: 'X-Axis',
     yAxisLabel: 'Y-Axis',
   },
@@ -755,6 +765,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [slidingWindowError, setSlidingWindowError] = useState('');
   const [slidingWindowTimestampCol, setSlidingWindowTimestampCol] = useState('');
 
+  // Latest-by ("current state per series"): keep only the newest row per
+  // distinct value of a key column. Client-side twin of ts-store's server-side
+  // latest_by param — the only option for a streaming component, which can't
+  // push the reduction down to the source. Multi-series views only (see the
+  // has_latest_by capability); single-value views use a filter instead.
+  // The timestamp column is optional — blank means last-arrived wins.
+  const [latestByEnabled, setLatestByEnabled] = useState(false);
+  const [latestByKeyCol, setLatestByKeyCol] = useState('');
+  const [latestByTimestampCol, setLatestByTimestampCol] = useState('');
+
   // Banded-bar column mapping — only used when chart_type === 'banded_bar'.
   // The chart is per-row only: each row carries its own mean + SD columns
   // and the renderer draws a per-row envelope. This object maps each
@@ -966,11 +986,14 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     addSaved(seriesColumn);
     addSaved(slidingWindowTimestampCol);
     addSaved(timeBucketTimestampCol);
+    addSaved(latestByKeyCol);
+    addSaved(latestByTimestampCol);
     filters.forEach((f) => addSaved(f?.field ?? f?.column));
     return [...opts].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
   }, [
     availableColumns, xAxisColumn, yAxisColumns, groupByColumn, seriesColumn,
-    slidingWindowTimestampCol, timeBucketTimestampCol, filters,
+    slidingWindowTimestampCol, timeBucketTimestampCol, latestByKeyCol,
+    latestByTimestampCol, filters,
   ]);
   // The single query-results table lives at the bottom of the Data Mapping tab
   // (it's filter-aware). It's easy to miss after running a query, so we scroll
@@ -1050,6 +1073,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     // Clear time bucket if not applicable
     if (!newConfig.hasTimeBucket) {
       setTimeBucketEnabled(false);
+    }
+
+    // Clear latest-by if not applicable. Single-value views (value/gauge) and
+    // per-row views (banded_bar) express "current state" with a filter instead,
+    // so switching to one must not leave a stale reduction configured.
+    if (!newConfig.hasLatestBy) {
+      setLatestByEnabled(false);
+      setLatestByKeyCol('');
+      setLatestByTimestampCol('');
     }
 
     // Clear sort/limit if not applicable
@@ -1279,6 +1311,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       setSlidingWindowText(secondsToDurationToken(sw?.duration || 300) || '5m');
       setSlidingWindowError('');
       setSlidingWindowTimestampCol(sw?.timestamp_col || '');
+      // Latest-by initialization. The key column alone marks it enabled — the
+      // timestamp column is optional (blank = last-arrived wins).
+      const lb = chart.data_mapping?.latest_by;
+      setLatestByEnabled(!!lb?.key_col);
+      setLatestByKeyCol(lb?.key_col || '');
+      setLatestByTimestampCol(lb?.timestamp_col || '');
       // Banded-bar column mapping. Empty defaults — the user picks
       // columns from the schema dropdown. Migrating an old chart that
       // still has reference_levels: keep it loaded so the chart keeps
@@ -1464,6 +1502,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       const loadedTb = chart.data_mapping?.time_bucket;
       const loadedTbValid = loadedTb?.interval > 0 && !!loadedTb?.timestamp_col && (loadedTb?.value_cols?.length || 0) > 0;
       const loadedSw = chart.data_mapping?.sliding_window;
+      const loadedLb = chart.data_mapping?.latest_by;
       const loadedParser = chart.data_mapping?.parser;
       const loadedParserPreset = (() => {
         if (!loadedParser?.data_path && !loadedParser?.timestamp_field) return 'none';
@@ -1549,6 +1588,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         slidingWindowEnabled: loadedSw?.duration > 0 && !!loadedSw?.timestamp_col,
         slidingWindowDuration: loadedSw?.duration || 300,
         slidingWindowTimestampCol: loadedSw?.timestamp_col || '',
+        latestByEnabled: !!loadedLb?.key_col,
+        latestByKeyCol: loadedLb?.key_col || '',
+        latestByTimestampCol: loadedLb?.timestamp_col || '',
         timeBucketEnabled: loadedTbValid,
         timeBucketInterval: loadedTb?.interval || 60,
         timeBucketFunction: loadedTb?.function || 'avg',
@@ -1626,6 +1668,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         slidingWindowEnabled: false,
         slidingWindowDuration: 300,
         slidingWindowTimestampCol: '',
+        latestByEnabled: false,
+        latestByKeyCol: '',
+        latestByTimestampCol: '',
         timeBucketEnabled: false,
         timeBucketInterval: 60,
         timeBucketFunction: 'avg',
@@ -1710,6 +1755,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       slidingWindowEnabled,
       slidingWindowDuration,
       slidingWindowTimestampCol,
+      latestByEnabled,
+      latestByKeyCol,
+      latestByTimestampCol,
       timeBucketEnabled,
       timeBucketInterval,
       timeBucketFunction,
@@ -1744,6 +1792,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, yAxisColors,
     groupByColumn, seriesColumn, filters, aggregation,
     slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol,
+    latestByEnabled, latestByKeyCol, latestByTimestampCol,
     timeBucketEnabled, timeBucketInterval, timeBucketFunction, timeBucketValueCols, timeBucketTimestampCol,
     sortBy, sortOrder, limitRows, columnAliases, columnWidths, columnFormats, columnRules, visibleColumns,
     parserPreset, parserDataPath, parserTimestampField, parserTimestampScale,
@@ -2058,6 +2107,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       setSlidingWindowTimestampCol('');
       setSlidingWindowEnabled(false);
     }
+    // Latest-by: the KEY column is required, so losing it disables the feature
+    // (same lockstep as the sliding window above). The timestamp column is
+    // optional — a stale one just clears, falling back to arrival order.
+    if (latestByKeyCol && !has(latestByKeyCol)) {
+      setLatestByKeyCol('');
+      setLatestByEnabled(false);
+    }
+    if (latestByTimestampCol && !has(latestByTimestampCol)) {
+      setLatestByTimestampCol('');
+    }
 
     // chartOptions-held column (scatter bubble size).
     if (chartOptions.sizeColumn && !has(chartOptions.sizeColumn)) {
@@ -2197,6 +2256,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setSlidingWindowEnabled(false);
     setSlidingWindowDuration(300);
     setSlidingWindowTimestampCol('');
+    setLatestByEnabled(false);
+    setLatestByKeyCol('');
+    setLatestByTimestampCol('');
     setBandColumns({ scheme: 'sd' });
     setBandedBarStyle('time_series');
     setTimeBucketEnabled(false);
@@ -2792,6 +2854,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     if (slidingWindowEnabled && !slidingWindowTimestampCol) {
       setSlidingWindowEnabled(false);
     }
+    // Same self-heal for latest-by, keyed on its required KEY column (the
+    // timestamp column is optional). The save block only persists latest_by
+    // when a key column is set, so nothing stale is written.
+    if (latestByEnabled && !latestByKeyCol) {
+      setLatestByEnabled(false);
+    }
 
     const chartPayload = {
       name: name.trim(),
@@ -2875,6 +2943,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         sliding_window: slidingWindowEnabled && slidingWindowTimestampCol ? {
           duration: slidingWindowDuration,
           timestamp_col: slidingWindowTimestampCol
+        } : null,
+        // Only the KEY column is required; an empty timestamp_col is a valid
+        // saved state meaning "newest = last-arrived".
+        latest_by: latestByEnabled && latestByKeyCol ? {
+          key_col: latestByKeyCol,
+          timestamp_col: latestByTimestampCol || ''
         } : null,
         time_bucket: (() => {
           const willSave = timeBucketEnabled && timeBucketTimestampCol && timeBucketValueCols.length > 0;
@@ -5308,6 +5382,104 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       subtitle="This panel filters a streaming connection by a dashboard variable client-side only. The history backfill isn't filtered at the source, so each value can load with sparse history. Bind the Filter field (in the Query section) to the dashboard variable, or set a sliding window, to get full per-value history. (For numeric machine data, a separate connection per source avoids this entirely.)"
                       style={{ marginTop: '0.5rem', maxWidth: '100%' }}
                     />
+                  )}
+                </div>
+                )}
+
+                {/* Current State Per Series (latest_by) — keep only the newest
+                    row per distinct key value. Multi-series views only: value
+                    and gauge render a single scalar (a filter + "last"
+                    aggregation already expresses "current value of disk1"),
+                    banded_bar's related columns share one timestamp so a
+                    per-key dedupe would reduce along the wrong axis, and pie
+                    already aggregates by category. Those opt out via
+                    hasLatestBy:false. Hidden for query languages that own
+                    client-side ops, same as the sliding window. */}
+                {!showCustomCode && chartTypeConfig.hasLatestBy !== false && !queryLanguageOwnsClientSideOps && (
+                <div className="spec-subsection latest-by-section">
+                  <div className="section-header">
+                    <h5 className="spec-subsection__heading">Current State Per Series</h5>
+                    <Toggle
+                      id="latest-by-toggle"
+                      labelText=""
+                      labelA="Off"
+                      labelB="On"
+                      toggled={latestByEnabled}
+                      onToggle={() => setLatestByEnabled(!latestByEnabled)}
+                      size="sm"
+                    />
+                  </div>
+                  {latestByEnabled && (() => {
+                    // Both pickers need a populated schema. A saved column
+                    // counts (sortedColumns unions saved selections in), so an
+                    // author reopening a component sees their choice even
+                    // before re-running the query.
+                    const latestByNeedsQuery = availableColumns.length === 0 && !latestByKeyCol;
+                    return (
+                    <>
+                    <Grid narrow>
+                      <Column lg={6} md={4} sm={4}>
+                        <Select
+                          id="latest-by-key"
+                          labelText="Series Column"
+                          value={latestByKeyCol}
+                          onChange={(e) => setLatestByKeyCol(e.target.value)}
+                          disabled={availableColumns.length === 0}
+                          helperText="One row per distinct value — its newest record"
+                        >
+                          <SelectItem value="" text="Select series column..." />
+                          {availableColumns.length === 0 && latestByKeyCol && (
+                            <SelectItem value={latestByKeyCol} text={latestByKeyCol} />
+                          )}
+                          {sortedColumns.map(col => (
+                            <SelectItem key={col} value={col} text={col} />
+                          ))}
+                        </Select>
+                      </Column>
+                      <Column lg={6} md={4} sm={4}>
+                        <Select
+                          id="latest-by-timestamp"
+                          labelText="Timestamp Column (optional)"
+                          value={latestByTimestampCol}
+                          onChange={(e) => setLatestByTimestampCol(e.target.value)}
+                          disabled={latestByNeedsQuery}
+                          helperText="Blank = use the most recently received row"
+                        >
+                          <SelectItem value="" text="Most recently received" />
+                          {availableColumns.length === 0 && latestByTimestampCol && (
+                            <SelectItem value={latestByTimestampCol} text={latestByTimestampCol} />
+                          )}
+                          {sortedColumns.map(col => (
+                            <SelectItem key={col} value={col} text={col} />
+                          ))}
+                        </Select>
+                      </Column>
+                    </Grid>
+                    {latestByNeedsQuery && (
+                      <p className="editor-info-hint">Run a query to choose a series column.</p>
+                    )}
+                    {/* The server-side ts-store latest_by already returns one
+                        row per key, so doing it again here is a no-op. Not
+                        blocked — a different key column is a legitimate (if
+                        unusual) thing to express — but worth naming so the
+                        author doesn't think this is what's doing the work. */}
+                    {isTSStore && !isTSStoreStreaming && tsstoreQueryType === 'latest' && (
+                      <InlineNotification
+                        lowContrast
+                        kind="info"
+                        hideCloseButton
+                        title="The query already does this"
+                        subtitle="This connection's query type is Current State (latest per series), so ts-store returns one row per series before the data reaches the browser. This client-side reduction is redundant unless you're keying on a different column."
+                        style={{ marginTop: '0.5rem', maxWidth: '100%' }}
+                      />
+                    )}
+                    </>
+                    );
+                  })()}
+                  {!latestByEnabled && (
+                    <p className="editor-info-hint">
+                      Enable to keep only the newest row per series (e.g. one row per disk or volume). Useful for streaming components, where the reduction can&apos;t be pushed down to the source.
+                    </p>
                   )}
                 </div>
                 )}

@@ -25,6 +25,7 @@
  * @property {boolean} [has_filters]
  * @property {boolean} [has_aggregation]
  * @property {boolean} [has_sliding_window]
+ * @property {boolean} [has_latest_by]
  * @property {boolean} [has_legend_config]
  * @property {boolean} [has_tooltip_config]
  * @property {boolean} [has_axis_range]
