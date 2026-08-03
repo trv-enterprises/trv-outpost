@@ -4902,6 +4902,379 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                 ) && (
                 <CollapsibleTile title="Client Side Processing" className="spec-section client-side-processing">
 
+                {/* ── SERVER-SIDE PROCESSING ──────────────────────────────
+                    Runs in Go BEFORE data reaches the browser, so it changes
+                    what data exists at all — not just what is rendered.
+                    Placed above the client-side group for that reason. */}
+
+                {/* Time Bucket Section - for socket streaming datasources
+                    AND chart types that consume multi-row time series.
+                    Single-value displays (gauge/number) opt out via
+                    hasTimeBucket:false. */}
+                {selectedDatasource?.type === 'socket' && chartTypeConfig.hasTimeBucket !== false && (
+                  <div className="spec-subsection time-bucket-section">
+                    <div className="section-header">
+                      <h5 className="spec-subsection__heading">Time Bucket Aggregation (Streaming)</h5>
+                      <Toggle
+                        id="time-bucket-toggle"
+                        labelText=""
+                        labelA="Off"
+                        labelB="On"
+                        toggled={timeBucketEnabled}
+                        onToggle={() => setTimeBucketEnabled(!timeBucketEnabled)}
+                        size="sm"
+                      />
+                    </div>
+                    {/* Warning when time bucket is enabled but incomplete */}
+                    {timeBucketEnabled && (!timeBucketTimestampCol || timeBucketValueCols.length === 0) && (
+                      <InlineNotification
+                        kind="warning"
+                        title="Incomplete configuration"
+                        subtitle={
+                          !timeBucketTimestampCol
+                            ? 'Select a timestamp column to enable time bucket aggregation.'
+                            : 'Select at least one value column to aggregate.'
+                        }
+                        lowContrast
+                        hideCloseButton
+                        style={{ marginBottom: '1rem' }}
+                      />
+                    )}
+                    {timeBucketEnabled && (
+                      availableColumns.length > 0 ? (
+                        <Grid narrow>
+                          <Column lg={3} md={4} sm={4}>
+                            <NumberInput
+                              id="time-bucket-interval"
+                              label="Bucket Interval (seconds)"
+                              value={timeBucketInterval}
+                              allowEmpty
+                              onChange={(e, { value }) => setTimeBucketInterval(value === '' || value == null ? 1 : value)}
+                              min={1}
+                              max={86400}
+                              step={1}
+                              helperText="e.g., 60 = 1 min buckets"
+                            />
+                          </Column>
+                          <Column lg={3} md={4} sm={4}>
+                            <Select
+                              id="time-bucket-function"
+                              labelText="Aggregation Function"
+                              value={timeBucketFunction}
+                              onChange={(e) => setTimeBucketFunction(e.target.value)}
+                            >
+                              <SelectItem value="avg" text="Average" />
+                              <SelectItem value="min" text="Minimum" />
+                              <SelectItem value="max" text="Maximum" />
+                              <SelectItem value="sum" text="Sum" />
+                              <SelectItem value="count" text="Count" />
+                            </Select>
+                          </Column>
+                          <Column lg={3} md={4} sm={4}>
+                            <Select
+                              id="time-bucket-timestamp"
+                              labelText="Timestamp Column"
+                              value={timeBucketTimestampCol}
+                              onChange={(e) => setTimeBucketTimestampCol(e.target.value)}
+                            >
+                              <SelectItem value="" text="Select timestamp..." />
+                              {sortedColumns.map(col => (
+                                <SelectItem key={col} value={col} text={col} />
+                              ))}
+                            </Select>
+                          </Column>
+                          <Column lg={3} md={4} sm={4}>
+                            <div className="value-cols-selector">
+                              <label className="cds--label">Value Columns to Aggregate</label>
+                              <div className="column-tags">
+                                {sortedColumns.filter(c => c !== timeBucketTimestampCol).map(col => (
+                                  <Tag
+                                    key={col}
+                                    type={timeBucketValueCols.includes(col) ? 'blue' : 'gray'}
+                                    onClick={() => {
+                                      setTimeBucketValueCols(prev =>
+                                        prev.includes(col)
+                                          ? prev.filter(c => c !== col)
+                                          : [...prev, col]
+                                      );
+                                    }}
+                                    className="column-tag"
+                                  >
+                                    {col}
+                                  </Tag>
+                                ))}
+                              </div>
+                            </div>
+                          </Column>
+                        </Grid>
+                      ) : timeBucketTimestampCol ? (
+                        <div className="saved-values-display">
+                          <Grid narrow>
+                            <Column lg={3} md={4} sm={4}>
+                              <div className="saved-value-field">
+                                <label className="cds--label">Interval</label>
+                                <Tag type="teal">{timeBucketInterval}s</Tag>
+                              </div>
+                            </Column>
+                            <Column lg={3} md={4} sm={4}>
+                              <div className="saved-value-field">
+                                <label className="cds--label">Function</label>
+                                <Tag type="purple">{timeBucketFunction}</Tag>
+                              </div>
+                            </Column>
+                            <Column lg={3} md={4} sm={4}>
+                              <div className="saved-value-field">
+                                <label className="cds--label">Timestamp</label>
+                                <Tag type="blue">{timeBucketTimestampCol}</Tag>
+                              </div>
+                            </Column>
+                            <Column lg={3} md={4} sm={4}>
+                              <div className="saved-value-field">
+                                <label className="cds--label">Value Columns</label>
+                                <div className="column-tags">
+                                  {timeBucketValueCols.map(col => (
+                                    <Tag key={col} type="blue">{col}</Tag>
+                                  ))}
+                                </div>
+                              </div>
+                            </Column>
+                          </Grid>
+                          <p className="run-query-hint">Fetch data to modify time bucket settings.</p>
+                        </div>
+                      ) : (
+                        <p className="run-query-hint">Fetch data to configure time bucket aggregation.</p>
+                      )
+                    )}
+                    {!timeBucketEnabled && (
+                      <p className="editor-info-hint">
+                        Enable to aggregate streaming data into time buckets (e.g., 1-minute averages). Server-side aggregation reduces data volume for high-frequency streams.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* ── CLIENT-SIDE PROCESSING ──────────────────────────────
+                    Applied by transformData() to already-fetched data, in the
+                    order these sections appear. The order matters and is not
+                    commutative: the window bounds which records are in scope,
+                    latest-by reduces those to one row per series, and only
+                    then do filters/sort/limit/aggregation run over the result.
+                    Keep this UI order in step with the pipeline in
+                    utils/dataTransforms.js::transformData. */}
+
+                {/* Sliding Window Section - for time-series data.
+                    Hidden when the connection's query already
+                    expresses time bounds (SQL WHERE ts > … /
+                    EdgeLake equivalent) — re-querying with a new
+                    time literal is the natural pattern for those
+                    types. Also hidden for chart types that opt out
+                    via hasSlidingWindow:false. */}
+                {!showCustomCode && chartTypeConfig.hasSlidingWindow !== false && !queryLanguageOwnsClientSideOps && (
+                <div className="spec-subsection sliding-window-section">
+                  <div className="section-header">
+                    <h5 className="spec-subsection__heading">Sliding Window (Time-Series)</h5>
+                    <Toggle
+                      id="sliding-window-toggle"
+                      labelText=""
+                      labelA="Off"
+                      labelB="On"
+                      toggled={slidingWindowEnabled}
+                      onToggle={() => setSlidingWindowEnabled(!slidingWindowEnabled)}
+                      size="sm"
+                    />
+                  </div>
+                  {slidingWindowEnabled && (() => {
+                    // The window needs a timestamp column, which only exists
+                    // once a query has populated availableColumns (a saved
+                    // column counts). Until then, BOTH controls are disabled
+                    // and inert so the user can't set a length that can't be
+                    // saved (save requires a timestamp col, else it silently
+                    // drops the window). One helper line below explains why.
+                    const windowNeedsQuery = availableColumns.length === 0 && !slidingWindowTimestampCol;
+                    return (
+                    <>
+                    <Grid narrow>
+                      <Column lg={6} md={4} sm={4}>
+                        <Select
+                          id="sliding-window-timestamp"
+                          labelText="Timestamp Column"
+                          value={slidingWindowTimestampCol}
+                          onChange={(e) => setSlidingWindowTimestampCol(e.target.value)}
+                          disabled={availableColumns.length === 0}
+                        >
+                          <SelectItem value="" text="Select timestamp column..." />
+                          {/* Include the saved column even when availableColumns
+                              is empty, so the Select shows the value the user
+                              previously chose. */}
+                          {availableColumns.length === 0 && slidingWindowTimestampCol && (
+                            <SelectItem
+                              value={slidingWindowTimestampCol}
+                              text={slidingWindowTimestampCol}
+                            />
+                          )}
+                          {sortedColumns.map(col => (
+                            <SelectItem key={col} value={col} text={col} />
+                          ))}
+                        </Select>
+                      </Column>
+                      <Column lg={6} md={4} sm={4}>
+                        <TextInput
+                          id="sliding-window-duration"
+                          labelText="Window Length"
+                          value={slidingWindowText}
+                          disabled={windowNeedsQuery}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            setSlidingWindowText(raw);
+                            const secs = durationTokenToSeconds(raw);
+                            if (secs == null || secs < 10) {
+                              setSlidingWindowError('Use s/m/h/d/w (e.g. 7d, 90m) or seconds; min 10s.');
+                            } else if (secs > SLIDING_WINDOW_MAX_SECONDS) {
+                              setSlidingWindowError('Max window is 30d.');
+                            } else {
+                              setSlidingWindowError('');
+                              setSlidingWindowDuration(secs);
+                            }
+                          }}
+                          invalid={!windowNeedsQuery && !!slidingWindowError}
+                          invalidText={slidingWindowError}
+                          placeholder="7d"
+                          helperText="Units: s/m/h/d/w — e.g. 90m, 1h, 7d, 1w. Plain number = seconds. Max 30d."
+                        />
+                      </Column>
+                    </Grid>
+                    {windowNeedsQuery && (
+                      <p className="editor-info-hint">Run a query to set the sliding window.</p>
+                    )}
+                    </>
+                    );
+                  })()}
+                  {!slidingWindowEnabled && (
+                    <p className="editor-info-hint">
+                      Enable to show only recent data (e.g., last 5 minutes). Useful for streaming/real-time charts.
+                    </p>
+                  )}
+                  {/* #18: a tsstore-streaming panel filtered ONLY by a
+                      client-side dashboard variable backfills count-based
+                      ("newest N"), unfiltered at the source, then thins
+                      client-side — so the selected value gets ~N/M records when
+                      the stream interleaves M values. Two fixes: set a source-
+                      side Filter bound to the variable (above; ts-store counts
+                      matches, so each value gets full history), or set a sliding
+                      window (time-based backfill). Only nudge on the at-risk
+                      shape: streaming + client-side variable filter + NO source
+                      filter + window off. */}
+                  {!slidingWindowEnabled && isTSStoreStreaming && variableBoundFilter && !tsstoreFilterUsesVariable && (
+                    <InlineNotification
+                      lowContrast
+                      kind="info"
+                      hideCloseButton
+                      title="Filter at the source for full per-value history"
+                      subtitle="This panel filters a streaming connection by a dashboard variable client-side only. The history backfill isn't filtered at the source, so each value can load with sparse history. Bind the Filter field (in the Query section) to the dashboard variable, or set a sliding window, to get full per-value history. (For numeric machine data, a separate connection per source avoids this entirely.)"
+                      style={{ marginTop: '0.5rem', maxWidth: '100%' }}
+                    />
+                  )}
+                </div>
+                )}
+
+                {/* Current State Per Series (latest_by) — keep only the newest
+                    row per distinct key value. Multi-series views only: value
+                    and gauge render a single scalar (a filter + "last"
+                    aggregation already expresses "current value of disk1"),
+                    banded_bar's related columns share one timestamp so a
+                    per-key dedupe would reduce along the wrong axis, and pie
+                    already aggregates by category. Those opt out via
+                    hasLatestBy:false. Hidden for query languages that own
+                    client-side ops, same as the sliding window. */}
+                {!showCustomCode && chartTypeConfig.hasLatestBy !== false && !queryLanguageOwnsClientSideOps && (
+                <div className="spec-subsection latest-by-section">
+                  <div className="section-header">
+                    <h5 className="spec-subsection__heading">Current State Per Series</h5>
+                    <Toggle
+                      id="latest-by-toggle"
+                      labelText=""
+                      labelA="Off"
+                      labelB="On"
+                      toggled={latestByEnabled}
+                      onToggle={() => setLatestByEnabled(!latestByEnabled)}
+                      size="sm"
+                    />
+                  </div>
+                  {latestByEnabled && (() => {
+                    // Both pickers need a populated schema. A saved column
+                    // counts (sortedColumns unions saved selections in), so an
+                    // author reopening a component sees their choice even
+                    // before re-running the query.
+                    const latestByNeedsQuery = availableColumns.length === 0 && !latestByKeyCol;
+                    return (
+                    <>
+                    <Grid narrow>
+                      <Column lg={6} md={4} sm={4}>
+                        <Select
+                          id="latest-by-key"
+                          labelText="Series Column"
+                          value={latestByKeyCol}
+                          onChange={(e) => setLatestByKeyCol(e.target.value)}
+                          disabled={availableColumns.length === 0}
+                          helperText="One row per distinct value — its newest record"
+                        >
+                          <SelectItem value="" text="Select series column..." />
+                          {availableColumns.length === 0 && latestByKeyCol && (
+                            <SelectItem value={latestByKeyCol} text={latestByKeyCol} />
+                          )}
+                          {sortedColumns.map(col => (
+                            <SelectItem key={col} value={col} text={col} />
+                          ))}
+                        </Select>
+                      </Column>
+                      <Column lg={6} md={4} sm={4}>
+                        <Select
+                          id="latest-by-timestamp"
+                          labelText="Timestamp Column (optional)"
+                          value={latestByTimestampCol}
+                          onChange={(e) => setLatestByTimestampCol(e.target.value)}
+                          disabled={latestByNeedsQuery}
+                          helperText="Blank = use the most recently received row"
+                        >
+                          <SelectItem value="" text="Most recently received" />
+                          {availableColumns.length === 0 && latestByTimestampCol && (
+                            <SelectItem value={latestByTimestampCol} text={latestByTimestampCol} />
+                          )}
+                          {sortedColumns.map(col => (
+                            <SelectItem key={col} value={col} text={col} />
+                          ))}
+                        </Select>
+                      </Column>
+                    </Grid>
+                    {latestByNeedsQuery && (
+                      <p className="editor-info-hint">Run a query to choose a series column.</p>
+                    )}
+                    {/* The server-side ts-store latest_by already returns one
+                        row per key, so doing it again here is a no-op. Not
+                        blocked — a different key column is a legitimate (if
+                        unusual) thing to express — but worth naming so the
+                        author doesn't think this is what's doing the work. */}
+                    {isTSStore && !isTSStoreStreaming && tsstoreQueryType === 'latest' && (
+                      <InlineNotification
+                        lowContrast
+                        kind="info"
+                        hideCloseButton
+                        title="The query already does this"
+                        subtitle="This connection's query type is Current State (latest per series), so ts-store returns one row per series before the data reaches the browser. This client-side reduction is redundant unless you're keying on a different column."
+                        style={{ marginTop: '0.5rem', maxWidth: '100%' }}
+                      />
+                    )}
+                    </>
+                    );
+                  })()}
+                  {!latestByEnabled && (
+                    <p className="editor-info-hint">
+                      Enable to keep only the newest row per series (e.g. one row per disk or volume). Useful for streaming components, where the reduction can&apos;t be pushed down to the source.
+                    </p>
+                  )}
+                </div>
+                )}
+
                 {/* Filters subsection. Hidden when the connection's
                     query language already owns this responsibility
                     (SQL WHERE / EdgeLake WHERE) — see
@@ -5271,365 +5644,6 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                 </div>
                 )}
 
-                {/* Sliding Window Section - for time-series data.
-                    Hidden when the connection's query already
-                    expresses time bounds (SQL WHERE ts > … /
-                    EdgeLake equivalent) — re-querying with a new
-                    time literal is the natural pattern for those
-                    types. Also hidden for chart types that opt out
-                    via hasSlidingWindow:false. */}
-                {!showCustomCode && chartTypeConfig.hasSlidingWindow !== false && !queryLanguageOwnsClientSideOps && (
-                <div className="spec-subsection sliding-window-section">
-                  <div className="section-header">
-                    <h5 className="spec-subsection__heading">Sliding Window (Time-Series)</h5>
-                    <Toggle
-                      id="sliding-window-toggle"
-                      labelText=""
-                      labelA="Off"
-                      labelB="On"
-                      toggled={slidingWindowEnabled}
-                      onToggle={() => setSlidingWindowEnabled(!slidingWindowEnabled)}
-                      size="sm"
-                    />
-                  </div>
-                  {slidingWindowEnabled && (() => {
-                    // The window needs a timestamp column, which only exists
-                    // once a query has populated availableColumns (a saved
-                    // column counts). Until then, BOTH controls are disabled
-                    // and inert so the user can't set a length that can't be
-                    // saved (save requires a timestamp col, else it silently
-                    // drops the window). One helper line below explains why.
-                    const windowNeedsQuery = availableColumns.length === 0 && !slidingWindowTimestampCol;
-                    return (
-                    <>
-                    <Grid narrow>
-                      <Column lg={6} md={4} sm={4}>
-                        <Select
-                          id="sliding-window-timestamp"
-                          labelText="Timestamp Column"
-                          value={slidingWindowTimestampCol}
-                          onChange={(e) => setSlidingWindowTimestampCol(e.target.value)}
-                          disabled={availableColumns.length === 0}
-                        >
-                          <SelectItem value="" text="Select timestamp column..." />
-                          {/* Include the saved column even when availableColumns
-                              is empty, so the Select shows the value the user
-                              previously chose. */}
-                          {availableColumns.length === 0 && slidingWindowTimestampCol && (
-                            <SelectItem
-                              value={slidingWindowTimestampCol}
-                              text={slidingWindowTimestampCol}
-                            />
-                          )}
-                          {sortedColumns.map(col => (
-                            <SelectItem key={col} value={col} text={col} />
-                          ))}
-                        </Select>
-                      </Column>
-                      <Column lg={6} md={4} sm={4}>
-                        <TextInput
-                          id="sliding-window-duration"
-                          labelText="Window Length"
-                          value={slidingWindowText}
-                          disabled={windowNeedsQuery}
-                          onChange={(e) => {
-                            const raw = e.target.value;
-                            setSlidingWindowText(raw);
-                            const secs = durationTokenToSeconds(raw);
-                            if (secs == null || secs < 10) {
-                              setSlidingWindowError('Use s/m/h/d/w (e.g. 7d, 90m) or seconds; min 10s.');
-                            } else if (secs > SLIDING_WINDOW_MAX_SECONDS) {
-                              setSlidingWindowError('Max window is 30d.');
-                            } else {
-                              setSlidingWindowError('');
-                              setSlidingWindowDuration(secs);
-                            }
-                          }}
-                          invalid={!windowNeedsQuery && !!slidingWindowError}
-                          invalidText={slidingWindowError}
-                          placeholder="7d"
-                          helperText="Units: s/m/h/d/w — e.g. 90m, 1h, 7d, 1w. Plain number = seconds. Max 30d."
-                        />
-                      </Column>
-                    </Grid>
-                    {windowNeedsQuery && (
-                      <p className="editor-info-hint">Run a query to set the sliding window.</p>
-                    )}
-                    </>
-                    );
-                  })()}
-                  {!slidingWindowEnabled && (
-                    <p className="editor-info-hint">
-                      Enable to show only recent data (e.g., last 5 minutes). Useful for streaming/real-time charts.
-                    </p>
-                  )}
-                  {/* #18: a tsstore-streaming panel filtered ONLY by a
-                      client-side dashboard variable backfills count-based
-                      ("newest N"), unfiltered at the source, then thins
-                      client-side — so the selected value gets ~N/M records when
-                      the stream interleaves M values. Two fixes: set a source-
-                      side Filter bound to the variable (above; ts-store counts
-                      matches, so each value gets full history), or set a sliding
-                      window (time-based backfill). Only nudge on the at-risk
-                      shape: streaming + client-side variable filter + NO source
-                      filter + window off. */}
-                  {!slidingWindowEnabled && isTSStoreStreaming && variableBoundFilter && !tsstoreFilterUsesVariable && (
-                    <InlineNotification
-                      lowContrast
-                      kind="info"
-                      hideCloseButton
-                      title="Filter at the source for full per-value history"
-                      subtitle="This panel filters a streaming connection by a dashboard variable client-side only. The history backfill isn't filtered at the source, so each value can load with sparse history. Bind the Filter field (in the Query section) to the dashboard variable, or set a sliding window, to get full per-value history. (For numeric machine data, a separate connection per source avoids this entirely.)"
-                      style={{ marginTop: '0.5rem', maxWidth: '100%' }}
-                    />
-                  )}
-                </div>
-                )}
-
-                {/* Current State Per Series (latest_by) — keep only the newest
-                    row per distinct key value. Multi-series views only: value
-                    and gauge render a single scalar (a filter + "last"
-                    aggregation already expresses "current value of disk1"),
-                    banded_bar's related columns share one timestamp so a
-                    per-key dedupe would reduce along the wrong axis, and pie
-                    already aggregates by category. Those opt out via
-                    hasLatestBy:false. Hidden for query languages that own
-                    client-side ops, same as the sliding window. */}
-                {!showCustomCode && chartTypeConfig.hasLatestBy !== false && !queryLanguageOwnsClientSideOps && (
-                <div className="spec-subsection latest-by-section">
-                  <div className="section-header">
-                    <h5 className="spec-subsection__heading">Current State Per Series</h5>
-                    <Toggle
-                      id="latest-by-toggle"
-                      labelText=""
-                      labelA="Off"
-                      labelB="On"
-                      toggled={latestByEnabled}
-                      onToggle={() => setLatestByEnabled(!latestByEnabled)}
-                      size="sm"
-                    />
-                  </div>
-                  {latestByEnabled && (() => {
-                    // Both pickers need a populated schema. A saved column
-                    // counts (sortedColumns unions saved selections in), so an
-                    // author reopening a component sees their choice even
-                    // before re-running the query.
-                    const latestByNeedsQuery = availableColumns.length === 0 && !latestByKeyCol;
-                    return (
-                    <>
-                    <Grid narrow>
-                      <Column lg={6} md={4} sm={4}>
-                        <Select
-                          id="latest-by-key"
-                          labelText="Series Column"
-                          value={latestByKeyCol}
-                          onChange={(e) => setLatestByKeyCol(e.target.value)}
-                          disabled={availableColumns.length === 0}
-                          helperText="One row per distinct value — its newest record"
-                        >
-                          <SelectItem value="" text="Select series column..." />
-                          {availableColumns.length === 0 && latestByKeyCol && (
-                            <SelectItem value={latestByKeyCol} text={latestByKeyCol} />
-                          )}
-                          {sortedColumns.map(col => (
-                            <SelectItem key={col} value={col} text={col} />
-                          ))}
-                        </Select>
-                      </Column>
-                      <Column lg={6} md={4} sm={4}>
-                        <Select
-                          id="latest-by-timestamp"
-                          labelText="Timestamp Column (optional)"
-                          value={latestByTimestampCol}
-                          onChange={(e) => setLatestByTimestampCol(e.target.value)}
-                          disabled={latestByNeedsQuery}
-                          helperText="Blank = use the most recently received row"
-                        >
-                          <SelectItem value="" text="Most recently received" />
-                          {availableColumns.length === 0 && latestByTimestampCol && (
-                            <SelectItem value={latestByTimestampCol} text={latestByTimestampCol} />
-                          )}
-                          {sortedColumns.map(col => (
-                            <SelectItem key={col} value={col} text={col} />
-                          ))}
-                        </Select>
-                      </Column>
-                    </Grid>
-                    {latestByNeedsQuery && (
-                      <p className="editor-info-hint">Run a query to choose a series column.</p>
-                    )}
-                    {/* The server-side ts-store latest_by already returns one
-                        row per key, so doing it again here is a no-op. Not
-                        blocked — a different key column is a legitimate (if
-                        unusual) thing to express — but worth naming so the
-                        author doesn't think this is what's doing the work. */}
-                    {isTSStore && !isTSStoreStreaming && tsstoreQueryType === 'latest' && (
-                      <InlineNotification
-                        lowContrast
-                        kind="info"
-                        hideCloseButton
-                        title="The query already does this"
-                        subtitle="This connection's query type is Current State (latest per series), so ts-store returns one row per series before the data reaches the browser. This client-side reduction is redundant unless you're keying on a different column."
-                        style={{ marginTop: '0.5rem', maxWidth: '100%' }}
-                      />
-                    )}
-                    </>
-                    );
-                  })()}
-                  {!latestByEnabled && (
-                    <p className="editor-info-hint">
-                      Enable to keep only the newest row per series (e.g. one row per disk or volume). Useful for streaming components, where the reduction can&apos;t be pushed down to the source.
-                    </p>
-                  )}
-                </div>
-                )}
-
-
-                {/* Time Bucket Section - for socket streaming datasources
-                    AND chart types that consume multi-row time series.
-                    Single-value displays (gauge/number) opt out via
-                    hasTimeBucket:false. */}
-                {selectedDatasource?.type === 'socket' && chartTypeConfig.hasTimeBucket !== false && (
-                  <div className="spec-subsection time-bucket-section">
-                    <div className="section-header">
-                      <h5 className="spec-subsection__heading">Time Bucket Aggregation (Streaming)</h5>
-                      <Toggle
-                        id="time-bucket-toggle"
-                        labelText=""
-                        labelA="Off"
-                        labelB="On"
-                        toggled={timeBucketEnabled}
-                        onToggle={() => setTimeBucketEnabled(!timeBucketEnabled)}
-                        size="sm"
-                      />
-                    </div>
-                    {/* Warning when time bucket is enabled but incomplete */}
-                    {timeBucketEnabled && (!timeBucketTimestampCol || timeBucketValueCols.length === 0) && (
-                      <InlineNotification
-                        kind="warning"
-                        title="Incomplete configuration"
-                        subtitle={
-                          !timeBucketTimestampCol
-                            ? 'Select a timestamp column to enable time bucket aggregation.'
-                            : 'Select at least one value column to aggregate.'
-                        }
-                        lowContrast
-                        hideCloseButton
-                        style={{ marginBottom: '1rem' }}
-                      />
-                    )}
-                    {timeBucketEnabled && (
-                      availableColumns.length > 0 ? (
-                        <Grid narrow>
-                          <Column lg={3} md={4} sm={4}>
-                            <NumberInput
-                              id="time-bucket-interval"
-                              label="Bucket Interval (seconds)"
-                              value={timeBucketInterval}
-                              allowEmpty
-                              onChange={(e, { value }) => setTimeBucketInterval(value === '' || value == null ? 1 : value)}
-                              min={1}
-                              max={86400}
-                              step={1}
-                              helperText="e.g., 60 = 1 min buckets"
-                            />
-                          </Column>
-                          <Column lg={3} md={4} sm={4}>
-                            <Select
-                              id="time-bucket-function"
-                              labelText="Aggregation Function"
-                              value={timeBucketFunction}
-                              onChange={(e) => setTimeBucketFunction(e.target.value)}
-                            >
-                              <SelectItem value="avg" text="Average" />
-                              <SelectItem value="min" text="Minimum" />
-                              <SelectItem value="max" text="Maximum" />
-                              <SelectItem value="sum" text="Sum" />
-                              <SelectItem value="count" text="Count" />
-                            </Select>
-                          </Column>
-                          <Column lg={3} md={4} sm={4}>
-                            <Select
-                              id="time-bucket-timestamp"
-                              labelText="Timestamp Column"
-                              value={timeBucketTimestampCol}
-                              onChange={(e) => setTimeBucketTimestampCol(e.target.value)}
-                            >
-                              <SelectItem value="" text="Select timestamp..." />
-                              {sortedColumns.map(col => (
-                                <SelectItem key={col} value={col} text={col} />
-                              ))}
-                            </Select>
-                          </Column>
-                          <Column lg={3} md={4} sm={4}>
-                            <div className="value-cols-selector">
-                              <label className="cds--label">Value Columns to Aggregate</label>
-                              <div className="column-tags">
-                                {sortedColumns.filter(c => c !== timeBucketTimestampCol).map(col => (
-                                  <Tag
-                                    key={col}
-                                    type={timeBucketValueCols.includes(col) ? 'blue' : 'gray'}
-                                    onClick={() => {
-                                      setTimeBucketValueCols(prev =>
-                                        prev.includes(col)
-                                          ? prev.filter(c => c !== col)
-                                          : [...prev, col]
-                                      );
-                                    }}
-                                    className="column-tag"
-                                  >
-                                    {col}
-                                  </Tag>
-                                ))}
-                              </div>
-                            </div>
-                          </Column>
-                        </Grid>
-                      ) : timeBucketTimestampCol ? (
-                        <div className="saved-values-display">
-                          <Grid narrow>
-                            <Column lg={3} md={4} sm={4}>
-                              <div className="saved-value-field">
-                                <label className="cds--label">Interval</label>
-                                <Tag type="teal">{timeBucketInterval}s</Tag>
-                              </div>
-                            </Column>
-                            <Column lg={3} md={4} sm={4}>
-                              <div className="saved-value-field">
-                                <label className="cds--label">Function</label>
-                                <Tag type="purple">{timeBucketFunction}</Tag>
-                              </div>
-                            </Column>
-                            <Column lg={3} md={4} sm={4}>
-                              <div className="saved-value-field">
-                                <label className="cds--label">Timestamp</label>
-                                <Tag type="blue">{timeBucketTimestampCol}</Tag>
-                              </div>
-                            </Column>
-                            <Column lg={3} md={4} sm={4}>
-                              <div className="saved-value-field">
-                                <label className="cds--label">Value Columns</label>
-                                <div className="column-tags">
-                                  {timeBucketValueCols.map(col => (
-                                    <Tag key={col} type="blue">{col}</Tag>
-                                  ))}
-                                </div>
-                              </div>
-                            </Column>
-                          </Grid>
-                          <p className="run-query-hint">Fetch data to modify time bucket settings.</p>
-                        </div>
-                      ) : (
-                        <p className="run-query-hint">Fetch data to configure time bucket aggregation.</p>
-                      )
-                    )}
-                    {!timeBucketEnabled && (
-                      <p className="editor-info-hint">
-                        Enable to aggregate streaming data into time buckets (e.g., 1-minute averages). Server-side aggregation reduces data volume for high-frequency streams.
-                      </p>
-                    )}
-                  </div>
-                )}
 
                 </CollapsibleTile>
                 )}
