@@ -79,6 +79,51 @@ export function applyTextCase(s, mode) {
   }
 }
 
+// ── Source unit (what the RAW number already is) ─────────────────────
+//
+// Distinct from the format choice: `numberFormat` says how to RENDER,
+// this says what the stored number MEANS. A column of megabytes holding
+// 123456 is 1.23456e11 bytes — without that, compact-SI abbreviates the
+// raw figure and reports "123.5k" for something that is really 123.5G.
+//
+// Naming the source unit (rather than storing a hand-entered multiplier)
+// keeps the FACT instead of the arithmetic: the multiplier is derivable
+// from the unit, but the unit is not recoverable from a bare `× 1000000`
+// — and a multiplier can't be validated, so a mistyped zero renders a
+// plausible wrong number with nothing to catch it.
+//
+// Decimal and binary are SEPARATE entries on purpose. Storage tooling
+// disagrees about "MB": disk vendors mean 1e6, memory/filesystem stats
+// mean 1024². Collapsing them is a silent 2.4% error at G and ~10% at T,
+// so the author picks which one their source means.
+const SOURCE_UNIT_SCALE = {
+  none: 1,
+  // Decimal (SI) source: KB / MB / GB / TB at powers of 1000.
+  k: 1e3,
+  M: 1e6,
+  G: 1e9,
+  T: 1e12,
+  // Binary (IEC) source: KiB / MiB / GiB / TiB at powers of 1024.
+  Ki: 1024,
+  Mi: 1024 ** 2,
+  Gi: 1024 ** 3,
+  Ti: 1024 ** 4,
+};
+
+/**
+ * Multiplier that converts a raw value from its source unit into base
+ * units. Unknown/missing → 1 (no scaling), so every existing record and
+ * every call site that doesn't pass a source unit is unaffected.
+ *
+ * @param {string} [sourceUnit]  key from SOURCE_UNIT_SCALE
+ * @returns {number}
+ */
+export function sourceUnitScale(sourceUnit) {
+  if (!sourceUnit) return 1;
+  const s = SOURCE_UNIT_SCALE[sourceUnit];
+  return Number.isFinite(s) ? s : 1;
+}
+
 // Plain locale number with an optional fixed decimal count ('auto' = up
 // to 2). Shared by the default + as a fallback.
 function formatPlain(n, decimals) {
@@ -171,7 +216,18 @@ export function formatNumberValue(raw, valueColumn, opts = {}, formatCellValue) 
     return formatTimestamp(raw, preset);
   }
 
-  const n = toNum(raw);
+  // Scale the raw value out of its source unit into base units before
+  // any numeric render. Applied here (not per-format) so plain/compact/
+  // auto all agree — a value tile and a data-grid cell on the same column
+  // must not disagree about magnitude. The datetime path returned above:
+  // a timestamp has no source unit and scaling one would shift the date.
+  //
+  // Duration formats DO scale: a milliseconds column with source unit
+  // 'none' stays seconds-as-authored, and the k/M entries are the honest
+  // way to say "this duration is in thousands of seconds" — the format
+  // still means seconds, the source unit says how many.
+  const rawNum = toNum(raw);
+  const n = rawNum == null ? null : rawNum * sourceUnitScale(opts.numberSourceUnit);
   // Non-numeric value → render it as text. A numeric format can't apply,
   // and we must never show "NaN". The viewer's auto-formatter still gets
   // first refusal so an ISO timestamp string or a boolean renders the way
@@ -201,6 +257,11 @@ export function formatNumberValue(raw, valueColumn, opts = {}, formatCellValue) 
       // formatter (handles its own locale/precision rules).
       // strictTimestampNames — see the non-numeric fallback above.
       if (decimals != null && decimals !== 'auto') return formatPlain(n, decimals);
-      return formatCellValue ? formatCellValue(raw, valueColumn, { strictTimestampNames: true }) : formatPlain(n, 'auto');
+      // Hand the SCALED number to the auto-formatter, not `raw` — with a
+      // source unit set, passing raw here would render the unscaled figure
+      // while every other format scaled, so one tile could disagree with
+      // the next. When no source unit is set n === raw and this is a no-op,
+      // which keeps the untouched-record path byte-identical.
+      return formatCellValue ? formatCellValue(n, valueColumn, { strictTimestampNames: true }) : formatPlain(n, 'auto');
   }
 }

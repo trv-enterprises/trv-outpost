@@ -56,8 +56,7 @@
         {
           "id": "value_type_group",
           "label": "Value type",
-          "helperText": "Auto reads the type from the sampled data and is right nearly always. Set it explicitly when the sample is empty, mixed, or a live stream hasn't produced a record yet — the options below follow this choice.",
-          "layout": "row-4",
+          "layout": "row-2",
           "fields": [
             {
               "id": "value_type",
@@ -65,27 +64,36 @@
               "type": "enum",
               "label": "Value type",
               "default": "auto",
+              "helperText": "Auto reads the type from the sampled data and is right nearly always. Set it explicitly when the sample is empty, mixed, or a live stream hasn't produced a record yet — the options below follow this choice.",
               "options": [
                 { "value": "auto", "label": "Auto — detect from data" },
                 { "value": "number", "label": "Number" },
                 { "value": "text", "label": "Text" }
               ]
-            }
-          ]
-        },
-        {
-          "id": "value_background_group",
-          "label": "Background",
-          "helperText": "Fill the tile with a color. The value's text color is paired automatically from Carbon's matching light/dark set, so the number stays readable — pick the fill and the contrast is handled. A color threshold or rule that matches still wins over the paired text color.",
-          "layout": "full-width",
-          "fields": [
+            },
             {
-              "id": "value_background",
-              "binds": "options.valueBackground",
-              "type": "color_select",
-              "label": "Background color",
-              "default": "",
-              "showsContrastPartner": true
+              "id": "value_source_unit",
+              "binds": "options.valueSourceUnit",
+              "type": "enum",
+              "label": "Source unit",
+              "default": "none",
+              "helperText": "What the stored number already is, not how it's displayed. A megabytes column holding 123,456 is 123.5G once scaled; left at None, Compact SI reports 123.5k. Pick Binary (KiB/MiB) for memory and filesystem stats, Decimal (KB/MB) for disk and network figures.",
+              "visibleWhen": {
+                "field": "value_type",
+                "operator": "not_in",
+                "value": ["text"]
+              },
+              "options": [
+                { "value": "none", "label": "None — base units already" },
+                { "value": "k", "label": "Kilo (KB, decimal ×1,000)" },
+                { "value": "M", "label": "Mega (MB, decimal ×1e6)" },
+                { "value": "G", "label": "Giga (GB, decimal ×1e9)" },
+                { "value": "T", "label": "Tera (TB, decimal ×1e12)" },
+                { "value": "Ki", "label": "Kibi (KiB, binary ×1,024)" },
+                { "value": "Mi", "label": "Mebi (MiB, binary ×1024²)" },
+                { "value": "Gi", "label": "Gibi (GiB, binary ×1024³)" },
+                { "value": "Ti", "label": "Tebi (TiB, binary ×1024⁴)" }
+              ]
             }
           ]
         },
@@ -94,7 +102,11 @@
           "label": "Display",
           "helperText": "The format implies the raw value's unit — pick Duration when the value is seconds, Date/Time when it's a timestamp — so no query math is needed.",
           "layout": "row-4",
-          "visibleWhen": { "field": "value_type", "operator": "not_in", "value": ["text"] },
+          "visibleWhen": {
+            "field": "value_type",
+            "operator": "not_in",
+            "value": ["text"]
+          },
           "fields": [
             {
               "id": "value_format",
@@ -161,7 +173,7 @@
               "label": "Unit suffix",
               "default": "",
               "placeholder": "e.g. °F, %, psi",
-              "helperText": "Rendered inline after the value, same size."
+              "helperText": "Rendered inline after the value, same size. With a source unit set, use the BASE unit (B, not MB) — the prefix comes from the value."
             }
           ]
         },
@@ -169,7 +181,11 @@
           "id": "value_date_style",
           "label": "Date / time style",
           "layout": "row-4",
-          "visibleWhen": { "field": "value_format", "operator": "eq", "value": "datetime" },
+          "visibleWhen": {
+            "field": "value_format",
+            "operator": "eq",
+            "value": "datetime"
+          },
           "fields": [
             {
               "id": "value_date_format",
@@ -191,15 +207,32 @@
         {
           "id": "value_thresholds_numeric",
           "label": "Color thresholds",
-          "helperText": "Color the value by how large it is. Each threshold's color applies from its value upward, so the highest one the value reaches wins. Leave empty for the default text color.",
           "layout": "full-width",
-          "visibleWhen": { "field": "value_type", "operator": "not_in", "value": ["text"] },
+          "visibleWhen": {
+            "field": "value_type",
+            "operator": "not_in",
+            "value": ["text"]
+          },
           "fields": [
+            {
+              "id": "value_threshold_target",
+              "binds": "options.valueThresholdTarget",
+              "type": "radio",
+              "label": "Apply color to",
+              "default": "text",
+              "helperText": "Where a matched threshold's color lands. Only background fills the tile and derives a readable text color automatically. Text and background fills the tile AND colors the value with the threshold color — only legible on a light fill. When no threshold matches, the tile falls back to the Background color set below.",
+              "options": [
+                { "value": "text", "label": "Text" },
+                { "value": "both", "label": "Text and background" },
+                { "value": "background", "label": "Only background" }
+              ]
+            },
             {
               "id": "value_thresholds",
               "binds": "options.valueThresholds",
               "type": "threshold_list",
-              "label": "Thresholds"
+              "label": "Thresholds",
+              "helperText": "Color the value by how large it is. Each threshold's color applies from its value upward, so the highest one the value reaches wins. Leave empty for the default text color."
             }
           ]
         },
@@ -208,7 +241,11 @@
           "label": "Display",
           "helperText": "Text values render as-is. Decimal places and unit suffix don't apply to text, so they aren't shown here.",
           "layout": "row-4",
-          "visibleWhen": { "field": "value_type", "operator": "eq", "value": "text" },
+          "visibleWhen": {
+            "field": "value_type",
+            "operator": "eq",
+            "value": "text"
+          },
           "fields": [
             {
               "id": "value_text_case",
@@ -257,15 +294,48 @@
         {
           "id": "value_thresholds_text_group",
           "label": "Color rules",
-          "helperText": "Color the value by what it says. Add a rule per state you care about — there is no limit. Rules are checked top to bottom and the first match wins, so put specific rules above broad ones. Matching ignores case.",
           "layout": "full-width",
-          "visibleWhen": { "field": "value_type", "operator": "eq", "value": "text" },
+          "visibleWhen": {
+            "field": "value_type",
+            "operator": "eq",
+            "value": "text"
+          },
           "fields": [
+            {
+              "id": "value_threshold_target_text_field",
+              "binds": "options.valueThresholdTarget",
+              "type": "radio",
+              "label": "Apply color to",
+              "default": "text",
+              "helperText": "Where a matched rule's color lands. Only background fills the tile and derives a readable text color automatically — the usual pick for a status tile that should read green/red at a glance. When no rule matches, the tile falls back to the Background color set below.",
+              "options": [
+                { "value": "text", "label": "Text" },
+                { "value": "both", "label": "Text and background" },
+                { "value": "background", "label": "Only background" }
+              ]
+            },
             {
               "id": "value_text_thresholds",
               "binds": "options.valueTextThresholds",
               "type": "text_threshold_list",
-              "label": "Color rules"
+              "label": "Color rules",
+              "helperText": "Color the value by what it says. Add a rule per state you care about — there is no limit. Rules are checked top to bottom and the first match wins, so put specific rules above broad ones. Matching ignores case."
+            }
+          ]
+        },
+        {
+          "id": "value_background_group",
+          "label": "Background",
+          "helperText": "Static fill for the tile, used whenever no threshold or rule matches. The value's text color is paired automatically from Carbon's matching light/dark set, so the number stays readable. When a threshold matches and Apply color to is Background or Both, the threshold's color fills the tile instead of this one.",
+          "layout": "full-width",
+          "fields": [
+            {
+              "id": "value_background",
+              "binds": "options.valueBackground",
+              "type": "color_select",
+              "label": "Background color",
+              "default": "",
+              "showsContrastPartner": true
             }
           ]
         }
