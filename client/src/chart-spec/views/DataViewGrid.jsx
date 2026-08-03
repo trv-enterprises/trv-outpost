@@ -242,9 +242,24 @@ export default function DataViewGrid({
   // position survive streaming buffer slices.
   const latestRowObjs = useMemo(() => {
     if (!data?.rows) return [];
+    // Key the cells off data.columns DIRECTLY, not the loading-gated
+    // allColumns.
+    //
+    // allColumns is `(!loading && !error && data?.columns) || []`, so while
+    // loading it is EMPTY even when data.rows is already populated — which
+    // is exactly the state a streaming backfill produces (rows arrive, the
+    // hook is still "loading" until the live subscription is up). Building
+    // rows against [] yields objects carrying only __id and no field keys,
+    // so every valueGetter reads undefined and the grid renders four
+    // correctly-sized but completely BLANK rows.
+    //
+    // initialRowDataRef then latches those keyless objects as the grid's
+    // one-shot rowData and never revisits them, so the table stayed empty
+    // until a live record forced a fresh batch through applyTransaction.
+    const cols = data.columns || [];
     return data.rows.map((row, idx) => {
       const o = {};
-      allColumns.forEach((c, i) => { o[c] = row[i]; });
+      cols.forEach((c, i) => { o[c] = row[i]; });
       let h = 0;
       for (let i = 0; i < row.length; i++) {
         const s = row[i] == null ? '' : String(row[i]);
@@ -253,8 +268,11 @@ export default function DataViewGrid({
       o.__id = String(h) + '-' + idx;
       return o;
     });
+    // data.columns is a dep in its own right: columnsKey is derived from the
+    // loading-gated allColumns, so it is "" during the very window this memo
+    // has to rebuild in.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.rows, columnsKey]);
+  }, [data?.rows, data?.columns, columnsKey]);
 
   // Grid mount strategy: feed only the first snapshot as rowData, then
   // switch to imperative applyTransaction() so the grid stays mounted
@@ -268,7 +286,10 @@ export default function DataViewGrid({
   // Editor-only — view mode never sets it, so view-mode renders are
   // unaffected.
   const [liveResize, setLiveResize] = useState(null);
-  if (initialRowDataRef.current === null && latestRowObjs.length > 0) {
+  // Latch only once the snapshot has COLUMNS as well as rows — this is a
+  // one-shot that never revisits, so latching a keyless snapshot would pin
+  // the grid to blank rows permanently.
+  if (initialRowDataRef.current === null && latestRowObjs.length > 0 && (data?.columns?.length || 0) > 0) {
     initialRowDataRef.current = latestRowObjs;
   }
 

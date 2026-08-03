@@ -459,12 +459,29 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
   // window's rows stay in `data` while the new live subscription appends on top
   // — stale history glued to new-window live data. Resetting re-arms the
   // backfill so the re-run paints the new window fresh. Skip the first mount.
-  const prevBackfillKeyRef = useRef(effectiveBackfillKey);
+  //
+  // "Skip the first mount" has to mean the first REAL key, not the first
+  // render's key. datasourceType / datasourceTransport are populated by an
+  // async getConnection() call, so on mount effectiveBackfill is null and
+  // the key is the literal string "null"; it flips to the real query only
+  // once that fetch resolves. Seeding the ref with the mount-time value
+  // therefore guaranteed a spurious null->real "change" on every initial
+  // load, which called resetForFreshLoad() and blew away the state the
+  // backfill had just populated — a reset storm on first paint rather than
+  // the range-change re-init this is for.
+  //
+  // Track only transitions between two RESOLVED keys.
+  const prevBackfillKeyRef = useRef(null);
   useEffect(() => {
-    if (prevBackfillKeyRef.current === effectiveBackfillKey) return;
+    // Not resolved yet — nothing to compare against, and nothing to reset.
+    if (typeLoading) return;
+    const prev = prevBackfillKeyRef.current;
     prevBackfillKeyRef.current = effectiveBackfillKey;
+    // First resolved key: record it, don't treat it as a change.
+    if (prev === null) return;
+    if (prev === effectiveBackfillKey) return;
     resetForFreshLoad();
-  }, [effectiveBackfillKey, resetForFreshLoad]);
+  }, [effectiveBackfillKey, typeLoading, resetForFreshLoad]);
 
   // Connect to SSE stream for socket datasources (raw or aggregated)
   useEffect(() => {
