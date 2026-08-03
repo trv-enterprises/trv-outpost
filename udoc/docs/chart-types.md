@@ -51,6 +51,64 @@ choose) and is shown greyed out to make that clear. What the average is taken
 sliding window if one is set — so on a live chart, "average over the last 5
 minutes, ignoring spikes" is a sliding window of 5 minutes plus **Average**.
 
+### Current State Per Series
+
+Streaming data arrives as a running history: every disk reports over and over,
+so a live table fills with hundreds of rows covering the same handful of disks.
+**Current State Per Series** collapses that to one row per thing — the newest
+reading for each disk, volume, container, or sensor.
+
+Turn it on in the component editor and pick:
+
+- **Series Column** — the column whose distinct values you want one row each
+  for (`disk`, `volume`, `container`, `host`).
+- **Timestamp Column** *(optional)* — which column decides "newest." Leave it
+  blank on a live stream and the most recently received row wins, which is
+  almost always what you want.
+
+Available on **Data Table, Bar, Line, Area, and Scatter** — the types that show
+several series at once.
+
+It's deliberately **not** offered on **Value** or **Gauge**. Those show a single
+number, so "the current value of disk1" is better expressed with a *filter* on
+`disk1` plus an aggregation of **Last** — no per-series reduction needed.
+**Banded Bar** doesn't offer it either: its related columns all share one
+timestamp, so collapsing by series would reduce along the wrong axis.
+
+:::tip
+On a **non-streaming ts-store** connection, prefer the query type **Current
+State (latest per series)** instead. It does the same reduction at the source,
+so less data crosses the network. This editor setting exists for *streaming*
+connections, which can't push the reduction down to the source. Setting both
+does no harm, but only one of them is doing the work.
+:::
+
+#### Processing order
+
+The editor's Data Mapping tab groups these settings and lists them in the order
+they actually run — which matters, because they build on each other:
+
+**Server-side processing** happens first, before the data reaches your browser:
+
+1. **Time Bucket Aggregation** — combines readings into intervals (a reading
+   per minute instead of per second)
+
+**Client-side processing** then shapes what's already been fetched:
+
+2. **Sliding Window** — discards anything older than the span you set
+3. **Current State Per Series** — keeps the newest row per series
+4. **Filters** — include/exclude specific values
+5. **Aggregation & Sorting** — reduces to a number, sorts, limits rows
+
+Reading it top to bottom tells you what a component does. A useful consequence:
+the sliding window runs *before* Current State Per Series, so a disk that
+stopped reporting longer ago than the window drops off the table instead of
+lingering with a stale reading that looks current.
+
+Note that **Sliding Window** and **Time Bucket** are different tools that pair
+well. The window sets *how far back* you look; the bucket sets *how coarse* the
+readings are within it. "Last 6 hours, averaged per minute" uses both.
+
 ### Chart Options
 | Option | Applicable Types |
 |--------|-----------------|
