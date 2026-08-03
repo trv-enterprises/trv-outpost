@@ -29,15 +29,15 @@ violate it when adding features. The rule of thumb up front:
 ┌──────────────────────────────────────────────────────────────┐
 │  Layer 2 — Dashboard server                                  │
 │  Stream parser (`data_path`), aggregator registry,           │
-│  retained-state cache.                                       │
+│  retained-state cache, `time_bucket` (BucketAggregator).     │
 │  Use when source can't filter (MQTT) or when multiple        │
 │  charts share an upstream stream and need different views.   │
 └──────────────────────────────────────────────────────────────┘
                               ↓
 ┌──────────────────────────────────────────────────────────────┐
 │  Layer 3 — Chart (data_mapping)                              │
-│  filters, aggregation, time_bucket, series, group_by,        │
-│  sort_by, limit.                                             │
+│  filters, aggregation, sliding_window, latest_by, series,    │
+│  group_by, sort_by, limit.                                   │
 │  Use for interactive UX (changing a bucket without touching  │
 │  source config), or when a chart needs a final shape that's  │
 │  cheap to compute on a small batch.                          │
@@ -47,9 +47,27 @@ violate it when adding features. The rule of thumb up front:
 ### Layer 3 output shape: rows vs. a scalar
 
 `transformData` (`client/src/utils/dataTransforms.js`) runs its stages in a
-fixed order — **filters → sliding window → sort → limit → aggregation** — and
-that order is load-bearing: the sliding window is what *bounds* the
-aggregation, which is how "average over the last 5 minutes" is expressed.
+fixed order:
+
+**sliding window → latest-by → filters → sort → limit → aggregation**
+
+That order is load-bearing at three points:
+
+- The **sliding window runs first** because it *bounds* everything downstream.
+  It is what makes "average over the last 5 minutes" expressible, and it is
+  what makes "newest" meaningful for latest-by — a series that stopped
+  reporting outside the window drops out instead of surviving with a stale
+  row presented as current state.
+- **latest-by runs before `limit`.** Reversed, the limit would truncate the
+  buffer before the dedupe and silently drop whole series — a `limit: 5` would
+  return five samples of one disk rather than one row for each of five disks.
+- **Aggregation runs last**, over the already-reduced set. On a latest-by
+  component that means `avg` averages the current value *across* series, not
+  each series' history.
+
+The editor's Data Mapping tab lists these sections in this same order, under a
+"Client-side processing" heading, so the UI reads the way the pipeline runs.
+Keep the two in step when adding a stage.
 
 The aggregation stage returns **two** things, and which one a chart should
 read depends on the aggregation type:
@@ -98,7 +116,7 @@ Two related constraints on single-value types:
 |---------------|-------------------------------------------|---------------------------------------------|-------------------------------------------|
 | **SQL**       | `GROUP BY` + `SUM/AVG/COUNT/...`          | `WHERE`, parameterized                      | Native — `information_schema`, sample rows |
 | **Prometheus**| Built-in operators: `sum / avg / min / max / count`, with `by (...)` / `without (...)` to control label retention | Label matchers in `{...}`; boolean filters via `> 80`; `topk / bottomk` | None for a specific expression — `/api/v1/labels` is global, only post-hoc inspection of returned `metric: {}` |
-| **ts-store**  | Push connection's `agg_window` + `agg_default` (avg/min/max/sum). One bucketed series per push connection. | None pre-push — every record flows; consumer filters chart-side | Schema endpoint per store; columns and types are known |
+| **ts-store**  | Push connection's `agg_window` + `agg_default` (avg/min/max/sum). One bucketed series per push connection. | REST mode: substring `filter` (+ `filter_ignore_case`) and `latest_by` (newest record per distinct value). Neither is available on the push/streaming transport — those consumers filter and reduce chart-side. | Schema endpoint per store; columns and types are known |
 | **MQTT**      | None at the broker                        | Topic-level subscription only; no value-level filtering | None — payload shape is whatever the publisher sent; learned by inspection |
 | **REST API**  | Whatever the upstream API supports        | URL params / request body, fully API-specific | API-specific; treat as opaque |
 | **WebSocket** | None at protocol layer                    | Connection-level parser (`data_path`) carves a slice; no value filter | None — payload shape is publisher-defined |
@@ -113,6 +131,23 @@ Three concrete examples from this codebase:
    why ts-store push connections expose `agg_window` and `agg_default`
    as first-class config — the bandwidth and CPU savings are
    substantial on long-lived dashboards.
+
+1b. **ts-store `latest_by` — the same reduction at two tiers**:
+   "one row per disk" can be expressed either as a ts-store query param
+   (`query_config.params.latest_by`, Layer 1 — ts-store returns one
+   record per distinct value and the wire carries N rows instead of the
+   whole buffer) or as `data_mapping.latest_by` (Layer 3 — the browser
+   reduces already-fetched rows). **Prefer Layer 1 whenever the
+   connection can reach it.** The Layer 3 twin exists because a ts-store
+   *streaming* connection cannot: the push transport takes no query
+   params, so a live per-disk table has nowhere else to do the
+   reduction. Same semantics, chosen by what the transport allows —
+   not a duplicate implementation.
+
+   Setting both is harmless (the second reduction is a no-op on an
+   already-reduced set) but redundant; the editor surfaces an
+   informational note rather than blocking it, since keying the two on
+   *different* columns is a legitimate, if unusual, thing to express.
 
 2. **PromQL `avg(...)` vs no aggregation**: a query like
    `node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes`
@@ -147,6 +182,14 @@ Source-side isn't always available or appropriate:
   shouldn't ALTER the underlying SQL or PromQL or push config —
   that's a per-user view preference, not a data-source change.
   Chart-side `data_mapping.time_bucket` is the right home.
+
+  > **`time_bucket` is configured per component but EXECUTES on the
+  > server** (Layer 2), in `internal/streaming/aggregator.go`'s
+  > `BucketAggregator`, against the live stream. It has no
+  > implementation in `dataTransforms.js` and is not part of the
+  > client-side stage order above. The editor groups it under
+  > "Server-side processing" for exactly this reason — it changes what
+  > data reaches the browser, not just what the browser renders.
 
 - **Discovery / one-off introspection**. The SQL connection editor
   lets users sample rows to pick column names. That's a chart-side

@@ -8,6 +8,43 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Current State Per Series — one row per disk, volume, or container.**
+  Streaming data arrives as a running history, so a live data table fills with
+  hundreds of rows covering the same handful of series. The new **Current State
+  Per Series** setting collapses that to the newest row per series.
+
+  Pick the column whose distinct values you want one row each for (`disk`,
+  `volume`, `container`). A timestamp column is optional — leave it blank on a
+  live stream and the most recently received row wins.
+
+  Available on **Data Table, Bar, Line, Area, and Scatter** — the types that
+  show several series at once. Deliberately not offered on **Value** or
+  **Gauge**, where "the current value of disk1" is better expressed with a
+  filter plus a **Last** aggregation, nor on **Banded Bar**, whose related
+  columns share a single timestamp.
+
+  Non-streaming ts-store connections already had this as the **Current State
+  (latest per series)** query type, which reduces at the source and is still
+  the better choice there. This is the twin for *streaming* connections, which
+  can't push the reduction down to the source.
+
+### Changed
+
+- **The component editor's data-processing settings are now grouped and ordered
+  by when they actually run.** The Data Mapping tab previously listed these
+  sections in roughly the reverse of their execution order — Filters and
+  Aggregation appeared first, while the Sliding Window that runs *before* them
+  came last. Reading top to bottom suggested a sequence that wasn't what
+  happened, which made it easy to misjudge why a chart showed what it showed.
+
+  They now appear under two headings: **Server-side processing** (Time Bucket
+  Aggregation, which runs in the server against the live stream, before data
+  reaches the browser) and **Client-side processing** (Sliding Window → Current
+  State Per Series → Filters → Aggregation & Sorting, in pipeline order). No
+  setting changed behavior or moved tabs — only the order and grouping.
+
 ## [0.50.0] — 2026-07-31
 
 ### Added

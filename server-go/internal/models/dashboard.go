@@ -202,6 +202,22 @@ type SlidingWindow struct {
 	TimestampCol string `json:"timestamp_col" bson:"timestamp_col"` // Column containing timestamps
 }
 
+// LatestBy reduces a result set to the newest row per distinct value of a
+// key column — "current state per series" (e.g. one row per disk/volume).
+//
+// This is the CLIENT-SIDE twin of ts-store's server-side `latest_by` query
+// param: identical semantics applied at render time instead of at the source.
+// A REST ts-store component should prefer the server-side param (less data
+// over the wire); a streaming component has no such option, so the reduction
+// happens in the browser against the buffered stream.
+//
+// Applied by the client in dataTransforms.js — the server only stores it.
+// @Description Newest-row-per-key reduction for multi-series components
+type LatestBy struct {
+	KeyCol       string `json:"key_col" bson:"key_col"`                                 // Column whose distinct values define the series
+	TimestampCol string `json:"timestamp_col,omitempty" bson:"timestamp_col,omitempty"` // Column deciding which row is newest; empty = last-arrived wins (correct for append-ordered stream buffers)
+}
+
 // TimeBucket defines time-bucketed aggregation for streaming data
 // @Description Time bucket configuration for aggregating streaming data into intervals
 type TimeBucket struct {
@@ -236,6 +252,7 @@ type ChartDataMapping struct {
 	Filters        []DataFilter            `json:"filters" bson:"filters"`                                     // Client-side filters applied after data fetch
 	Aggregation    *DataAggregation        `json:"aggregation" bson:"aggregation"`                             // Aggregation to apply (first, last, avg, etc.)
 	SlidingWindow  *SlidingWindow          `json:"sliding_window" bson:"sliding_window"`                       // Time-based sliding window (e.g., last 5 minutes)
+	LatestBy       *LatestBy               `json:"latest_by,omitempty" bson:"latest_by,omitempty"`             // Newest row per distinct key value ("current state per series"). Client-side twin of ts-store's latest_by param; applied in dataTransforms.js. Multi-series views only (dataview/bar/line/area/scatter) — single-value views use a filter + last aggregation instead.
 	TimeBucket     *TimeBucket             `json:"time_bucket" bson:"time_bucket"`                             // Time-bucketed aggregation for streaming data
 	SortBy         string                  `json:"sort_by" bson:"sort_by"`                                     // Column to sort by
 	SortOrder      string                  `json:"sort_order" bson:"sort_order"`                               // asc or desc

@@ -21,6 +21,7 @@
     "has_filters": true,
     "has_aggregation": false,
     "has_sliding_window": false,
+    "has_latest_by": true,
     "has_legend_config": false,
     "has_tooltip_config": false,
     "has_axis_range": false,
