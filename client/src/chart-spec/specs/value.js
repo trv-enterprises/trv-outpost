@@ -98,6 +98,7 @@ export function buildOption(values, data, helpers = {}) {
       numberFormat: opts.valueFormat ?? opts.numberFormat,
       numberDecimals: opts.valueDecimals ?? opts.numberDecimals,
       numberDateFormat: opts.valueDateFormat ?? opts.numberDateFormat,
+      numberSourceUnit: opts.valueSourceUnit ?? opts.numberSourceUnit,
     }, formatCellValue);
   }
 
@@ -119,20 +120,41 @@ export function buildOption(values, data, helpers = {}) {
     ? resolveTextThresholdColor(raw, opts.valueTextThresholds)
     : resolveNumericThresholdColor(toNumber(raw, NaN), opts.valueThresholds);
 
-  // Background fill + its automatically-paired text color (#214). The author
-  // picks only the background; the readable partner is looked up from
-  // Carbon's aligned light/dark sets — see contrastPartnerFor.
-  const background = typeof opts.valueBackground === 'string' ? opts.valueBackground : '';
-  const pairedText = background ? contrastPartnerFor(background) : null;
+  // Static background fill (#214) — the author picks only the fill and the
+  // readable partner is looked up from Carbon's aligned light/dark sets.
+  // This is the tile's baseline: it applies whenever no threshold matched.
+  const staticBackground = typeof opts.valueBackground === 'string' ? opts.valueBackground : '';
 
-  // Precedence: a MATCHED threshold/rule still wins over the paired color.
-  // The pairing exists to keep an un-thresholded value readable on its fill,
-  // not to disable the author's explicit "color this red when it's bad" —
-  // silently dropping thresholds the moment a background is set would make
-  // the two features mutually exclusive for no reason. When no rule matched,
-  // the paired color takes over from the default text token (which would be
-  // near-invisible on a light fill).
-  const color = thresholdColor || pairedText;
+  // Where a MATCHED threshold's color lands. 'text' (default) is the
+  // historical behavior — recolor the value and leave the fill alone.
+  // 'background' fills the tile with the threshold color and derives a
+  // readable text color from it, which is what makes a status tile read
+  // green/red at a glance instead of needing the viewer to read the number.
+  // 'both' fills AND uses the threshold color for the text; only legible on
+  // a light fill, so the editor steers toward 'background'.
+  //
+  // Unmatched is deliberately NOT the same as 'text': with no rule matched
+  // there is no threshold color to place anywhere, so every mode falls back
+  // to the static fill. That keeps "no data yet"/"nothing exceptional" from
+  // rendering as an un-filled tile in one mode and a filled one in another.
+  const thresholdTarget = opts.valueThresholdTarget || 'text';
+  const fillsBackground = thresholdColor && (thresholdTarget === 'background' || thresholdTarget === 'both');
+  const background = fillsBackground ? thresholdColor : staticBackground;
+
+  // Text color, in precedence order:
+  //   1. 'background' mode with a match → derive from the threshold fill, so
+  //      the value stays readable on it (the author never picks this).
+  //   2. 'text'/'both' with a match → the threshold color itself.
+  //   3. No match → the static fill's paired partner, or null to let the
+  //      view use its default token when there's no fill either.
+  let color;
+  if (thresholdColor && thresholdTarget === 'background') {
+    color = contrastPartnerFor(thresholdColor);
+  } else if (thresholdColor) {
+    color = thresholdColor;
+  } else {
+    color = staticBackground ? contrastPartnerFor(staticBackground) : null;
+  }
 
   return {
     render: 'value',

@@ -48,7 +48,7 @@
  * @typedef {Object} FieldSpec
  * @property {string} id
  * @property {string} binds         dot-path into the saved component shape
- * @property {'column_select'|'column_multi_select'|'enum'|'text'|'number'|'boolean'|'slider'|'code'|'nullable_number'|'y_axis_columns_list'|'threshold_list'|'text_threshold_list'|'column_manager'|'band_scheme'|'color_select'} type
+ * @property {'column_select'|'column_multi_select'|'enum'|'radio'|'text'|'number'|'boolean'|'slider'|'code'|'nullable_number'|'y_axis_columns_list'|'threshold_list'|'text_threshold_list'|'column_manager'|'band_scheme'|'color_select'} type
  * @property {string} label
  * @property {boolean} [required]
  * @property {string} [helperText]
@@ -124,6 +124,7 @@ const SUPPORTED_FIELD_TYPES = new Set([
   'column_manager',      // dataview: visible-columns checklist + reorder + per-column alias
   'band_scheme',         // banded_bar: scheme selector + per-scheme band-column mappings
   'color_select',        // optional single color from the swatch palette ('' = unset)
+  'radio',               // same options shape as enum, rendered as an always-visible radio group
 ]);
 const SUPPORTED_LAYOUTS = new Set([
   'single-column',
@@ -168,9 +169,11 @@ function validateField(field, path, errors, sectionFieldIds) {
   if (typeof field.label !== 'string' || !field.label) {
     pushErr(errors, path, 'missing "label"');
   }
-  if (field.type === 'enum') {
+  // `radio` carries the same { value, label }[] shape as `enum` — only the
+  // control differs — so it gets the same options validation.
+  if (field.type === 'enum' || field.type === 'radio') {
     if (!Array.isArray(field.options) || field.options.length === 0) {
-      pushErr(errors, path, 'enum field must have non-empty options[]');
+      pushErr(errors, path, `${field.type} field must have non-empty options[]`);
     } else {
       field.options.forEach((opt, i) => {
         if (!opt || typeof opt !== 'object') {

@@ -15,6 +15,7 @@ import TextThresholdListField from './TextThresholdList';
 import ColumnManagerField from './ColumnManager';
 import BandSchemeField from './BandScheme';
 import ColorSelectField from './ColorSelect';
+import RadioField from './RadioField';
 
 const FIELD_RENDERERS = {
   // Stage 1
@@ -32,6 +33,10 @@ const FIELD_RENDERERS = {
   column_manager: ColumnManagerField,
   band_scheme: BandSchemeField,
   color_select: ColorSelectField,
+  // Same option shape as `enum`, shown as an always-visible radio group.
+  // For short mutually-exclusive choices where seeing the alternatives
+  // matters more than saving vertical space.
+  radio: RadioField,
   // column_multi_select + code stay deferred — no current spec uses
   // either. The schema validator permits them; renderers land when
   // a spec needs them.

@@ -98,7 +98,12 @@ func ChartOptionsSchema() map[string]interface{} {
 			"valueFormat": map[string]interface{}{
 				"type":        "string",
 				"enum":        []string{"auto", "plain", "compact", "duration", "duration_clock", "datetime"},
-				"description": "value chart format. The format IMPLIES the raw value's unit, so map a raw column and pick the format — do NOT do unit math in the query. \"auto\" (source precision), \"plain\" (1,234.5), \"compact\" (1.2M/3.4K), \"duration\" (value is SECONDS → \"2d 3h 4m\" — e.g. uptime.sec), \"duration_clock\" (seconds → HH:MM:SS), \"datetime\" (value is a timestamp → date/time via valueDateFormat). For bytes→GB there's no built-in scale yet; use compact or a custom-code value tile. A TEXT value renders as its own string and ignores this setting — no format or custom code is needed to show a status string.",
+				"description": "value chart format. The format IMPLIES the raw value's unit, so map a raw column and pick the format — do NOT do unit math in the query. \"auto\" (source precision), \"plain\" (1,234.5), \"compact\" (1.2M/3.4K), \"duration\" (value is SECONDS → \"2d 3h 4m\" — e.g. uptime.sec), \"duration_clock\" (seconds → HH:MM:SS), \"datetime\" (value is a timestamp → date/time via valueDateFormat). For a column already in KB/MB/GB, set valueSourceUnit and use \"compact\" — do NOT scale in the query. A TEXT value renders as its own string and ignores this setting — no format or custom code is needed to show a status string.",
+			},
+			"valueSourceUnit": map[string]interface{}{
+				"type":        "string",
+				"enum":        []string{"none", "k", "M", "G", "T", "Ki", "Mi", "Gi", "Ti"},
+				"description": "value chart: what the STORED number already is, so \"compact\" abbreviates from the right magnitude. Default \"none\" (already base units). A megabytes column holding 123456 with valueSourceUnit=\"M\" renders \"123.5G\"; leaving it \"none\" would report \"123.5k\". Decimal k/M/G/T are powers of 1000 (disk vendors, network figures); binary Ki/Mi/Gi/Ti are powers of 1024 (memory and filesystem stats) — picking the wrong family is a ~2.4% error at G. Set valueUnit to the BASE unit (\"B\", not \"MB\") — the prefix comes from the value. This replaces scaling in the query.",
 			},
 			"valueDateFormat": map[string]interface{}{
 				"type":        "string",
@@ -131,6 +136,15 @@ func ChartOptionsSchema() map[string]interface{} {
 				"description": "value chart, TEXT values: color the value by what it says. Array of {operator, match, color} where operator is \"eq\" (whole string) or \"contains\" (substring). Matching is CASE-INSENSITIVE, so match \"online\" catches \"ONLINE\". Rules are evaluated IN ORDER and the FIRST match wins — put specific rules above broad catch-alls. There is no limit on rule count; add one per state that matters. Example: [{operator:\"eq\",match:\"ONLINE\",color:\"#24a148\"},{operator:\"contains\",match:\"fail\",color:\"#da1e28\"}]. Omit for the default text color.",
 				"items":       map[string]interface{}{"type": "object"},
 			},
+			"valueThresholdTarget": map[string]interface{}{
+				"type":        "string",
+				"enum":        []string{"text", "background", "both"},
+				"description": "value chart: where a MATCHED threshold/rule color lands. \"text\" (default) recolors the value only. \"background\" fills the whole tile with the threshold color and derives a readable text color automatically — pick this for status tiles that should read green/red at a glance. \"both\" fills and also colors the text with the threshold color (only legible on a light fill — prefer \"background\"). Applies to valueThresholds and valueTextThresholds alike. When NO threshold matches, the tile falls back to valueBackground regardless of this setting.",
+			},
+			"valueBackground": map[string]interface{}{
+				"type":        "string",
+				"description": "value chart: static background fill (hex, e.g. \"#0f62fe\") used when no threshold/rule matches. The value's text color is paired automatically for contrast — do not try to set a text color. Leave unset for a normal transparent tile.",
+			},
 			"valueSize": map[string]interface{}{
 				"type": "integer",
 				// Constrain to the same discrete size ladder the editor's
@@ -157,10 +171,11 @@ var ChartOptionKeys = map[string]struct{}{
 	"sampling": {}, "legend": {}, "chartSmooth": {}, "showSymbol": {},
 	"chartShowDataLabels": {}, "chartSiPrefixes": {}, "chartShowZoomSlider": {}, "chartStacked": {},
 	"xAxisLabelRotate": {}, "barOrientation": {}, "barWidthPct": {},
-	"bandedBarStyle":   {}, "valueFormat": {}, "valueDateFormat": {},
-	"valueDecimals": {}, "valueUnit": {}, "valueSize": {},
+	"bandedBarStyle": {}, "valueFormat": {}, "valueDateFormat": {},
+	"valueDecimals": {}, "valueUnit": {}, "valueSize": {}, "valueSourceUnit": {},
 	"valueType": {}, "valueTextCase": {},
 	"valueThresholds": {}, "valueTextThresholds": {}, "title": {},
+	"valueThresholdTarget": {}, "valueBackground": {},
 }
 
 // Retired option-key spellings translate to their current names via

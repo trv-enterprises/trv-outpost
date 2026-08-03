@@ -1535,7 +1535,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         edgelakeDatabase: loadedEdgelakeDatabase,
         xAxisColumn: chart.data_mapping?.x_axis || '',
         xAxisLabel: chart.data_mapping?.x_axis_label || '',
-        xAxisFormat: chart.data_mapping?.x_axis_format || 'chart',
+        xAxisFormat: chart.data_mapping?.x_axis_format || 'auto',
         // Match the extracted state set above (strings + per-column colors) so
         // the dirty-tracking baseline equals the live state on load.
         yAxisColumns: loadedYCols,
@@ -4550,6 +4550,18 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       // Value-format enum + date sub-format (number-formats.js).
                       value_format: chartOptions.valueFormat ?? chartOptions.numberFormat ?? 'auto',
                       value_date_format: chartOptions.valueDateFormat ?? chartOptions.numberDateFormat ?? 'datetime',
+                      // Source unit: what the STORED number already is (a
+                      // megabytes column needs ×1e6 before SI, else 123456
+                      // MB reads "123.5k" instead of "123.5G"). 'none' is
+                      // the no-scaling default, so untouched records are
+                      // unaffected.
+                      value_source_unit: chartOptions.valueSourceUnit ?? chartOptions.numberSourceUnit ?? 'none',
+                      // Where a matched threshold's color lands (text |
+                      // background | both). Numeric and text value types each
+                      // render their own copy of the control, but there is ONE
+                      // stored key — same pattern as value_size/value_size_text.
+                      value_threshold_target: chartOptions.valueThresholdTarget ?? 'text',
+                      value_threshold_target_text_field: chartOptions.valueThresholdTarget ?? 'text',
                       // dataview: the column_manager widget reads these
                       // keys directly (visible_columns null = show all).
                       visible_columns: visibleColumns,
@@ -4754,6 +4766,21 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           break;
                         case 'value_date_format':
                           updateChartOption('valueDateFormat', value);
+                          break;
+                        // Source-unit enum stored as the raw key ('none' |
+                        // k/M/G/T | Ki/Mi/Gi/Ti); number-formats.js maps it
+                        // to a multiplier. Kept a string so it round-trips
+                        // through the spec options verbatim.
+                        case 'value_source_unit':
+                          updateChartOption('valueSourceUnit', value);
+                          break;
+                        // Both threshold-target fields write the SAME stored
+                        // key — the numeric and text Color-thresholds rows each
+                        // carry their own field id, but there is one setting,
+                        // so it survives a number↔text switch.
+                        case 'value_threshold_target':
+                        case 'value_threshold_target_text_field':
+                          updateChartOption('valueThresholdTarget', value);
                           break;
                         // dataview: the column_manager widget writes the
                         // visible-columns whitelist (null = show all) and
