@@ -154,15 +154,25 @@
   background-color: transparent;
 }
 
-/* ...and put the EVEN rows' fill back explicitly.
+/* ...and put the EVEN rows' fill back, as a TINT rather than a surface.
    They inherit --ag-background-color, which was cleared above, so without
    this every row goes transparent and the zebra striping collapses into
-   one flat sheet — rows become hard to track across a wide table. Naming
-   the token directly keeps the alternating tinted/transparent banding
-   that makes the table readable over an arbitrary canvas. */
+   one flat sheet — rows become hard to track across a wide table.
+
+   The solid --cds-layer-01 (#262626) used in solid mode is too heavy
+   here: it is a raised-surface tone, and against a transparent panel the
+   banding read as opaque slabs sitting on the canvas rather than a whisper
+   of structure over it.
+
+   A ~2% white wash lands on exactly #1b1b1b over the standard #161616
+   canvas — a single step up from the background — while STAYING
+   translucent, so a custom background or image still shows through the
+   tinted rows. An opaque #1b1b1b would hit the same colour on the default
+   canvas but block anything behind it, which is the whole point of
+   transparent mode. */
 :root[data-transparent-panels='true']:not([data-panel-background='solid']) .ag-theme-quartz-dark .ag-row-even,
 :root[data-panel-background='transparent'] .ag-theme-quartz-dark .ag-row-even {
-  background-color: var(--cds-layer-01);
+  background-color: rgba(255, 255, 255, 0.0215);
 }
 
 /*
