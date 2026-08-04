@@ -58,3 +58,18 @@
 .ag-theme-quartz-dark .ag-header-cell.ag-column-last .ag-header-cell-resize::after {
   display: none;
 }
+
+/*
+ * ...and the same on the data cells (#245).
+ *
+ * --ag-cell-horizontal-border puts a 1px right border on EVERY .ag-cell,
+ * which is what draws the column grid. On the last column there is no
+ * next column to divide from, so it lands flush against the panel's own
+ * border and reads as a doubled edge.
+ *
+ * Scoped to .ag-cell-last-left-pinned / .ag-column-last so the interior
+ * column dividers are untouched.
+ */
+.ag-theme-quartz-dark .ag-cell.ag-column-last {
+  border-right: none;
+}
