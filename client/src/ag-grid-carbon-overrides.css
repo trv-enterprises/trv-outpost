@@ -187,3 +187,15 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* ...and drop the grid's surrounding border entirely (#245).
+   The panel's own border is already transparent in this mode, so the
+   wrapper's 1px outline was the only thing left drawing a box — a frame
+   around a component that is supposed to be floating free on the canvas.
+   The INTERNAL rules stay: the line under the header and between rows are
+   what keep the data legible, and they read as structure rather than as a
+   container. */
+:root[data-transparent-panels='true']:not([data-panel-background='solid']) .ag-theme-quartz-dark .ag-root-wrapper,
+:root[data-panel-background='transparent'] .ag-theme-quartz-dark .ag-root-wrapper {
+  border: none;
+}
