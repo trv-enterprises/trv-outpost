@@ -164,3 +164,26 @@
 :root[data-panel-background='transparent'] .ag-theme-quartz-dark .ag-row-even {
   background-color: var(--cds-layer-01);
 }
+
+/*
+ * Match the cells' font smoothing to the rest of the grid (#245).
+ *
+ * AG Grid sets `-webkit-font-smoothing: antialiased` on the grid root but
+ * then explicitly overrides `.ag-cell` back to `subpixel-antialiased`.
+ * On macOS subpixel rendering lays down color fringes that thicken
+ * strokes, so the 400-weight cell text rendered VISIBLY HEAVIER than the
+ * 500-weight header sitting right above it — the header read as the
+ * lighter of the two, which is backwards.
+ *
+ * It is a rasterization difference, not a metrics one: the same string
+ * measures 91.08px in both contexts. Only the rendered weight differs.
+ *
+ * Putting the cells back on `antialiased` makes the whole grid rasterize
+ * consistently, so the header's heavier font-weight actually reads as
+ * heavier. Everything else about the type — family, size, weight,
+ * spacing — is untouched.
+ */
+.ag-theme-quartz-dark .ag-cell {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
