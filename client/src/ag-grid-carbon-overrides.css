@@ -209,3 +209,26 @@
 :root[data-panel-background='transparent'] .ag-theme-quartz-dark .ag-root-wrapper {
   border: none;
 }
+
+/* ...and the vertical column rules go too (#245).
+   Two separate things draw them: the 1px right border on every .ag-cell
+   (from --ag-cell-horizontal-border) and the 2px ::after inside each
+   header cell's resize handle. Both are cleared so the table reads as
+   floating rows over the canvas rather than a ruled grid.
+
+   The HORIZONTAL rules stay — the line under the header and the dividers
+   between rows are what keep a row readable across its full width, and
+   they carry the structure the column lines were adding redundantly.
+
+   The resize handle itself is untouched, so columns are still draggable;
+   only the bar it paints is hidden. */
+:root[data-transparent-panels='true']:not([data-panel-background='solid']) .ag-theme-quartz-dark .ag-cell,
+:root[data-panel-background='transparent'] .ag-theme-quartz-dark .ag-cell {
+  border-right-color: transparent;
+  border-left-color: transparent;
+}
+
+:root[data-transparent-panels='true']:not([data-panel-background='solid']) .ag-theme-quartz-dark .ag-header-cell-resize::after,
+:root[data-panel-background='transparent'] .ag-theme-quartz-dark .ag-header-cell-resize::after {
+  display: none;
+}
