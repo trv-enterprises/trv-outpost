@@ -38,3 +38,23 @@
      suppressCellFocus anyway, but this covers stray cases. */
   --ag-cell-horizontal-border: solid var(--ag-border-color);
 }
+
+/*
+ * Drop the trailing column separator on the LAST header cell (#245).
+ *
+ * AG Grid paints the inter-column divider as a 2px ::after inside each
+ * header cell's resize handle (.ag-header-cell-resize), and it does so
+ * for every column — including the last one, where there is no next
+ * column to separate from. With the table sized to its content that bar
+ * sat mid-panel and read as a stray floating tick; now that the last
+ * column flexes to fill the width it lands flush on the panel edge and
+ * doubles the panel's own border.
+ *
+ * Scoped to .ag-column-last so every genuine BETWEEN-column separator is
+ * untouched. The handle itself is deliberately left in place — the last
+ * column is still resizable, and hiding the element (rather than just
+ * its ::after) would take the drag target with it.
+ */
+.ag-theme-quartz-dark .ag-header-cell.ag-column-last .ag-header-cell-resize::after {
+  display: none;
+}
