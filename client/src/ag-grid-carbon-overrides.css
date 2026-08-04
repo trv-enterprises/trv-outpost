@@ -15,7 +15,11 @@
   --ag-background-color: var(--cds-layer-01);            /* #262626 — softer than #161616 base */
   --ag-foreground-color: var(--cds-text-primary);        /* #f4f4f4 */
   --ag-header-background-color: var(--cds-layer-02);     /* #393939 — one step up for header */
-  --ag-header-foreground-color: var(--cds-text-secondary);  /* #c6c6c6 */
+  /* Header labels at full text-primary (#f4f4f4), matching the cells.
+     text-secondary (#c6c6c6) left them reading as muted next to their own
+     data, which is backwards for a column heading. Weight is untouched —
+     the contrast lift alone is what gives the header its emphasis. */
+  --ag-header-foreground-color: var(--cds-text-primary);  /* #f4f4f4 */
   --ag-odd-row-background-color: var(--cds-layer-hover-01); /* #353535 — softer stripe, keeps header distinct */
   --ag-border-color: var(--cds-border-subtle-01);        /* #393939 */
   --ag-secondary-border-color: var(--cds-border-subtle-01);
@@ -31,10 +35,200 @@
   --ag-input-border-color: var(--cds-border-strong-01);
   --ag-font-family: 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif;
   --ag-font-size: 14px;
+  /* Header band, 4px tighter than Quartz's default (48px, from
+     `calc(14px + 8px * 4.25)`). Panel space is scarce — every pixel the
+     header gives back is a pixel of data — and at 44px the label and the
+     filter icon still sit comfortably.
+     NOTE: the ComponentEditor overrides this with an explicit
+     headerHeight={56}; its headers carry action buttons that wrap onto a
+     second line, so it needs the extra room and is unaffected here. */
+  --ag-header-height: 44px;
   /* Grid internals that don't key off the two seeds */
   --ag-icon-font-color: var(--cds-text-secondary);
   --ag-disabled-foreground-color: var(--cds-text-disabled);
   /* Kill the default bluish glow on the focused cell — our grid has
      suppressCellFocus anyway, but this covers stray cases. */
   --ag-cell-horizontal-border: solid var(--ag-border-color);
+}
+
+/*
+ * Drop the trailing column separator on the LAST header cell (#245).
+ *
+ * AG Grid paints the inter-column divider as a 2px ::after inside each
+ * header cell's resize handle (.ag-header-cell-resize), and it does so
+ * for every column — including the last one, where there is no next
+ * column to separate from. With the table sized to its content that bar
+ * sat mid-panel and read as a stray floating tick; now that the last
+ * column flexes to fill the width it lands flush on the panel edge and
+ * doubles the panel's own border.
+ *
+ * Scoped to .ag-column-last so every genuine BETWEEN-column separator is
+ * untouched. The handle itself is deliberately left in place — the last
+ * column is still resizable, and hiding the element (rather than just
+ * its ::after) would take the drag target with it.
+ */
+.ag-theme-quartz-dark .ag-header-cell.ag-column-last .ag-header-cell-resize::after {
+  display: none;
+}
+
+/*
+ * ...and the same on the data cells (#245).
+ *
+ * --ag-cell-horizontal-border puts a 1px right border on EVERY .ag-cell,
+ * which is what draws the column grid. On the last column there is no
+ * next column to divide from, so it lands flush against the panel's own
+ * border and reads as a doubled edge.
+ *
+ * Scoped to .ag-cell-last-left-pinned / .ag-column-last so the interior
+ * column dividers are untouched.
+ */
+.ag-theme-quartz-dark .ag-cell.ag-column-last {
+  border-right: none;
+}
+
+/*
+ * Square off AG Grid's wrapper (#245).
+ *
+ * .ag-root-wrapper draws a 1px border with an 8px radius around the whole
+ * grid. The border stays — it's the edge that closes the table off on the
+ * left, right, and bottom. The RADIUS goes: the grid sits inside a panel
+ * that has its own rounded corners, so a second, tighter curve just inside
+ * the first reads as a doubled corner rather than one frame.
+ */
+.ag-theme-quartz-dark .ag-root-wrapper {
+  border-radius: 0;
+}
+
+/*
+ * Transparent panels (#245).
+ *
+ * When the deployment setting `transparent_panels` is on (or a dashboard
+ * overrides to transparent), the panel drops its own fill so components
+ * float on the dashboard canvas. AG Grid paints its own surfaces though,
+ * so without this the table stayed an opaque slab sitting on a
+ * see-through panel — the one component that ignored the setting.
+ *
+ * Only the two LIGHTER surfaces are cleared: the header band and the odd
+ * (striped) rows, which are the same raised tone. The even rows keep
+ * their fill, so the zebra striping survives as alternating
+ * tinted/transparent bands instead of collapsing to a flat sheet. That is
+ * what keeps rows readable against an arbitrary canvas while still
+ * letting it show through.
+ *
+ * The grid's own background and its wrapper go too — both are the same
+ * base fill the panel just gave up.
+ *
+ * Gated on the same root attributes as DashboardGrid.scss: transparent
+ * when EITHER the deployment setting is on, or this dashboard overrides
+ * to transparent. A dashboard set to "solid" is excluded from the global
+ * arm via :not(), so the per-dashboard choice wins in both directions
+ * regardless of effect ordering (the global attribute is set
+ * asynchronously after identity resolves).
+ *
+ * Chrome only — nothing here changes geometry, so column widths, row
+ * heights, and scroll behavior are identical with the setting on or off.
+ */
+:root[data-transparent-panels='true']:not([data-panel-background='solid']) .ag-theme-quartz-dark,
+:root[data-panel-background='transparent'] .ag-theme-quartz-dark {
+  --ag-background-color: transparent;
+  --ag-header-background-color: transparent;
+  --ag-odd-row-background-color: transparent;
+}
+
+:root[data-transparent-panels='true']:not([data-panel-background='solid']) .ag-theme-quartz-dark .ag-root-wrapper,
+:root[data-panel-background='transparent'] .ag-theme-quartz-dark .ag-root-wrapper {
+  background-color: transparent;
+}
+
+/* .ag-header carries its own fill rather than reading the variable, so
+   clearing the token above is not enough on its own. */
+:root[data-transparent-panels='true']:not([data-panel-background='solid']) .ag-theme-quartz-dark .ag-header,
+:root[data-panel-background='transparent'] .ag-theme-quartz-dark .ag-header {
+  background-color: transparent;
+}
+
+/* Same for the striped rows — the odd-row fill is applied to the row
+   element, so the token alone leaves it painted. */
+:root[data-transparent-panels='true']:not([data-panel-background='solid']) .ag-theme-quartz-dark .ag-row-odd,
+:root[data-panel-background='transparent'] .ag-theme-quartz-dark .ag-row-odd {
+  background-color: transparent;
+}
+
+/* ...and put the EVEN rows' fill back, as a TINT rather than a surface.
+   They inherit --ag-background-color, which was cleared above, so without
+   this every row goes transparent and the zebra striping collapses into
+   one flat sheet — rows become hard to track across a wide table.
+
+   The solid --cds-layer-01 (#262626) used in solid mode is too heavy
+   here: it is a raised-surface tone, and against a transparent panel the
+   banding read as opaque slabs sitting on the canvas rather than a whisper
+   of structure over it.
+
+   A ~2% white wash lands on exactly #1b1b1b over the standard #161616
+   canvas — a single step up from the background — while STAYING
+   translucent, so a custom background or image still shows through the
+   tinted rows. An opaque #1b1b1b would hit the same colour on the default
+   canvas but block anything behind it, which is the whole point of
+   transparent mode. */
+:root[data-transparent-panels='true']:not([data-panel-background='solid']) .ag-theme-quartz-dark .ag-row-even,
+:root[data-panel-background='transparent'] .ag-theme-quartz-dark .ag-row-even {
+  background-color: rgba(255, 255, 255, 0.0215);
+}
+
+/*
+ * Match the cells' font smoothing to the rest of the grid (#245).
+ *
+ * AG Grid sets `-webkit-font-smoothing: antialiased` on the grid root but
+ * then explicitly overrides `.ag-cell` back to `subpixel-antialiased`.
+ * On macOS subpixel rendering lays down color fringes that thicken
+ * strokes, so the 400-weight cell text rendered VISIBLY HEAVIER than the
+ * 500-weight header sitting right above it — the header read as the
+ * lighter of the two, which is backwards.
+ *
+ * It is a rasterization difference, not a metrics one: the same string
+ * measures 91.08px in both contexts. Only the rendered weight differs.
+ *
+ * Putting the cells back on `antialiased` makes the whole grid rasterize
+ * consistently, so the header's heavier font-weight actually reads as
+ * heavier. Everything else about the type — family, size, weight,
+ * spacing — is untouched.
+ */
+.ag-theme-quartz-dark .ag-cell {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ...and drop the grid's surrounding border entirely (#245).
+   The panel's own border is already transparent in this mode, so the
+   wrapper's 1px outline was the only thing left drawing a box — a frame
+   around a component that is supposed to be floating free on the canvas.
+   The INTERNAL rules stay: the line under the header and between rows are
+   what keep the data legible, and they read as structure rather than as a
+   container. */
+:root[data-transparent-panels='true']:not([data-panel-background='solid']) .ag-theme-quartz-dark .ag-root-wrapper,
+:root[data-panel-background='transparent'] .ag-theme-quartz-dark .ag-root-wrapper {
+  border: none;
+}
+
+/* ...and the vertical column rules go too (#245).
+   Two separate things draw them: the 1px right border on every .ag-cell
+   (from --ag-cell-horizontal-border) and the 2px ::after inside each
+   header cell's resize handle. Both are cleared so the table reads as
+   floating rows over the canvas rather than a ruled grid.
+
+   The HORIZONTAL rules stay — the line under the header and the dividers
+   between rows are what keep a row readable across its full width, and
+   they carry the structure the column lines were adding redundantly.
+
+   The resize handle itself is untouched, so columns are still draggable;
+   only the bar it paints is hidden. */
+:root[data-transparent-panels='true']:not([data-panel-background='solid']) .ag-theme-quartz-dark .ag-cell,
+:root[data-panel-background='transparent'] .ag-theme-quartz-dark .ag-cell {
+  border-right-color: transparent;
+  border-left-color: transparent;
+}
+
+:root[data-transparent-panels='true']:not([data-panel-background='solid']) .ag-theme-quartz-dark .ag-header-cell-resize::after,
+:root[data-panel-background='transparent'] .ag-theme-quartz-dark .ag-header-cell-resize::after {
+  display: none;
 }

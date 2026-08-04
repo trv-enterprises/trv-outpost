@@ -7,6 +7,7 @@ import { Modal } from '@carbon/react';
 import ComponentEditor from './ComponentEditor';
 import apiClient from '../api/client';
 import { invalidateTagsCache } from './shared/tagsApi';
+import { clearDataviewLayoutForCurrentUser } from '../hooks/useDataviewLayout';
 import DiscardChangesModal from './shared/DiscardChangesModal';
 import SharedComponentWarningModal from './shared/SharedComponentWarningModal';
 import useSharedComponentWarning from '../hooks/useSharedComponentWarning';
@@ -98,6 +99,11 @@ function ComponentEditorModal({ open, onClose, onSave, chart, panelId, dashboard
       if (chart?.id) {
         // Update existing chart
         savedChart = await apiClient.updateComponent(chart.id, chartPayload);
+        // Drop the author's OWN per-user column widths for this component:
+        // they just re-specified the layout, so a width they dragged while
+        // viewing it earlier must not sit on top of what they saved. Same
+        // reasoning as ComponentDetailPage.confirmSave.
+        await clearDataviewLayoutForCurrentUser(chart.id);
       } else {
         // Create new chart
         savedChart = await apiClient.createComponent(chartPayload);

@@ -390,7 +390,7 @@ export default function DataViewGrid({
   }, [latestRowObjs, gridReady]);
 
   const columnDefs = useMemo(() => {
-    return orderedColumns.map((col) => {
+    const defs = orderedColumns.map((col) => {
       const isTimeCol = /time/i.test(col) || col === 'ts';
       const sampleVal = latestRowObjs[0]?.[col];
       const isNumCol = !isTimeCol && typeof sampleVal === 'number';
@@ -507,6 +507,41 @@ export default function DataViewGrid({
       }
       return def;
     });
+
+    // Fill the panel width: the LAST visible column takes the leftover
+    // (#245), so the table ends flush with the panel edge instead of
+    // stopping short and leaving a dead strip beside the rows.
+    //
+    // VIEWER ONLY. The editor is a fixed-width authoring surface whose
+    // columns may legitimately exceed the panel: the author is tuning
+    // widths there, and a column that stretches on its own would both hide
+    // the width being set and misrepresent what viewers actually get.
+    //
+    // Declarative flex, never measure-and-write. AG Grid solves flex inside
+    // its own layout pass, so the fill re-solves on every panel resize with
+    // no read-back of our own output and no feedback loop to guard against
+    // — the failure mode of every earlier attempt, which measured the box,
+    // wrote a width, and thereby changed the box being measured.
+    //
+    // The last column is deliberately never FIXED. Its author/content width
+    // becomes the minWidth FLOOR it can grow from but never shrink below,
+    // which is what makes the horizontal scrollbar appear when the table
+    // genuinely cannot fit, instead of columns being crushed. `width` and
+    // `flex` are mutually exclusive in AG Grid, so the width must be
+    // deleted for the flex to take effect at all.
+    if (!editable) {
+      const lastVisible = [...defs].reverse().find((d) => !hiddenSet.has(d.colId));
+      if (lastVisible) {
+        const floor = Number.isFinite(lastVisible.width) && lastVisible.width > 0
+          ? lastVisible.width
+          : (Number.isFinite(lastVisible.minWidth) ? lastVisible.minWidth : 0);
+        delete lastVisible.width;
+        lastVisible.flex = 1;
+        lastVisible.suppressSizeToFit = false;
+        if (floor > 0) lastVisible.minWidth = floor;
+      }
+    }
+    return defs;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columnsKey, userLayout, columnWidthsKey, columnFormatsKey, columnAliasesKey, columnRulesKey, editable, hiddenSet]);
 
@@ -517,16 +552,21 @@ export default function DataViewGrid({
   // field looked like it stopped working (the wide `msg` cell won). Restricting
   // the strategy's colIds to unsized columns lets the explicit widths stick.
   const autoSizeColIds = useMemo(() => {
-    return orderedColumns.filter((col) => {
-      // Editor: a "Show hidden" placeholder is fixed-width by design.
-      if (hiddenSet.has(col)) return false;
+    const visible = orderedColumns.filter((col) => !hiddenSet.has(col));
+    // In the VIEWER the last visible column carries flex:1 to fill the panel
+    // (#245). autoSizeColumns would pin it back to its content width, which
+    // is exactly the fill being cancelled — so it is never a candidate there.
+    // The editor has no fill, so every unsized column autosizes normally.
+    const flexed = editable ? null : visible[visible.length - 1];
+    return visible.filter((col) => {
+      if (flexed && col === flexed) return false;
       const uw = userLayout?.widths?.[col];
       const aw = Number(columnWidths?.[col]);
       const hasWidth = (uw && uw > 0) || (Number.isFinite(aw) && aw > 0);
       return !hasWidth;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columnsKey, userLayout, columnWidthsKey, hiddenSet]);
+  }, [columnsKey, userLayout, columnWidthsKey, hiddenSet, editable]);
 
   // Re-measure the unsized columns against the FORMATTED cell text.
   //
@@ -554,6 +594,9 @@ export default function DataViewGrid({
     const api = gridRef.current?.api;
     if (!api || autoSizeColIds.length === 0) return;
     const live = autoSizeColIds.filter((c) => api.getColumn?.(c));
+    // NOT skipHeader: the header is part of what a column must fit, and
+    // dropping it left long header names ellipsized while the freed width
+    // went to the flexed last column instead of the one that needed it.
     if (live.length > 0) api.autoSizeColumns(live);
   }, [gridReady, hasRows, autoSizeColIds, columnFormatsKey, columnAliasesKey]);
 
