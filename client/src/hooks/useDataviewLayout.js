@@ -25,6 +25,49 @@ const APP_CONFIG_KEY = 'dataview_layouts';
 const SAVE_DEBOUNCE_MS = 600;
 
 /**
+ * Drop the CURRENT user's saved layout for one dataview chart.
+ *
+ * Called when a component is saved in the editor. The author has just
+ * re-specified the column layout, and their own per-user drag widths from
+ * viewing that chart earlier would otherwise sit on top of it — the author
+ * changes a width, saves, opens the viewer, and sees the old width, with
+ * nothing on screen explaining why.
+ *
+ * `widthBase` only covers the narrower case where the author sets an
+ * explicit width on a column (a changed author width invalidates a drag
+ * captured against the old one). It does nothing when the author's change
+ * is to RELEASE a width to autosize, to reorder, or to hide a column —
+ * and it never applies at all to columns the author never pinned. Those
+ * are exactly the cases that leave a stale drag stranded.
+ *
+ * Scoped deliberately: this clears only the saving user's own layout for
+ * this one chart. Other users' layouts are untouched — their drags are
+ * still their own preference, and the existing widthBase rule remains the
+ * mechanism that invalidates those when it should.
+ *
+ * Best-effort: a failure here must never block the component save, so it
+ * resolves either way and only warns.
+ *
+ * @param {string} chartId
+ * @returns {Promise<void>}
+ */
+export async function clearDataviewLayoutForCurrentUser(chartId) {
+  if (!chartId) return;
+  const userGuid = apiClient.getCurrentUserGuid();
+  if (!userGuid) return;
+  try {
+    const cfg = await apiClient.getUserConfig(userGuid);
+    const existing = cfg?.settings?.[APP_CONFIG_KEY] || {};
+    if (!(chartId in existing)) return; // nothing stored — no write needed
+    const next = { ...existing };
+    delete next[chartId];
+    await apiClient.updateUserConfig(userGuid, { [APP_CONFIG_KEY]: next });
+  } catch (err) {
+    console.warn('[useDataviewLayout] Failed to clear layout:', err);
+  }
+}
+
+/**
  * useDataviewLayout
  *
  * Loads the current user's saved layout for a specific dataview chart

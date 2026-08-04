@@ -594,20 +594,10 @@ export default function DataViewGrid({
     const api = gridRef.current?.api;
     if (!api || autoSizeColIds.length === 0) return;
     const live = autoSizeColIds.filter((c) => api.getColumn?.(c));
-    if (live.length === 0) return;
-
-    // Size to the CELLS, not the header (#245).
-    //
-    // AG Grid's header measurement adds a large, near-constant amount per
-    // column — ~118px measured on total_bytes (300 with the header, 182
-    // without) for a cell painting "24.0T". Across every column that left
-    // the table far wider than its panel, which is what truncated one
-    // column while its neighbour sat half empty.
-    //
-    // skipHeader makes the column follow its CONTENT; the header then flows
-    // with the column (ellipsizing) rather than dictating its width. The
-    // colDef minWidth floors still stop a header collapsing to nothing.
-    api.autoSizeColumns({ colIds: live, skipHeader: true });
+    // NOT skipHeader: the header is part of what a column must fit, and
+    // dropping it left long header names ellipsized while the freed width
+    // went to the flexed last column instead of the one that needed it.
+    if (live.length > 0) api.autoSizeColumns(live);
   }, [gridReady, hasRows, autoSizeColIds, columnFormatsKey, columnAliasesKey]);
 
   // No default flex — columns size to their content via the grid's
@@ -753,10 +743,7 @@ export default function DataViewGrid({
           // widths aren't clobbered by fitCellContents on data render. When
           // every column is explicitly sized, omit the strategy entirely.
           autoSizeStrategy={autoSizeColIds.length > 0
-            // skipHeader matches the post-render autosize pass above: size to
-            // cell content and let the header flow with the column, rather
-            // than paying ~118px/column of header measurement (#245).
-            ? { type: 'fitCellContents', colIds: autoSizeColIds, skipHeader: true }
+            ? { type: 'fitCellContents', colIds: autoSizeColIds }
             : undefined}
           animateRows={false}
           suppressCellFocus

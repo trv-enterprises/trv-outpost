@@ -10,6 +10,7 @@ import ComponentEditor from '../components/ComponentEditor';
 import apiClient from '../api/client';
 import DiscardChangesModal from '../components/shared/DiscardChangesModal';
 import { invalidateTagsCache } from '../components/shared/tagsApi';
+import { clearDataviewLayoutForCurrentUser } from '../hooks/useDataviewLayout';
 import useAssistantSurface from '../hooks/useAssistantSurface';
 import { useAIAvailability } from '../context/AIAvailabilityContext';
 import './ComponentDetailPage.scss';
@@ -157,6 +158,21 @@ function ComponentDetailPage() {
         await apiClient.createComponent(pendingPayload);
       } else {
         await apiClient.updateComponent(id, pendingPayload);
+        // The author just re-specified this component's column layout, so
+        // drop THEIR OWN per-user drag widths for it. Otherwise the widths
+        // they dragged while viewing the chart earlier sit on top of the
+        // layout they just saved: change a column, save, open the viewer,
+        // and see the old width with nothing on screen explaining why.
+        //
+        // widthBase only invalidates a drag when the author sets an
+        // explicit width on that column — it does nothing when the change
+        // is to release a width back to autosize, reorder, or hide, which
+        // are exactly the cases that strand a stale drag.
+        //
+        // Only the saving user's own layout for this one component is
+        // cleared; other users' drags remain their own preference.
+        // Best-effort — never block the save on it.
+        await clearDataviewLayoutForCurrentUser(id);
       }
 
       invalidateTagsCache();
