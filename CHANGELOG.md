@@ -6,9 +6,29 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.51.0] — 2026-08-04
 
 ### Added
+
+- **Value tiles can scale a column that is already in KB/MB/GB.** A column
+  holding megabytes rendered `123,456` as `123.5k` — Compact SI scales the raw
+  number with no idea what it means. Set the tile's **Source unit** and it
+  scales once before formatting, so `plain`, `compact`, `auto`, and `duration`
+  all agree and a tile can't disagree with a grid cell on the same column.
+
+  Decimal (`k`/`M`/`G`/`T`) and binary (`Ki`/`Mi`/`Gi`/`Ti`) are separate
+  entries deliberately: disk vendors mean 1e6 by "MB" while memory and
+  filesystem stats mean 1024², and collapsing them is a silent 2.4% error at G
+  and ~10% at T. The unit is named rather than entered as a raw multiplier —
+  a multiplier can't be validated, so a mistyped zero renders a plausible
+  wrong number with nothing to catch it.
+
+- **Value thresholds can color the tile background, not just the text.**
+  Thresholds previously only set the text color, and the Background option was
+  a static fill with no connection to them, so "fill the tile red when it's
+  bad" was unreachable. A new **Threshold target** chooses Text (the existing
+  default), Text and background, or Only background — the last deriving a
+  readable text color automatically.
 
 - **Current State Per Series — one row per disk, volume, or container.**
   Streaming data arrives as a running history, so a live data table fills with
@@ -44,6 +64,61 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   reaches the browser) and **Client-side processing** (Sliding Window → Current
   State Per Series → Filters → Aggregation & Sorting, in pipeline order). No
   setting changed behavior or moved tabs — only the order and grouping.
+
+- **Data tables fill the width of their panel.** The last column now takes up
+  whatever width is left over, so a table ends flush with the panel edge
+  instead of stopping short and leaving a dead strip beside the rows. The last
+  column's own width becomes a floor it can grow from but never shrink below,
+  so a table that genuinely doesn't fit still gets a horizontal scrollbar
+  rather than crushed columns.
+
+  The component editor is deliberately excluded — it's a fixed-width authoring
+  surface where columns may legitimately exceed the panel, and a column that
+  stretched on its own would hide the width being set.
+
+- **Data tables honor the transparent-panels setting.** The data table was the
+  one component that ignored `transparent_panels`, staying an opaque slab on a
+  see-through panel. The header band, the lighter striped rows, the surround
+  border, and the vertical column rules now let the canvas through. The
+  alternating row tint stays as a translucent wash so rows remain trackable
+  across a wide table without blocking a background image.
+
+- **Data table chrome cleanup.** Removed a stray separator after the last
+  header cell and a doubled border down the right of the rows, squared off the
+  grid's rounded corners so they no longer fight the panel's own, and tightened
+  the header band by 4px — which is what lets a partial row show at the bottom
+  as the "there's more, scroll" cue. Header labels now match the row text
+  color, and cell text no longer renders heavier than the header above it.
+
+### Fixed
+
+- **Streaming data tables showed no rows until a live record arrived.**
+  Affected every streaming data table. The grid is seeded once and then fed by
+  transactions, but a backfill that resolved before the grid mounted was
+  dropped by both paths — so the table sat empty until a record happened to
+  push, then painted normally.
+
+- **A dashboard could briefly reset its own layout on load.** A configuration
+  read that ran before the auth token was available returned nothing, which
+  read as "no saved layout" and triggered a spurious reset.
+
+- **An author's own column widths no longer override the layout they just
+  saved.** Column widths are per-user, so a viewer's drag beats the author
+  config — right for viewers, but it stranded the author: drag a column while
+  viewing, later edit that component and save, and the old widths sat on top of
+  the layout just saved with nothing on screen explaining why. Saving a
+  component now clears that user's stored widths for it. Other users' drags are
+  untouched.
+
+- **ts-store alerts no longer imply multiple rules per alert.** The UI and docs
+  still described a multi-rule model that ts-store doesn't have.
+
+### Security
+
+- **Dependency vulnerabilities cleared across server, client, Electron, and the
+  docs site**, including two reachable Go vulnerabilities that Dependabot never
+  reported. Electron moved 28 → 43. The npm audit now scans every workspace
+  rather than the client alone.
 
 ## [0.50.0] — 2026-07-31
 
