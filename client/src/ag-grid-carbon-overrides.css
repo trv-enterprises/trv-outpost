@@ -94,3 +94,69 @@
 .ag-theme-quartz-dark .ag-root-wrapper {
   border-radius: 0;
 }
+
+/*
+ * Transparent panels (#245).
+ *
+ * When the deployment setting `transparent_panels` is on (or a dashboard
+ * overrides to transparent), the panel drops its own fill so components
+ * float on the dashboard canvas. AG Grid paints its own surfaces though,
+ * so without this the table stayed an opaque slab sitting on a
+ * see-through panel — the one component that ignored the setting.
+ *
+ * Only the two LIGHTER surfaces are cleared: the header band and the odd
+ * (striped) rows, which are the same raised tone. The even rows keep
+ * their fill, so the zebra striping survives as alternating
+ * tinted/transparent bands instead of collapsing to a flat sheet. That is
+ * what keeps rows readable against an arbitrary canvas while still
+ * letting it show through.
+ *
+ * The grid's own background and its wrapper go too — both are the same
+ * base fill the panel just gave up.
+ *
+ * Gated on the same root attributes as DashboardGrid.scss: transparent
+ * when EITHER the deployment setting is on, or this dashboard overrides
+ * to transparent. A dashboard set to "solid" is excluded from the global
+ * arm via :not(), so the per-dashboard choice wins in both directions
+ * regardless of effect ordering (the global attribute is set
+ * asynchronously after identity resolves).
+ *
+ * Chrome only — nothing here changes geometry, so column widths, row
+ * heights, and scroll behavior are identical with the setting on or off.
+ */
+:root[data-transparent-panels='true']:not([data-panel-background='solid']) .ag-theme-quartz-dark,
+:root[data-panel-background='transparent'] .ag-theme-quartz-dark {
+  --ag-background-color: transparent;
+  --ag-header-background-color: transparent;
+  --ag-odd-row-background-color: transparent;
+}
+
+:root[data-transparent-panels='true']:not([data-panel-background='solid']) .ag-theme-quartz-dark .ag-root-wrapper,
+:root[data-panel-background='transparent'] .ag-theme-quartz-dark .ag-root-wrapper {
+  background-color: transparent;
+}
+
+/* .ag-header carries its own fill rather than reading the variable, so
+   clearing the token above is not enough on its own. */
+:root[data-transparent-panels='true']:not([data-panel-background='solid']) .ag-theme-quartz-dark .ag-header,
+:root[data-panel-background='transparent'] .ag-theme-quartz-dark .ag-header {
+  background-color: transparent;
+}
+
+/* Same for the striped rows — the odd-row fill is applied to the row
+   element, so the token alone leaves it painted. */
+:root[data-transparent-panels='true']:not([data-panel-background='solid']) .ag-theme-quartz-dark .ag-row-odd,
+:root[data-panel-background='transparent'] .ag-theme-quartz-dark .ag-row-odd {
+  background-color: transparent;
+}
+
+/* ...and put the EVEN rows' fill back explicitly.
+   They inherit --ag-background-color, which was cleared above, so without
+   this every row goes transparent and the zebra striping collapses into
+   one flat sheet — rows become hard to track across a wide table. Naming
+   the token directly keeps the alternating tinted/transparent banding
+   that makes the table readable over an arbitrary canvas. */
+:root[data-transparent-panels='true']:not([data-panel-background='solid']) .ag-theme-quartz-dark .ag-row-even,
+:root[data-panel-background='transparent'] .ag-theme-quartz-dark .ag-row-even {
+  background-color: var(--cds-layer-01);
+}
