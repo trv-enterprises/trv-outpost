@@ -390,7 +390,7 @@ export default function DataViewGrid({
   }, [latestRowObjs, gridReady]);
 
   const columnDefs = useMemo(() => {
-    const defs = orderedColumns.map((col) => {
+    return orderedColumns.map((col) => {
       const isTimeCol = /time/i.test(col) || col === 'ts';
       const sampleVal = latestRowObjs[0]?.[col];
       const isNumCol = !isTimeCol && typeof sampleVal === 'number';
@@ -507,44 +507,6 @@ export default function DataViewGrid({
       }
       return def;
     });
-
-    // Fill the panel width: the LAST visible column absorbs the leftover
-    // (#245). Without this the table ends wherever its columns happen to
-    // add up and leaves a dead strip — the last column's right border
-    // reads as a stray separator floating mid-panel.
-    //
-    // Declarative `flex` ONLY. Every previous attempt measured the grid's
-    // box and wrote a width back, which changes the very box being
-    // measured: widen → total exceeds the viewport → scrollbar appears →
-    // available size changes → ResizeObserver → widen again. AG Grid
-    // solves flex internally during its own layout pass, every frame,
-    // with no read-back, so there is no loop to guard against.
-    //
-    // Three constraints, each of which silently defeats the fill:
-    //  1. `width` and `flex` are mutually exclusive — a leftover `width`
-    //     wins and the column never flexes. Delete it and carry the value
-    //     into minWidth so an explicitly-sized last column keeps its size
-    //     as a FLOOR and only ever grows into slack.
-    //  2. The flexed column must be excluded from autoSizeColumns (see
-    //     autoSizeColIds), which would otherwise pin it to content width.
-    //  3. defaultColDef must carry no flex — a default flex:1 spreads the
-    //     slack across every column and cancels the content autosize.
-    //     Only this one column gets it, explicitly.
-    //
-    // `minWidth` is what makes overflow still scroll rather than shrink:
-    // flex never sizes a column below it, so when the columns genuinely
-    // don't fit, the horizontal scrollbar appears as it should.
-    const lastVisible = [...defs].reverse().find((d) => !hiddenSet.has(d.colId));
-    if (lastVisible) {
-      const floor = Number.isFinite(lastVisible.width) && lastVisible.width > 0
-        ? lastVisible.width
-        : (Number.isFinite(lastVisible.minWidth) ? lastVisible.minWidth : 0);
-      delete lastVisible.width;
-      lastVisible.flex = 1;
-      lastVisible.suppressSizeToFit = false;
-      if (floor > 0) lastVisible.minWidth = floor;
-    }
-    return defs;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columnsKey, userLayout, columnWidthsKey, columnFormatsKey, columnAliasesKey, columnRulesKey, editable, hiddenSet]);
 
@@ -555,13 +517,9 @@ export default function DataViewGrid({
   // field looked like it stopped working (the wide `msg` cell won). Restricting
   // the strategy's colIds to unsized columns lets the explicit widths stick.
   const autoSizeColIds = useMemo(() => {
-    const visible = orderedColumns.filter((col) => !hiddenSet.has(col));
-    // The last visible column carries flex:1 to fill the panel (#245).
-    // autoSizeColumns would pin it to its content width, which is exactly
-    // the fill being cancelled — so it is never a candidate here.
-    const flexed = visible[visible.length - 1];
-    return visible.filter((col) => {
-      if (col === flexed) return false;
+    return orderedColumns.filter((col) => {
+      // Editor: a "Show hidden" placeholder is fixed-width by design.
+      if (hiddenSet.has(col)) return false;
       const uw = userLayout?.widths?.[col];
       const aw = Number(columnWidths?.[col]);
       const hasWidth = (uw && uw > 0) || (Number.isFinite(aw) && aw > 0);
