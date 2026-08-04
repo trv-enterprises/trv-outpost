@@ -73,3 +73,16 @@
 .ag-theme-quartz-dark .ag-cell.ag-column-last {
   border-right: none;
 }
+
+/*
+ * Square off AG Grid's wrapper (#245).
+ *
+ * .ag-root-wrapper draws a 1px border with an 8px radius around the whole
+ * grid. The border stays — it's the edge that closes the table off on the
+ * left, right, and bottom. The RADIUS goes: the grid sits inside a panel
+ * that has its own rounded corners, so a second, tighter curve just inside
+ * the first reads as a doubled corner rather than one frame.
+ */
+.ag-theme-quartz-dark .ag-root-wrapper {
+  border-radius: 0;
+}
