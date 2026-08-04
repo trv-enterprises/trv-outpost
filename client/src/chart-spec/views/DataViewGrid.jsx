@@ -589,6 +589,25 @@ export default function DataViewGrid({
   // when content first exists to measure. Depending on latestRowObjs would
   // re-autosize on every streaming batch and fight a viewer's column drag.
   const hasRows = latestRowObjs.length > 0;
+  // Depend on the column LIST, not on autoSizeColIds' object identity.
+  //
+  // autoSizeColIds is a useMemo keyed partly on `userLayout`, which is an
+  // OBJECT from useDataviewLayout. When that hook refetches — which it does
+  // around a data refresh — the layout object gets a new identity, the memo
+  // re-derives to an equal-but-new array, and this effect re-fires even
+  // though nothing about the columns changed.
+  //
+  // That re-run is not harmless. By then flex:1 is live on the last column,
+  // so autoSizeColumns measures a layout the fill has already stretched and
+  // returns different widths than it did at mount — narrow enough that
+  // "Storage Pool 1" fitted on first paint and truncated to "Storage Poo..."
+  // after the first refresh.
+  //
+  // Joining to a string makes the dep VALUE-based, so an identical column
+  // set no longer retriggers the pass. Genuine changes (a column added,
+  // removed, or newly given an explicit width) still change the string and
+  // still re-measure.
+  const autoSizeKey = autoSizeColIds.join('|');
   useEffect(() => {
     if (!gridReady || !hasRows) return;
     const api = gridRef.current?.api;
@@ -598,7 +617,8 @@ export default function DataViewGrid({
     // dropping it left long header names ellipsized while the freed width
     // went to the flexed last column instead of the one that needed it.
     if (live.length > 0) api.autoSizeColumns(live);
-  }, [gridReady, hasRows, autoSizeColIds, columnFormatsKey, columnAliasesKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gridReady, hasRows, autoSizeKey, columnFormatsKey, columnAliasesKey]);
 
   // No default flex — columns size to their content via the grid's
   // autoSizeStrategy=fitCellContents. A default flex=1 would cause AG Grid
