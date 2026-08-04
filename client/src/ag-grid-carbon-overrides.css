@@ -15,7 +15,11 @@
   --ag-background-color: var(--cds-layer-01);            /* #262626 — softer than #161616 base */
   --ag-foreground-color: var(--cds-text-primary);        /* #f4f4f4 */
   --ag-header-background-color: var(--cds-layer-02);     /* #393939 — one step up for header */
-  --ag-header-foreground-color: var(--cds-text-secondary);  /* #c6c6c6 */
+  /* Header labels at full text-primary (#f4f4f4), matching the cells.
+     text-secondary (#c6c6c6) left them reading as muted next to their own
+     data, which is backwards for a column heading. Weight is untouched —
+     the contrast lift alone is what gives the header its emphasis. */
+  --ag-header-foreground-color: var(--cds-text-primary);  /* #f4f4f4 */
   --ag-odd-row-background-color: var(--cds-layer-hover-01); /* #353535 — softer stripe, keeps header distinct */
   --ag-border-color: var(--cds-border-subtle-01);        /* #393939 */
   --ag-secondary-border-color: var(--cds-border-subtle-01);
