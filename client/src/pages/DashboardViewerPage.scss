@@ -50,6 +50,71 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
         padding-left: 3.5rem;
       }
     }
+
+    // ── Transparent header (fullscreen + transparent panels) ─────────
+    //
+    // In fullscreen the toolbar is the only opaque band left on screen once
+    // the panels themselves are see-through: the dashboard reads as floating
+    // on the canvas, interrupted by a solid grey strip across the top. Drop
+    // its fill so the canvas runs behind it too.
+    //
+    // "Currently transparent" is two separate states, and both must arm this:
+    //   1. the deployment setting `transparent_panels` is on, or
+    //   2. THIS dashboard overrides `panel_background` to transparent.
+    // A dashboard explicitly set to "solid" is excluded from arm 1 via
+    // :not(), so a per-dashboard choice wins in both directions no matter
+    // which effect ran last — the global attribute is set asynchronously
+    // after identity resolves, so ordering can't be relied on. Same gating
+    // shape as DashboardGrid.scss and the AG Grid overrides.
+    //
+    // FULLSCREEN ONLY. Windowed view keeps the solid toolbar: there it sits
+    // under the app header against browser chrome, where a transparent strip
+    // reads as a rendering glitch rather than a design.
+    //
+    // The bottom rule stays. It's what keeps the header a header — without
+    // it the title and controls float directly against panel content near
+    // the top of the grid, which is where they visually collide.
+    //
+    // Chrome only. Nothing here changes the toolbar's box: the 56px height
+    // and its 57px contribution to the grid's row budget are untouched, so
+    // dashboard geometry is byte-identical with the setting on or off.
+    :root[data-transparent-panels='true']:not([data-panel-background='solid']) &,
+    :root[data-panel-background='transparent'] & {
+      .viewer-toolbar {
+        background-color: transparent;
+        border-bottom-color: var(--cds-border-subtle-01);
+      }
+    }
+
+    // ── Auto-hide the toolbar (kiosk) ────────────────────────────────
+    //
+    // Fades the toolbar out while leaving its BOX in place. This is the
+    // whole point of doing it with opacity rather than display/height: the
+    // toolbar keeps contributing its 57px to the layout, so the grid's row
+    // budget and every panel's geometry are byte-identical whether the
+    // header is showing or not. Collapsing it would re-lay-out the grid on
+    // every reveal and could gain or lose a dashboard row as it toggles.
+    //
+    // pointer-events: none while hidden so the invisible bar can't swallow
+    // clicks meant for the dashboard underneath — but the reveal listener
+    // is on `window`, so a tap in the top strip still brings it back.
+    //
+    // visibility joins the transition (rather than being switched
+    // instantly) so the hidden toolbar is removed from the accessibility
+    // tree and taken out of tab order, instead of leaving invisible focus
+    // targets a keyboard user can land on.
+    &.header-hidden .viewer-toolbar {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity 240ms ease, visibility 0s linear 240ms;
+    }
+
+    .viewer-toolbar {
+      opacity: 1;
+      visibility: visible;
+      transition: opacity 160ms ease, visibility 0s linear 0s;
+    }
   }
 
   // Edit mode: the toolbar carries more controls (dimension picker, zoom,
@@ -1442,7 +1507,12 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
 .dashboard-actions-menu.cds--overflow-menu-options {
   inline-size: max-content;
   min-inline-size: 13rem; // keep Carbon's default as the floor
-  max-inline-size: 22rem; // guard against a runaway-long label
+  // Raised from 22rem: "Auto-hide toolbar in fullscreen" plus the leading
+  // check column exceeded that cap, and Carbon ellipsizes the label rather
+  // than growing — so the item truncated mid-word with the check clipped
+  // off the end. Still bounded, so a genuinely runaway label can't stretch
+  // the menu across the screen.
+  max-inline-size: 26rem;
 
   // Carbon ellipsizes the label on __option-content (not __btn). Let the
   // content size to its text so the container's max-content width can fit it.

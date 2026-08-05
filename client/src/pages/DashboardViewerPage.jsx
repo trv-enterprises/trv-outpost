@@ -204,6 +204,19 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // Dashboard command subscription (voice control / kiosk integration)
   const [dashboardCommand, setDashboardCommand] = useState(null); // Latest command: { target, action, ... }
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Auto-hide the fullscreen toolbar (kiosk). Per-user preference, default
+  // OFF, overridable per-URL via ?autohide=1|0 so a kiosk can be pointed at
+  // a link that hides the chrome without changing the signed-in user's
+  // preference (kiosks often share an account).
+  //
+  // OVERLAY, not reflow: the toolbar keeps its 57px of layout even while
+  // hidden, so the grid's row budget — and therefore dashboard geometry —
+  // is identical whether the header is showing or not. Reclaiming the space
+  // would re-lay-out the grid on every show/hide and could gain or lose a
+  // row as the header toggles.
+  const [autoHideHeader, setAutoHideHeader] = useState(false);
+  // Whether the auto-hidden toolbar is currently revealed.
+  const [headerRevealed, setHeaderRevealed] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(new Date());
   // "Measure screen size" helper. The published dimension names (2K, 4K)
   // overstate the usable area — the OS steals top space (menu bar / notch
@@ -1398,6 +1411,40 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     fetchDashboard();
   }, [location.state, fetchDashboard]);
 
+  // Resolve the auto-hide-header setting: URL wins, else user preference.
+  //
+  // `?autohide=1` (or 0/true/false) is the kiosk lever — a kiosk can be
+  // pointed at a link that hides the chrome WITHOUT changing the preference
+  // of the account it happens to be signed in as, which matters because
+  // kiosks routinely share a login with a human.
+  //
+  // Deliberately does NOT write the URL value back to the stored
+  // preference: a link is a per-view instruction, not a preference change,
+  // and persisting it would mean opening one kiosk link silently reconfigured
+  // that user's normal browsing.
+  useEffect(() => {
+    let cancelled = false;
+    const raw = searchParams.get('autohide');
+    if (raw != null) {
+      const on = raw === '1' || raw.toLowerCase() === 'true';
+      setAutoHideHeader(on);
+      return undefined;
+    }
+    const load = async () => {
+      const userGuid = apiClient.getCurrentUserGuid();
+      if (!userGuid) return;
+      try {
+        const config = await apiClient.getUserConfig(userGuid);
+        if (cancelled) return;
+        setAutoHideHeader(config?.settings?.dashboard_autohide_header === true);
+      } catch {
+        // No user config yet — default off.
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [searchParams]);
+
   // Check if this dashboard is the user's default
   useEffect(() => {
     const checkIfDefault = async () => {
@@ -1414,6 +1461,22 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     };
     checkIfDefault();
   }, [id]);
+
+  // Toggle the auto-hide preference. Optimistic: the UI flips immediately
+  // and the write is fire-and-forget, because this is a display preference
+  // whose failure mode (it reverts on next load) is self-explaining and not
+  // worth a blocking spinner or an error dialog.
+  const handleToggleAutoHideHeader = async () => {
+    const next = !autoHideHeader;
+    setAutoHideHeader(next);
+    const userGuid = apiClient.getCurrentUserGuid();
+    if (!userGuid) return;
+    try {
+      await apiClient.updateUserConfig(userGuid, { dashboard_autohide_header: next });
+    } catch (err) {
+      console.error('Failed to save auto-hide preference:', err);
+    }
+  };
 
   const handleSetAsDefault = async () => {
     const userGuid = apiClient.getCurrentUserGuid();
@@ -1509,6 +1572,62 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       commandSubscribedRef.current = false;
     };
   }, []); // Subscribe once on mount, unsubscribe on unmount
+
+  // Auto-hide reveal/conceal (kiosk).
+  //
+  // Only armed in FULLSCREEN with the setting on — windowed view always
+  // shows its toolbar, and hiding chrome the user didn't ask to hide is a
+  // good way to make an app feel broken.
+  //
+  // Reveal is a TOP-EDGE hit, and deliberately listens for both pointermove
+  // and pointerdown: a desktop user slides the mouse up, a touch kiosk taps
+  // the strip. Listening only for mouse movement would leave a touch-only
+  // kiosk with no way to reach the controls at all — the header would be
+  // unrecoverable without going through the OS.
+  //
+  // The reveal zone is generous (72px, slightly more than the 57px toolbar)
+  // so a tap aimed at the header still lands even if it is currently hidden
+  // and therefore invisible to aim at.
+  //
+  // Escape also reveals: a keyboard is the one input a kiosk might have when
+  // its touchscreen is unresponsive, and it costs nothing to honour.
+  useEffect(() => {
+    if (!isFullscreen || !autoHideHeader) {
+      setHeaderRevealed(false);
+      return undefined;
+    }
+    const REVEAL_ZONE_PX = 72;
+    const IDLE_MS = 3000;
+    let timer = null;
+
+    const conceal = () => setHeaderRevealed(false);
+    const armIdle = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(conceal, IDLE_MS);
+    };
+    const onPointer = (e) => {
+      if (e.clientY <= REVEAL_ZONE_PX) {
+        setHeaderRevealed(true);
+        armIdle();
+      }
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        setHeaderRevealed(true);
+        armIdle();
+      }
+    };
+
+    window.addEventListener('pointermove', onPointer);
+    window.addEventListener('pointerdown', onPointer);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      if (timer) clearTimeout(timer);
+      window.removeEventListener('pointermove', onPointer);
+      window.removeEventListener('pointerdown', onPointer);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [isFullscreen, autoHideHeader]);
 
   // Fullscreen handling
   const toggleFullscreen = () => {
@@ -4020,7 +4139,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
 
   return (
     <RefreshableComponentsProvider>
-    <div className={`dashboard-viewer-page ${isFullscreen ? 'fullscreen' : ''} ${isEditMode ? 'edit-mode-active' : ''}`}>
+    <div className={`dashboard-viewer-page ${isFullscreen ? 'fullscreen' : ''} ${isEditMode ? 'edit-mode-active' : ''} ${isFullscreen && autoHideHeader && !headerRevealed ? 'header-hidden' : ''}`}>
       {/* Header toolbar */}
       <div className="viewer-toolbar">
         <div className="toolbar-left">
@@ -4660,6 +4779,21 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                   disabled={isDefaultDashboard}
                   onClick={handleSetAsDefault}
                 />
+                {/* Kiosk chrome. Only offered when a URL ?autohide= isn't
+                    already forcing the value — otherwise the menu would
+                    show a toggle that appears to do nothing, since the URL
+                    wins on the next resolve. */}
+                {searchParams.get('autohide') == null && (
+                  <OverflowMenuItem
+                    itemText={
+                      <span className="fit-mode-item">
+                        <span className="fit-mode-check">{autoHideHeader ? '✓' : ''}</span>
+                        Auto-hide toolbar in fullscreen
+                      </span>
+                    }
+                    onClick={handleToggleAutoHideHeader}
+                  />
+                )}
               </OverflowMenu>
             </>
           )}
