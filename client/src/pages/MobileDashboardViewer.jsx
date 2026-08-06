@@ -94,6 +94,7 @@ function MobileDashboardViewer({ canControl = false }) {
     setValue: setDashVariableValue,
     resolveConnectionId,
     resolveSwapNoMatch,
+    swapMeta,
     resolveComponent,
     filterVariable: dashFilterVariable,
     filterValue: dashFilterValue,
@@ -327,6 +328,7 @@ function MobileDashboardViewer({ canControl = false }) {
               candidates={dashVariableCandidates}
               value={dashVariableValue}
               onChange={setDashVariableValue}
+              swapMeta={swapMeta}
             />
             <FilterVariablePicker
               variable={dashFilterVariable}

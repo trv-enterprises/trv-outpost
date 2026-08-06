@@ -272,6 +272,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     setValue: setDashVariableValue,
     resolveConnectionId,
     resolveSwapNoMatch,
+    swapMeta,
     resolveComponent,
     filterVariable: dashFilterVariable,
     filterValue: dashFilterValue,
@@ -2235,7 +2236,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                     : undefined
                 }
                 onText={() => setTextPanel(panel.id)}
-                showSwapRulesOption={(!!dashVariable || !!dashFilterVariable) && hasChart}
+                showSwapRulesOption={editableVariablesEnabled
+                  && (editableVariableMode === 'connection_swap' || editableVariableMode === 'filter')
+                  && hasChart}
                 hasSwapRules={Array.isArray(panel.component_overrides) && panel.component_overrides.length > 0}
                 onEditSwapRules={() => openSwapRulesModal(panel.id)}
                 showConnectionTagsOption={editableVariablesEnabled
@@ -4250,6 +4253,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                 candidates={dashVariableCandidates}
                 value={dashVariableValue}
                 onChange={setDashVariableValue}
+                swapMeta={swapMeta}
               />
             )}
 
@@ -4917,8 +4921,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           onSave={handleSaveSwapRules}
           panel={editablePanels.find((p) => p.id === swapRulesPanelId)}
           chartsMap={chartsMap}
-          variableMode={dashVariable ? 'connection_swap' : 'filter'}
-          variableLabel={(dashVariable || dashFilterVariable)?.label || (dashVariable || dashFilterVariable)?.name || 'variable'}
+          variableMode={editableVariableMode === 'filter' ? 'filter' : 'connection_swap'}
+          variableLabel={editableVariableLabel
+            || (dashVariable || dashFilterVariable)?.label
+            || (dashVariable || dashFilterVariable)?.name
+            || 'variable'}
         />
       )}
 
