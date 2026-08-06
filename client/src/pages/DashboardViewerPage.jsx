@@ -270,6 +270,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     selectedConnId: dashVariableValue,
     setValue: setDashVariableValue,
     resolveConnectionId,
+    resolveSwapNoMatch,
     resolveComponent,
     filterVariable: dashFilterVariable,
     filterValue: dashFilterValue,
@@ -4812,6 +4813,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           chartsMap={chartsMap}
           dashboard={dashboard}
           resolveConnectionId={resolveConnectionId}
+          resolveSwapNoMatch={resolveSwapNoMatch}
           resolveComponent={resolveComponent}
           swapIssuesByPanel={swapIssuesByPanel}
           unauthorizedComponents={unauthorizedComponents}

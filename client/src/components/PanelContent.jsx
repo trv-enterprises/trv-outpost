@@ -49,6 +49,12 @@ function PanelContent({
   unauthorizedReason = null,
   swapIssue = null,
   resolveConnectionId,
+  // Tag-value swap: (panel) => { value, tags } when this panel's connection
+  // family has no connection for the selected key value, else null. Gates
+  // rendering BEFORE the chart mounts — with host B selected, silently
+  // painting host A's (baseline) data would be a lie; an explicit empty
+  // state naming the gap is honest.
+  resolveSwapNoMatch = null,
   dashboardVariableText = '',
   variableValues = {},
   dashboardVariableValue = null,
@@ -63,6 +69,10 @@ function PanelContent({
   // panelRange is the range this specific panel actually receives; it also
   // drives the step-aware refresh below, so the two can't drift.
   const panelRange = RANGE_EXEMPT_CHART_TYPES.has(chart?.chart_type) ? null : rangeValue;
+
+  // Tag-value swap no-match (only ever non-null for chart panels with the
+  // mode active and a selection made).
+  const swapNoMatch = hasChart && resolveSwapNoMatch ? resolveSwapNoMatch(panel) : null;
 
   return (
     <PanelErrorBoundary
@@ -97,6 +107,21 @@ function PanelContent({
             {unauthorizedReason === 'connection'
               ? 'This component reads from a connection in a namespace you don\'t have access to.'
               : 'This component is in a namespace you don\'t have access to.'}
+          </div>
+        </div>
+      ) : swapNoMatch ? (
+        // Tag-value swap: this panel's connection family has no connection
+        // for the selected value. The message is deliberately SPECIFIC — it
+        // only ever appears on a misconfigured or sparse family, where the
+        // selected value and the panel's tags are exactly what the author
+        // needs to fix it.
+        <div className="panel-swap-no-match">
+          <div className="panel-swap-no-match__title">No connection</div>
+          <div className="panel-swap-no-match__detail">
+            {`No connection for "${swapNoMatch.value}"`}
+            {swapNoMatch.tags.length > 0
+              ? ` matches this panel's tags (${swapNoMatch.tags.join(', ')}).`
+              : ' matches this dashboard\'s connection tags.'}
           </div>
         </div>
       ) : hasText ? (
@@ -150,7 +175,7 @@ function PanelContent({
                     dataMapping: chart.data_mapping,
                     // Dashboard-variable connection-swap: override the
                     // component's design-time connection when active.
-                    connectionId: resolveConnectionId ? resolveConnectionId(chart) : chart.connection_id,
+                    connectionId: resolveConnectionId ? resolveConnectionId(chart, panel) : chart.connection_id,
                     // Execute-by-reference (#23): view mode sends runtime
                     // values only; the server runs this component's stored
                     // query. `chart` is already the post-override effective
@@ -204,6 +229,7 @@ PanelContent.propTypes = {
     componentName: PropTypes.string,
   }),
   resolveConnectionId: PropTypes.func,
+  resolveSwapNoMatch: PropTypes.func,
   dashboardVariableText: PropTypes.string,
   variableValues: PropTypes.object,
   dashboardVariableValue: PropTypes.string,
