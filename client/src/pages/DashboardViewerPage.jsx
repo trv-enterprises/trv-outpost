@@ -68,6 +68,7 @@ import PanelTextModal from '../components/PanelTextModal';
 import ComponentEditorModal from '../components/ComponentEditorModal';
 import ComponentPickerModal from '../components/ComponentPickerModal';
 import ComponentSwapRulesModal from '../components/ComponentSwapRulesModal';
+import PanelConnectionTagsModal from '../components/PanelConnectionTagsModal';
 import AIPreflightModal from '../components/AIPreflightModal';
 import ColorSwatchPicker from '../components/shared/ColorSwatchPicker';
 import { TEXT_THRESHOLD_COLOR_PALETTE } from '../chart-spec/option-helpers';
@@ -627,6 +628,8 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
 
   // Component-swap rules modal state (which panel's rules are being edited)
   const [swapRulesPanelId, setSwapRulesPanelId] = useState(null);
+  // Panel whose connection-tags modal is open (tag-value swap mode).
+  const [connectionTagsPanelId, setConnectionTagsPanelId] = useState(null);
 
   // AI pre-flight modal state
   const [aiPreflightOpen, setAiPreflightOpen] = useState(false);
@@ -2235,6 +2238,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                 showSwapRulesOption={(!!dashVariable || !!dashFilterVariable) && hasChart}
                 hasSwapRules={Array.isArray(panel.component_overrides) && panel.component_overrides.length > 0}
                 onEditSwapRules={() => openSwapRulesModal(panel.id)}
+                showConnectionTagsOption={editableVariablesEnabled
+                  && editableVariableMode === 'connection_swap'
+                  && editableVariableSelection === 'tag_value'
+                  && hasChart}
+                hasConnectionTags={Array.isArray(panel.connection_tags) && panel.connection_tags.length > 0}
+                onEditConnectionTags={() => setConnectionTagsPanelId(panel.id)}
               />
             )}
           </div>
@@ -4910,6 +4919,22 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           chartsMap={chartsMap}
           variableMode={dashVariable ? 'connection_swap' : 'filter'}
           variableLabel={(dashVariable || dashFilterVariable)?.label || (dashVariable || dashFilterVariable)?.name || 'variable'}
+        />
+      )}
+
+      {/* Panel connection tags editor (edit mode, tag-value swap) */}
+      {connectionTagsPanelId && (
+        <PanelConnectionTagsModal
+          open={!!connectionTagsPanelId}
+          onClose={() => setConnectionTagsPanelId(null)}
+          panel={editablePanels.find((p) => p.id === connectionTagsPanelId)}
+          variableTags={editableVariableTags}
+          keyPrefix={editableVariableLabelTagPrefix}
+          sameNamespace={editableVariableSameNamespace}
+          dashboardNamespace={dashboard?.namespace || ''}
+          onSave={(tagsOrNull) => {
+            updateEditablePanel(connectionTagsPanelId, { connection_tags: tagsOrNull });
+          }}
         />
       )}
 

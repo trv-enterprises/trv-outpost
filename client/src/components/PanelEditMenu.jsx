@@ -54,6 +54,11 @@ function PanelEditMenu({
   showSwapRulesOption = false,
   hasSwapRules = false,
   onEditSwapRules,
+  // Panel connection tags (tag-value swap mode). Shown only when the
+  // dashboard's swap variable selects by tag value.
+  showConnectionTagsOption = false,
+  hasConnectionTags = false,
+  onEditConnectionTags,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [dropdownStyle, setDropdownStyle] = useState({});
@@ -233,16 +238,36 @@ function PanelEditMenu({
       {/* Component-swap rules (only when the dashboard has an active variable
           and this panel has a component). Lets the panel render a different
           component per active variable value. */}
-      {showSwapRulesOption && (
+      {(showSwapRulesOption || showConnectionTagsOption) && (
         <>
           <div className="panel-edit-menu-divider" />
-          <button
-            className="panel-edit-menu-item"
-            onClick={() => handleAction(onEditSwapRules)}
-          >
-            {hasSwapRules ? <PinFilled size={16} /> : <Pin size={16} />}
-            <span>Connection-based components…</span>
-          </button>
+          {showSwapRulesOption && (
+            <button
+              className="panel-edit-menu-item"
+              onClick={() => handleAction(onEditSwapRules)}
+            >
+              {hasSwapRules ? <PinFilled size={16} /> : <Pin size={16} />}
+              <span>Connection-based components…</span>
+            </button>
+          )}
+          {/* Panel connection tags (tag-value swap mode only). Binds THIS
+              panel to a different connection family. Named around the PANEL
+              (dashboard-owned data) rather than the component — components
+              are shared across dashboards, and a "component-based" name
+              would imply exactly the cross-dashboard effect this doesn't
+              have. Visible even with no tags set: that's how they get set
+              the first time. The filled icon is the set-state indicator, so
+              scanning panels in edit mode shows which deviate from the
+              primary family. */}
+          {showConnectionTagsOption && (
+            <button
+              className="panel-edit-menu-item"
+              onClick={() => handleAction(onEditConnectionTags)}
+            >
+              {hasConnectionTags ? <PinFilled size={16} /> : <Pin size={16} />}
+              <span>Panel connection tags…</span>
+            </button>
+          )}
         </>
       )}
     </div>
