@@ -39,18 +39,28 @@ func orMatchStub(pool []*models.Connection) func(context.Context, string, []stri
 // surface: family enumeration + dedupe, per-value resolution, the sparse
 // family, ambiguity, and connections lacking the key tag.
 func TestResolveSwapFamilies(t *testing.T) {
+	// Tag convention mirrors the real deployment: every connection carries
+	// the variable's GATE tag (docker-stats) plus its specific family tag
+	// (docker-daemon / docker-containers) — panel tags EXTEND the gate,
+	// they don't replace it.
 	pool := []*models.Connection{
-		{ID: "s1", Name: "syn-001", Tags: []string{"synology", "host:trv-srv-001"}},
-		{ID: "s2", Name: "syn-002", Tags: []string{"synology", "host:trv-srv-002"}},
-		{ID: "s3", Name: "syn-003", Tags: []string{"synology", "host:trv-srv-003"}},
-		{ID: "d1", Name: "dock-001", Tags: []string{"docker-stats", "host:trv-srv-001"}},
-		// Two docker connections for host 002 — the ambiguity case. Names
+		{ID: "s1", Name: "daemon-001", Tags: []string{"docker-stats", "docker-daemon", "host:trv-srv-001"}},
+		{ID: "s2", Name: "daemon-002", Tags: []string{"docker-stats", "docker-daemon", "host:trv-srv-002"}},
+		{ID: "s3", Name: "daemon-003", Tags: []string{"docker-stats", "docker-daemon", "host:trv-srv-003"}},
+		{ID: "d1", Name: "cont-001", Tags: []string{"docker-stats", "docker-containers", "host:trv-srv-001"}},
+		// Two container connections for host 002 — the ambiguity case. Names
 		// chosen so first-by-name is deterministic and testable.
-		{ID: "d2a", Name: "dock-002-a", Tags: []string{"docker-stats", "host:trv-srv-002"}},
-		{ID: "d2z", Name: "dock-002-z", Tags: []string{"docker-stats", "host:trv-srv-002"}},
-		// No docker connection for host 003 — the sparse family case.
+		{ID: "d2a", Name: "cont-002-a", Tags: []string{"docker-stats", "docker-containers", "host:trv-srv-002"}},
+		{ID: "d2z", Name: "cont-002-z", Tags: []string{"docker-stats", "docker-containers", "host:trv-srv-002"}},
+		// No container connection for host 003 — the sparse family case.
 		// A connection with no key tag is not selectable in this mode.
-		{ID: "nokey", Name: "syn-nokey", Tags: []string{"synology"}},
+		{ID: "nokey", Name: "daemon-nokey", Tags: []string{"docker-stats", "docker-daemon"}},
+		// THE GATE: carries the family extension tag + a key tag but NOT the
+		// variable's gate tag (a NAS connection with docker-stats removed).
+		// Union semantics must exclude it from the containers family even
+		// though it matches the panel's own tags — the variable tag admits
+		// a connection at all; the panel tags only narrow within that.
+		{ID: "nas", Name: "nas-cont", Tags: []string{"docker-containers", "host:nas-syn-002"}},
 	}
 	s := &DashboardService{connByTags: orMatchStub(pool)}
 
@@ -58,14 +68,14 @@ func TestResolveSwapFamilies(t *testing.T) {
 		Namespace: "default",
 		Panels: []models.DashboardPanel{
 			{ID: "p1"}, // primary family (no tags)
-			{ID: "p2", ConnectionTags: []string{"docker-stats"}},
+			{ID: "p2", ConnectionTags: []string{"docker-containers"}},
 			// Same family as p2 after normalization — must dedupe into one
 			// family entry carrying both panel ids.
-			{ID: "p3", ConnectionTags: []string{"Docker-Stats"}},
+			{ID: "p3", ConnectionTags: []string{"Docker-Containers"}},
 		},
 	}
 	cfg := &models.ConnectionSwapConfig{
-		Tags:           []string{"synology"},
+		Tags:           []string{"docker-stats"},
 		Selection:      models.SwapSelectionTagValue,
 		LabelTagPrefix: "host",
 	}
@@ -77,7 +87,7 @@ func TestResolveSwapFamilies(t *testing.T) {
 
 	// ── Families ────────────────────────────────────────────────────
 	if len(families) != 2 {
-		t.Fatalf("expected 2 families (primary + docker), got %d", len(families))
+		t.Fatalf("expected 2 families (primary + containers), got %d", len(families))
 	}
 	prim, dock := families[0], families[1]
 	if !prim.Primary {
@@ -87,7 +97,19 @@ func TestResolveSwapFamilies(t *testing.T) {
 		t.Error("override family must not be marked primary")
 	}
 	if len(dock.PanelIDs) != 2 {
-		t.Errorf("docker family should carry both p2 and p3, got %v", dock.PanelIDs)
+		t.Errorf("containers family should carry both p2 and p3, got %v", dock.PanelIDs)
+	}
+	// Union semantics: the family's effective tags include the GATE tag.
+	{
+		found := false
+		for _, tg := range dock.Tags {
+			if tg == "docker-stats" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("containers family tags must include the variable's gate tag, got %v", dock.Tags)
+		}
 	}
 
 	resolved := func(f models.SwapFamily, value string) *models.SwapResolution {
@@ -99,26 +121,44 @@ func TestResolveSwapFamilies(t *testing.T) {
 		return nil
 	}
 
-	// Primary resolves all three hosts.
-	for _, want := range []struct{ value, id string }{
-		{"trv-srv-001", "s1"}, {"trv-srv-002", "s2"}, {"trv-srv-003", "s3"},
-	} {
-		r := resolved(prim, want.value)
-		if r == nil || r.ConnectionID != want.id {
-			t.Errorf("primary %s: got %+v, want connection %s", want.value, r, want.id)
-		}
+	// Primary family = the GATE tag alone, which under the umbrella-tag
+	// convention matches BOTH sub-families' connections — so wherever both
+	// exist for a host, the primary resolution is AMBIGUOUS (flagged, first
+	// by name). This is the honest consequence of gate+extension semantics:
+	// a panel with no panel-tags is asking for "any docker-stats connection
+	// on this host". Authors should tag every data panel (or make the
+	// variable's own tags pin one sub-family).
+	if r := resolved(prim, "trv-srv-001"); r == nil || r.ConnectionID != "d1" || !r.Ambiguous {
+		t.Errorf("primary 001: got %+v, want d1 (cont-001, first by name) flagged ambiguous", r)
+	}
+	if r := resolved(prim, "trv-srv-002"); r == nil || r.ConnectionID != "d2a" || !r.Ambiguous {
+		t.Errorf("primary 002: got %+v, want d2a flagged ambiguous", r)
+	}
+	// Host 003 has only the daemon connection → unambiguous.
+	if r := resolved(prim, "trv-srv-003"); r == nil || r.ConnectionID != "s3" || r.Ambiguous {
+		t.Errorf("primary 003: got %+v, want s3 unambiguous", r)
 	}
 
-	// Docker family: 001 resolves plainly; 002 is ambiguous with the
+	// Containers family: 001 resolves plainly; 002 is ambiguous with the
 	// first-by-name pick; 003 is absent (sparse), NOT an entry with empty id.
 	if r := resolved(dock, "trv-srv-001"); r == nil || r.ConnectionID != "d1" || r.Ambiguous {
-		t.Errorf("docker 001: got %+v, want d1 unambiguous", r)
+		t.Errorf("containers 001: got %+v, want d1 unambiguous", r)
 	}
 	if r := resolved(dock, "trv-srv-002"); r == nil || r.ConnectionID != "d2a" || !r.Ambiguous {
-		t.Errorf("docker 002: got %+v, want d2a with Ambiguous=true (first by name)", r)
+		t.Errorf("containers 002: got %+v, want d2a with Ambiguous=true (first by name)", r)
 	}
 	if r := resolved(dock, "trv-srv-003"); r != nil {
-		t.Errorf("docker 003: expected no entry (sparse family), got %+v", r)
+		t.Errorf("containers 003: expected no entry (sparse family), got %+v", r)
+	}
+	// The GATE: nas-cont matches the panel tags + carries a key tag, but
+	// lacks the variable's gate tag — it must resolve NOWHERE.
+	if r := resolved(dock, "nas-syn-002"); r != nil {
+		t.Errorf("gate: nas-cont (no docker-stats tag) must not resolve, got %+v", r)
+	}
+	for _, v := range values {
+		if v.Value == "nas-syn-002" {
+			t.Errorf("gate: nas-syn-002 must not be a selectable value, got %+v", v)
+		}
 	}
 
 	// ── Values ──────────────────────────────────────────────────────

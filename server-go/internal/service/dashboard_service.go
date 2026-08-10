@@ -864,8 +864,18 @@ func (s *DashboardService) GetVariableCandidates(ctx context.Context, dashboardI
 func (s *DashboardService) resolveSwapFamilies(ctx context.Context, dashboard *models.Dashboard, cfg *models.ConnectionSwapConfig) ([]models.SwapTagValue, []models.SwapFamily, error) {
 	prefix := strings.TrimSpace(cfg.LabelTagPrefix)
 
-	// Family enumeration. Key each override family by its normalized joined
-	// tag set so two panels with the same tags share one family entry.
+	// Family enumeration. A panel's ConnectionTags EXTEND the variable's
+	// Tags — they do not replace them. The variable's tags are the entry
+	// gate ("connections must meet the tag to be considered at all for
+	// this dashboard"); the panel's tags then narrow within that gate. So
+	// an override family's effective tag set is the UNION, and removing
+	// the gate tag from a connection removes it from every family at once.
+	// (Owner-decided 2026-08-07, superseding the earlier replace
+	// semantics: a NAS connection stripped of the gate tag was still being
+	// selected because the override family never re-checked it.)
+	//
+	// Key each family by the normalized UNION so two panels whose
+	// extensions differ only in case/order share one family entry.
 	type famAcc struct {
 		tags     []string
 		panelIDs []string
@@ -873,13 +883,13 @@ func (s *DashboardService) resolveSwapFamilies(ctx context.Context, dashboard *m
 	famOrder := []string{}
 	fams := map[string]*famAcc{}
 	for _, p := range dashboard.Panels {
-		norm := models.NormalizeTags(p.ConnectionTags)
-		if len(norm) == 0 {
+		if len(models.NormalizeTags(p.ConnectionTags)) == 0 {
 			continue
 		}
-		key := strings.Join(norm, "\x00")
+		union := models.NormalizeTags(append(append([]string{}, cfg.Tags...), p.ConnectionTags...))
+		key := strings.Join(union, "\x00")
 		if fams[key] == nil {
-			fams[key] = &famAcc{tags: norm}
+			fams[key] = &famAcc{tags: union}
 			famOrder = append(famOrder, key)
 		}
 		fams[key].panelIDs = append(fams[key].panelIDs, p.ID)

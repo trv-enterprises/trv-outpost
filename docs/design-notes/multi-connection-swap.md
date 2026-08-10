@@ -44,14 +44,27 @@ key-value store on connections (`host:trv-srv-001`).
 - Panel **with** panel-connection tags → the connection matching
   `panel.connection_tags ∪ {host:<selected value>}`.
 
-The panel tag set **replaces** the variable's tags for that panel — it
-does not union with them (the docker connection does not carry the
-synology tags). "Additive" in the original framing means the feature
-adds on top of the variable mechanism, not that tag sets merge. The
-panel tags are **static**: they carry no reference to the variable or
-any of its values; the join to the selection happens entirely through
-the key tag. Changing the selected host re-resolves every family with
-zero panel-side changes.
+The panel tag set **extends** the variable's tags (UNION) — the
+variable's tags are the entry gate ("connections must meet the tag to
+be considered at all for this dashboard") and the panel's tags narrow
+within it, so a panel family's effective tags are
+`variable.tags ∪ panel.connection_tags`. Removing the gate tag from a
+connection removes it from every family at once.
+
+> Owner-decided 2026-08-07, superseding the replace semantics this note
+> originally specified. Replace was inferred from "the docker connection
+> does not carry the synology tags", but the real tagging convention
+> gives every connection the umbrella tag PLUS its specific tag, so
+> union both works everywhere and provides the gating behaviour the
+> owner intended. Consequence worth knowing: the primary family (gate
+> tag alone) is inherently AMBIGUOUS under this convention wherever a
+> host has multiple sub-family connections — untagged data panels get a
+> flagged first-by-name pick, so authors should tag every data panel.
+
+The panel tags are **static**: they carry no reference to the variable
+or any of its values; the join to the selection happens entirely
+through the key tag. Changing the selected host re-resolves every
+family with zero panel-side changes.
 
 The stored selection (and the URL param) becomes the **tag value
 string** (`trv-srv-002`), not a connection id.

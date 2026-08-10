@@ -13,12 +13,13 @@ import './PanelConnectionTagsModal.scss';
  * PanelConnectionTagsModal — bind ONE panel to a different connection family
  * (tag-value swap mode, #186).
  *
- * The panel's connection follows the dashboard variable, but matches THESE
- * tags instead of the variable's connection tags: the connection carrying all
- * of these tags plus `<prefix>:<selected value>` is used. The tags REPLACE
- * the variable's tags for this panel (they do not union with them — a docker
- * connection doesn't carry the synology tags); "additive" in the design
- * conversation meant the feature adds on top of the variable mechanism.
+ * The panel's connection follows the dashboard variable, NARROWED by these
+ * tags: the connection must carry the variable's connection tags (the entry
+ * gate — "considered at all for this dashboard") AND these, plus
+ * `<prefix>:<selected value>`. UNION semantics, owner-decided 2026-08-07 —
+ * see the superseding note in multi-connection-swap.md; the earlier replace
+ * semantics let a connection stripped of the gate tag keep resolving via a
+ * panel family.
  *
  * The RESOLUTION PREVIEW is load-bearing, not decoration: without it, tag
  * entry is blind and the first feedback is a broken panel in view mode. With
@@ -109,7 +110,9 @@ function PanelConnectionTagsModal({
     const draftTags = tags.map(norm).filter(Boolean);
     if (draftTags.length === 0) return { rows: [], empty: true };
     const primary = resolveFamily(variableTags);
-    const draft = resolveFamily(tags);
+    // UNION semantics: the panel's tags EXTEND the variable's tags — the
+    // variable's tags are the entry gate, the panel's narrow within it.
+    const draft = resolveFamily([...variableTags, ...tags]);
     // Every value either family knows about, so a value the draft family
     // adds (present nowhere in the primary) still shows up.
     const values = [...new Set([...primary.keys(), ...draft.keys()])].sort();
@@ -142,10 +145,10 @@ function PanelConnectionTagsModal({
     >
       <div className="panel-conn-tags">
         <p className="pct-help">
-          This panel&apos;s connection follows the dashboard variable, but matches
-          <strong> these tags</strong> instead of the variable&apos;s connection tags.
-          The connection carrying all of these tags plus{' '}
-          <code>{keyPrefix || 'prefix'}:&lt;selected value&gt;</code> is used.
+          This panel&apos;s connection follows the dashboard variable, narrowed by
+          <strong> these tags</strong>: the connection must carry the
+          variable&apos;s connection tags <em>and</em> these, plus{' '}
+          <code>{keyPrefix || 'prefix'}:&lt;selected value&gt;</code>.
         </p>
 
         <TagInput
