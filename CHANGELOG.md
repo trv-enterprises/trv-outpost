@@ -6,6 +6,84 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.52.0] — 2026-08-10
+
+### Added
+
+- **Swap by tag value — one selection swaps every related connection.**
+  A dashboard whose panels span related connections for the same host
+  (Synology stats + Docker daemon + container stats…) previously needed one
+  swap per connection. A new **Swap by: Tag value** mode on the
+  connection-swap variable changes what the picker selects: the dropdown
+  lists distinct values of the key tag (e.g. `host`) — each host once — and
+  every panel resolves its own connection for the selected value.
+
+  Panels bound to a different sub-family (the Docker daemon connection
+  rather than the Synology one) declare it via a new **"Panel connection
+  tags…"** menu item, whose modal shows a live resolution preview: every
+  selectable value → the connection the draft tags resolve to, or an
+  explicit no-match. Tag semantics are gate-then-narrow: the variable's tags
+  admit a connection at all, panel tags narrow within that — so de-tagging
+  a connection removes it from every family at once.
+
+  Partial coverage is annotated in the picker ("host — 2 of 3 families"),
+  and a panel with no connection for the selected value renders an empty
+  state naming the gap — never another host's data. Connection mode is
+  byte-identical to before; existing dashboards are untouched.
+
+- **Current State per Series works on streaming connections.** A tag-value
+  swap is exactly how a REST-authored `latest_by` component lands on a
+  streaming connection — where nothing reduced, and a "current state" table
+  reverted to N rows per container. The setting is now treated as intent and
+  honored per transport: the streaming backfill seeds from the source
+  reduction (time-bounded, so large stores answer in milliseconds instead of
+  scanning everything), escalates to a count-bounded pull when the seed
+  fails or comes back empty, and the client keeps deduplicating to one row
+  per series as live data arrives.
+
+- **Transparent fullscreen header.** With transparent panels on, the
+  fullscreen toolbar was the only opaque band left — a solid grey strip
+  interrupting a dashboard that otherwise floats on the canvas. It now drops
+  its fill in fullscreen and keeps only a subtle bottom rule. A dashboard
+  explicitly set to solid panels keeps its opaque toolbar; windowed view is
+  unchanged.
+
+- **Header auto-hide for kiosks.** A per-user preference (default off) plus
+  a `?autohide=1|0` URL override fade the fullscreen toolbar away after a
+  few seconds idle. Move the pointer to the top edge, tap the top strip, or
+  press Escape to bring it back. The URL form is the kiosk lever: a kiosk
+  link hides the chrome without changing the preference of the (often
+  shared) account it's signed in as. Hiding is an overlay, not a reflow —
+  panel geometry is identical whether the header shows or not.
+
+### Changed
+
+- **ts-store REST components no longer offer client-side Current State Per
+  Series or Sliding Window.** Both duplicate reductions the non-streaming
+  query can already push to the source (`latest` and `since`/`range` query
+  types), which reduce at the store instead of shipping rows to discard.
+  Both remain for streaming connections, where they were built. A saved REST
+  component that had one enabled self-heals at save rather than applying it
+  invisibly.
+
+### Fixed
+
+- Swap-issue badges painted on the wrong panel in view mode (every badge
+  anchored to the grid's corner), and their tooltips clipped or vanished
+  depending on alignment.
+- Text panels were badged for swap compatibility they can't have, and
+  produced garbage in tag-value mode.
+- The panel edit menu could run off-screen (stale height estimate replaced
+  with a measured one).
+- The "Swap by" selection was lost on the edit round-trip.
+- A streaming connection with failed auth now surfaces an inline error on
+  the panel instead of spinning forever.
+
+### CI
+
+- **govulncheck** added to the server PR checks, motivated by it catching
+  two reachable vulnerabilities Dependabot missed.
+
 ## [0.51.0] — 2026-08-04
 
 ### Added
