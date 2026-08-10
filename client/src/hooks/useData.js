@@ -706,6 +706,12 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
           // and on a store where it hangs, waiting the full 45s just holds
           // the panel blank before the inevitable fallback.
           const seedTimeout = effectiveBackfill?.params?.latest_by ? 10_000 : BACKFILL_TIMEOUT_MS;
+          // Count-bounded fallback for the latest_by seed: `newest <buffer>`
+          // is bounded by record count, not time, so it is immune to a
+          // store's cadence — the client-side dedupe reduces it to
+          // newest-per-series either way. Used when the bounded seed FAILS
+          // or comes back EMPTY (below).
+          const plainNewestFallback = { raw: 'newest', type: 'tsstore', params: { limit: getStreamBufferSize() } };
           let result;
           try {
             result = await queryBackfillShared(connectionId, effectiveBackfill, { timeout: seedTimeout });
@@ -713,11 +719,23 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
             if (cancelled) return;
             if (!effectiveBackfill?.params?.latest_by || isAbortError(seedErr)) throw seedErr;
             console.warn('[useData] latest_by backfill failed, falling back to plain newest:', seedErr.message);
-            result = await queryBackfillShared(
-              connectionId,
-              { raw: 'newest', type: 'tsstore', params: { limit: getStreamBufferSize() } },
-              { timeout: BACKFILL_TIMEOUT_MS },
-            );
+            result = await queryBackfillShared(connectionId, plainNewestFallback, { timeout: BACKFILL_TIMEOUT_MS });
+          }
+          // An EMPTY bounded seed is a miss, not an answer. The since:1h
+          // bound assumes every current series reported within the hour —
+          // an assumption the store's API can't verify in advance (stats
+          // exposes store-level newest/oldest, but nothing reveals
+          // per-series cadence, and any time bound that admits a chatty
+          // series can starve a sparse one). A batch-loaded or
+          // slow-cadence store has valid newest-per-series data the bound
+          // returns zero rows for — and zero rows is a SUCCESS, so without
+          // this the fallback never fired and the panel silently started
+          // blank. Escalate to the count-bounded pull; if THAT is empty
+          // too, the store is genuinely empty and empty is the answer.
+          if (!cancelled
+              && effectiveBackfill?.params?.latest_by
+              && (result?.data?.rows?.length ?? 0) === 0) {
+            result = await queryBackfillShared(connectionId, plainNewestFallback, { timeout: BACKFILL_TIMEOUT_MS });
           }
           // Superseded while awaiting (connection swap, range change,
           // unmount): drop the stale rows and stop — the replacement run
