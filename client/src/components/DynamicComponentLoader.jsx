@@ -80,13 +80,37 @@ function useDataWithTransforms(params) {
   // Pass through all params including timeBucket for aggregated streaming
   const result = useDataOriginal(params);
 
+  // Streaming twin for a SERVER-side latest_by (#186 follow-on).
+  //
+  // A ts-store `latest` query (`params.latest_by`) reduces to one row per
+  // series AT THE SOURCE — but only on a REST connection. When the same
+  // component lands on a STREAMING connection (a tag-value swap resolving a
+  // panel to the streaming member of the family is exactly how), the stream
+  // path backfills history and appends live records: the source-side
+  // reduction never runs, and the "current state" table quietly reverts to
+  // a history — N rows per container instead of one.
+  //
+  // latest_by is INTENT ("newest row per series"), so honor it per
+  // transport: pushed down on REST, applied client-side here when the
+  // effective connection turns out to stream. Empty timestampCol = the
+  // last-arrived record wins, which is arrival order — correct for a live
+  // stream. An author's explicit client-side Current State Per Series
+  // (data_mapping.latest_by → transforms.latestBy) wins over the synthetic
+  // one; they'd only differ if deliberately configured differently.
+  const latestByParam = params?.query?.params?.latest_by || '';
+  const effectiveTransforms = useMemo(() => {
+    if (!latestByParam || !result.isStreaming) return transforms;
+    if (transforms?.latestBy?.keyCol) return transforms;
+    return { ...(transforms || {}), latestBy: { keyCol: latestByParam, timestampCol: '' } };
+  }, [transforms, latestByParam, result.isStreaming]);
+
   // Apply transforms if we have them and data is ready
   const transformedData = useMemo(() => {
-    if (!transforms || !result.data) {
+    if (!effectiveTransforms || !result.data) {
       return result.data;
     }
-    return transformData(result.data, transforms);
-  }, [result.data, transforms]);
+    return transformData(result.data, effectiveTransforms);
+  }, [result.data, effectiveTransforms]);
 
   return {
     ...result,
@@ -269,12 +293,27 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
     seriesCol: dataMapping?.series || '',
   });
 
+  // Streaming twin for a SERVER-side latest_by (#186 follow-on) — same
+  // synthesis as useDataWithTransforms above, for THIS path: the loader's
+  // own fetch is what feeds every spec-driven chart (dataview included),
+  // not the eval-scope hook. A ts-store `latest` query reduces at the
+  // source only on REST; when the effective connection streams (a
+  // tag-value swap resolving the panel to the streaming family member),
+  // the buffer accumulates history and the "current state" table shows N
+  // rows per container. latest_by is intent — apply it client-side here.
+  const specLatestByParam = effectiveQuery?.params?.latest_by || '';
+  const effectiveSpecTransforms = useMemo(() => {
+    if (!specLatestByParam || !isStreaming) return transforms;
+    if (transforms?.latestBy?.keyCol) return transforms;
+    return { ...(transforms || {}), latestBy: { keyCol: specLatestByParam, timestampCol: '' } };
+  }, [transforms, specLatestByParam, isStreaming]);
+
   // Apply transforms to fetched data
   const transformedFetchedData = useMemo(() => {
     if (!shouldFetchData || !fetchedData) return null;
-    if (!transforms) return fetchedData;
-    return transformData(fetchedData, transforms);
-  }, [fetchedData, transforms, shouldFetchData]);
+    if (!effectiveSpecTransforms) return fetchedData;
+    return transformData(fetchedData, effectiveSpecTransforms);
+  }, [fetchedData, effectiveSpecTransforms, shouldFetchData]);
 
   useEffect(() => {
     if (!code) {
