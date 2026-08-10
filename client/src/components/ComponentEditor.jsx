@@ -2860,6 +2860,22 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     if (latestByEnabled && !latestByKeyCol) {
       setLatestByEnabled(false);
     }
+    // ...and drop it entirely when the section isn't offered for this
+    // connection. Non-streaming ts-store hides the client-side toggle in
+    // favour of its server-side "Current State (latest per series)" query
+    // type, but the value persists on state independently of whether the
+    // section renders — so a component that had it enabled, then switched to
+    // a ts-store REST connection, would keep applying it with no visible
+    // control to turn it off. Hidden AND active is the worst of both.
+    if (latestByEnabled && isTSStore && !isTSStoreStreaming) {
+      setLatestByEnabled(false);
+    }
+    // Same for the sliding window, hidden on non-streaming ts-store in
+    // favour of the `since` / `range` query types. Identical hazard: the
+    // value outlives the section that edits it.
+    if (slidingWindowEnabled && isTSStore && !isTSStoreStreaming) {
+      setSlidingWindowEnabled(false);
+    }
 
     const chartPayload = {
       name: name.trim(),
@@ -5068,8 +5084,26 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     EdgeLake equivalent) — re-querying with a new
                     time literal is the natural pattern for those
                     types. Also hidden for chart types that opt out
-                    via hasSlidingWindow:false. */}
-                {!showCustomCode && chartTypeConfig.hasSlidingWindow !== false && !queryLanguageOwnsClientSideOps && (
+                    via hasSlidingWindow:false.
+
+                    Non-streaming ts-store is hidden for the same reason:
+                    its `since` and `range` query types already bound time
+                    at the SOURCE. The window only narrows range — it does
+                    no bucketing — so "since:3d + a 24h window" returns
+                    exactly the rows "since:24h" would, having pulled two
+                    extra days over the wire to discard them in the browser.
+                    The pipeline order (window → latest_by → filters →
+                    aggregation, see utils/dataTransforms.js::transformData)
+                    means aggregation sees only what survives the window, so
+                    the two forms also aggregate identically.
+
+                    It stays for STREAMING, which is what it was built for:
+                    a continuously-advancing trim over data that arrives
+                    once and is never re-queried. A polled REST component
+                    re-queries on every refresh, where `since` expresses the
+                    same intent for less traffic. */}
+                {!showCustomCode && chartTypeConfig.hasSlidingWindow !== false && !queryLanguageOwnsClientSideOps
+                  && !(isTSStore && !isTSStoreStreaming) && (
                 <div className="spec-subsection sliding-window-section">
                   <div className="section-header">
                     <h5 className="spec-subsection__heading">Sliding Window (Time-Series)</h5>
@@ -5185,8 +5219,20 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     per-key dedupe would reduce along the wrong axis, and pie
                     already aggregates by category. Those opt out via
                     hasLatestBy:false. Hidden for query languages that own
-                    client-side ops, same as the sliding window. */}
-                {!showCustomCode && chartTypeConfig.hasLatestBy !== false && !queryLanguageOwnsClientSideOps && (
+                    client-side ops, same as the sliding window.
+
+                    Also hidden on NON-STREAMING ts-store, which already has
+                    this as a query type ("Current State (latest per series)",
+                    the server-side latest_by param). That one reduces at the
+                    source, so it returns one row per series instead of
+                    shipping a full history for the browser to throw away —
+                    strictly better whenever it's available. Offering both put
+                    two controls for the same outcome on the same form, with
+                    no cue that one is the right one. This client-side twin
+                    exists for STREAMING connections, which can't push the
+                    reduction down to the source. */}
+                {!showCustomCode && chartTypeConfig.hasLatestBy !== false && !queryLanguageOwnsClientSideOps
+                  && !(isTSStore && !isTSStoreStreaming) && (
                 <div className="spec-subsection latest-by-section">
                   <div className="section-header">
                     <h5 className="spec-subsection__heading">Current State Per Series</h5>
