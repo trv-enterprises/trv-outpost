@@ -83,17 +83,25 @@ function PanelContent({
           active swap connection is missing columns this component needs, so the
           user knows WHY the panel looks degraded instead of silently seeing a
           collapsed table. */}
-      {swapIssue && Array.isArray(swapIssue.missing) && swapIssue.missing.length > 0 && (
+      {hasChart && swapIssue && Array.isArray(swapIssue.missing) && swapIssue.missing.length > 0 && (
+        // Native `title`, NOT a Carbon Tooltip. Carbon positions its popovers
+        // `fixed`, but panels sit inside counter-transform wrappers in fit
+        // modes and a transformed ancestor is a containing block for fixed
+        // elements — the popover's viewport-computed coordinates get applied
+        // in the transform's coordinate space, so it rendered clipped,
+        // covered by sibling panels, or detached depending on which way it
+        // aligned. The native tooltip renders in the OS layer: immune to
+        // transforms, overflow, and z-index — and it can't collide with the
+        // panel's own hover title (nested title attrs: innermost wins).
         <div className="swap-issue-badge">
-          <Tooltip
-            align="left"
-            autoAlign
-            label={`${swapIssue.missing.length} column${swapIssue.missing.length === 1 ? '' : 's'} unavailable on this connection: ${swapIssue.missing.join(', ')}`}
+          <button
+            type="button"
+            className="swap-issue-badge__trigger"
+            title={`${swapIssue.missing.length} column${swapIssue.missing.length === 1 ? '' : 's'} unavailable on this connection: ${swapIssue.missing.join(', ')}`}
+            aria-label="Columns unavailable on this connection"
           >
-            <button type="button" className="swap-issue-badge__trigger" aria-label="Columns unavailable on this connection">
-              <WarningAltFilled size={16} />
-            </button>
-          </Tooltip>
+            <WarningAltFilled size={16} />
+          </button>
         </div>
       )}
       {unauthorizedReason ? (

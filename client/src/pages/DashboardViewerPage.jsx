@@ -849,6 +849,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     const map = {};
     for (const p of panels) {
       if (!p?.id) continue;
+      // A text panel renders its text_config even when a STALE component_id
+      // lingers from a chart→text conversion — so it reads no connection and
+      // must not be compat-checked. Including it produced a "columns
+      // unavailable" badge on a panel showing plain text (pre-existing; also
+      // visible on prod).
+      if (p.text_config) continue;
       const compId = resolveComponent ? resolveComponent(p) : p.component_id;
       if (compId) map[p.id] = compId;
     }
@@ -859,7 +865,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const { issuesByPanel: swapIssuesByPanel } = useSwapCompatibility({
     dashboardId: id,
     variableName: dashVariable?.name || '',
-    selectedConnId: dashVariableValue || '',
+    // Tag-value mode: the selection is a KEY VALUE, not a connection id.
+    // The swap-compatibility endpoint compares schemas against a connection
+    // id, so calling it with a value string produced garbage issues
+    // mis-attributed across panels (a text panel wearing a "4 columns
+    // unavailable" badge). Compatibility in this mode needs per-family
+    // targets — an open follow-up in multi-connection-swap.md — so until
+    // that exists the check is OFF, and the no-match empty state covers
+    // the wrong-connection failure class.
+    selectedConnId: swapMeta ? '' : (dashVariableValue || ''),
     panelComponents: effectivePanelComponents,
   });
 

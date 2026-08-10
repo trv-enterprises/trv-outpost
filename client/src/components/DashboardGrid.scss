@@ -218,6 +218,15 @@
       display: flex;
       flex-direction: column;
       height: 100%;
+      // Positioning anchor for absolutely-positioned panel chrome — the
+      // swap-issue badge above all. Without this the badge's top/right
+      // resolved against the nearest positioned ancestor, which in VIEW
+      // mode is .dashboard-grid itself — so every badge painted at the
+      // GRID's top-right corner, landing on whatever panel happened to sit
+      // there (a full-width header text panel wore a warning that belonged
+      // to a chart three rows down). Edit mode never showed it because the
+      // edit-mode panel rules already position the container.
+      position: relative;
 
       &.has-component {
         // All panels with components have consistent styling
