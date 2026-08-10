@@ -7,6 +7,7 @@ package models
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -42,6 +43,21 @@ type DashboardPanel struct {
 	// must stay fixed simply has no overrides and points its default at the
 	// connection it wants.
 	ComponentOverrides []ComponentOverride `json:"component_overrides,omitempty" bson:"component_overrides,omitempty"`
+	// ConnectionTags binds this panel to a DIFFERENT connection family when
+	// the dashboard's connection_swap variable is in tag_value mode. The
+	// panel's connection resolves to the one matching ConnectionTags plus the
+	// key tag (`prefix:<selected value>`) — these tags REPLACE the variable's
+	// Tags for this panel (they do not union with them; a docker connection
+	// does not carry the synology tags). Static: no reference to the variable
+	// or any of its values, so one selection re-resolves every family.
+	//
+	// Lives on the panel (not the component record, which is shared across
+	// dashboards, and not a dashboard-level side map, which would need
+	// panel-id remapping on duplicate the way panel_border adornments do).
+	// Empty/nil = the panel follows the variable's primary family. Ignored
+	// entirely outside tag_value mode; retained dormant when the variable is
+	// disabled (keep-and-count policy — see multi-connection-swap.md).
+	ConnectionTags []string `json:"connection_tags,omitempty" bson:"connection_tags,omitempty"`
 }
 
 // ComponentOverride is one component-swap rule on a DashboardPanel.
@@ -525,12 +541,34 @@ type DashboardVariable struct {
 	Range          *RangeConfig          `json:"range,omitempty" bson:"range,omitempty"`
 }
 
+// Connection-swap selection modes — what the variable's picker selects.
+// A string discriminator rather than a boolean so a third mode never needs
+// a schema change. See docs/design-notes/multi-connection-swap.md.
+const (
+	// SwapSelectionConnection: the picker lists candidate CONNECTIONS and
+	// selecting one repoints every panel. The original (and default) mode;
+	// an empty Selection field means this.
+	SwapSelectionConnection = "connection"
+	// SwapSelectionTagValue: the picker lists DISTINCT VALUES of the key tag
+	// (LabelTagPrefix, required in this mode — it is simultaneously the
+	// display label, the dedupe key, and the join key). Each panel resolves
+	// its own connection: (its family tags) ∪ {prefix:<selected value>},
+	// where the family tags are the variable's Tags for ordinary panels or
+	// the panel's ConnectionTags for panels bound to a different family.
+	SwapSelectionTagValue = "tag_value"
+)
+
 // ConnectionSwapConfig configures a connection_swap variable: the dropdown lists
 // connections discovered by tag match (within the dashboard's namespace) and
 // selecting one repoints every variable-driven panel's effective connection_id.
 type ConnectionSwapConfig struct {
 	Tags         []string `json:"tags" bson:"tags"`                   // AND-matched discovery tags: a candidate must carry ALL of them (the Mongo query is OR/$in, then GetVariableCandidates narrows to AND)
 	SchemaStrict string   `json:"schema_strict" bson:"schema_strict"` // "type_only" (default) | "superset" | "exact"
+	// Selection is what the picker selects: SwapSelectionConnection (default,
+	// also when empty) or SwapSelectionTagValue. In tag_value mode the stored
+	// selection (and URL param) is the tag VALUE string, not a connection id,
+	// and LabelTagPrefix is required.
+	Selection string `json:"selection,omitempty" bson:"selection,omitempty"`
 	// SameNamespace restricts candidate discovery to the dashboard's own
 	// namespace. Default false (cross-namespace by tag), so a dashboard whose
 	// source connections live in a different namespace can still find them.
@@ -621,6 +659,25 @@ func ValidateVariables(variables []DashboardVariable) error {
 			filterCount++
 		case VariableModeRange:
 			rangeCount++
+		case VariableModeConnectionSwap:
+			cs := variables[i].ConnectionSwap
+			if cs == nil {
+				continue
+			}
+			switch cs.Selection {
+			case "", SwapSelectionConnection:
+				// default mode — no extra requirements
+			case SwapSelectionTagValue:
+				// The prefix is the join key: without it there is nothing to
+				// dedupe the picker on and nothing to resolve families with.
+				// Names can't serve either role, so this is a hard requirement
+				// of the mode rather than a preference.
+				if strings.TrimSpace(cs.LabelTagPrefix) == "" {
+					return fmt.Errorf("connection_swap selection %q requires label_tag_prefix: it is the key the picker dedupes on and the tag families join through", SwapSelectionTagValue)
+				}
+			default:
+				return fmt.Errorf("connection_swap selection must be %q or %q (got %q)", SwapSelectionConnection, SwapSelectionTagValue, cs.Selection)
+			}
 		}
 	}
 	if filterCount > 1 {
@@ -652,6 +709,48 @@ type VariableCandidate struct {
 type VariableCandidatesResponse struct {
 	Variable   string              `json:"variable"`
 	Candidates []VariableCandidate `json:"candidates"`
+	// Tag-value mode additions (Selection == SwapSelectionTagValue). Empty in
+	// connection mode. Candidates above still lists the PRIMARY family's
+	// connections in both modes, so existing clients keep working.
+	Selection string         `json:"selection,omitempty"`
+	KeyPrefix string         `json:"key_prefix,omitempty"` // the LabelTagPrefix the values were extracted with
+	Values    []SwapTagValue `json:"values,omitempty"`     // distinct selectable key values, sorted
+	Families  []SwapFamily   `json:"families,omitempty"`   // primary + each distinct panel connection_tags set, with per-value resolution
+}
+
+// SwapTagValue is one selectable key value in tag_value mode, annotated with
+// how many families resolve for it so the picker can flag partial coverage
+// ("trv-srv-003 — 2 of 3 families") and a partial swap is an informed one.
+type SwapTagValue struct {
+	Value           string `json:"value"`
+	FamiliesTotal   int    `json:"families_total"`
+	FamiliesMatched int    `json:"families_matched"`
+}
+
+// SwapFamily is one connection family: the variable's own Tags (primary) or
+// one distinct panel ConnectionTags set. Resolutions map each selectable key
+// value to the connection that family resolves to — this single structure
+// powers both the viewer's per-panel resolution and the panel-tags modal's
+// resolution preview, so the two can't drift.
+type SwapFamily struct {
+	Tags     []string `json:"tags"`                // normalized family tags
+	Primary  bool     `json:"primary,omitempty"`   // true for the variable's own Tags
+	PanelIDs []string `json:"panel_ids,omitempty"` // panels bound to this family (override families only)
+	// Resolutions holds one entry per key value the family resolves; a value
+	// absent here is a no-match for this family (the panel renders its
+	// empty state rather than baseline data).
+	Resolutions []SwapResolution `json:"resolutions"`
+}
+
+// SwapResolution is one family's resolved connection for one key value.
+type SwapResolution struct {
+	Value          string `json:"value"`
+	ConnectionID   string `json:"connection_id"`
+	ConnectionName string `json:"connection_name"`
+	// Ambiguous flags >1 connection matching (family tags + key:value); the
+	// first by name was chosen deterministically. Authoring-time warning
+	// material — the config should be fixed, not silently tolerated.
+	Ambiguous bool `json:"ambiguous,omitempty"`
 }
 
 // PanelSwapIssue reports one variable-driven panel whose (effective) component

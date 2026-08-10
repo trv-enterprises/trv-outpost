@@ -829,7 +829,167 @@ func (s *DashboardService) GetVariableCandidates(ctx context.Context, dashboardI
 		resp.Candidates = append(resp.Candidates, cand)
 	}
 
+	// Tag-value mode: the picker selects a KEY VALUE, not a connection, and
+	// every family follows it. Compute the selectable values plus per-family
+	// resolution. One computation serves both the viewer's per-panel
+	// resolution and the panel-tags modal's resolution preview.
+	if cfg.Selection == models.SwapSelectionTagValue {
+		resp.Selection = cfg.Selection
+		resp.KeyPrefix = cfg.LabelTagPrefix
+		values, families, err := s.resolveSwapFamilies(ctx, dashboard, cfg)
+		if err != nil {
+			return nil, err
+		}
+		resp.Values = values
+		resp.Families = families
+	}
+
 	return resp, nil
+}
+
+// resolveSwapFamilies enumerates the dashboard's connection families (the
+// variable's own Tags = the primary family, plus each DISTINCT panel
+// ConnectionTags set) and resolves each family's connection per key value.
+//
+// A family's connection for value V is the one matching (family tags) whose
+// tag set carries `prefix:V`. More than one match is flagged Ambiguous and
+// resolved deterministically (first by name) rather than erroring — the
+// config should be fixed, but a viewer shouldn't get a broken dashboard
+// while it is. No match simply omits the entry: the panel renders its
+// empty state, never another host's data.
+//
+// The selectable values are the UNION of values seen across families, each
+// annotated with how many families matched so the picker can present
+// partial coverage honestly.
+func (s *DashboardService) resolveSwapFamilies(ctx context.Context, dashboard *models.Dashboard, cfg *models.ConnectionSwapConfig) ([]models.SwapTagValue, []models.SwapFamily, error) {
+	prefix := strings.TrimSpace(cfg.LabelTagPrefix)
+
+	// Family enumeration. A panel's ConnectionTags EXTEND the variable's
+	// Tags — they do not replace them. The variable's tags are the entry
+	// gate ("connections must meet the tag to be considered at all for
+	// this dashboard"); the panel's tags then narrow within that gate. So
+	// an override family's effective tag set is the UNION, and removing
+	// the gate tag from a connection removes it from every family at once.
+	// (Owner-decided 2026-08-07, superseding the earlier replace
+	// semantics: a NAS connection stripped of the gate tag was still being
+	// selected because the override family never re-checked it.)
+	//
+	// Key each family by the normalized UNION so two panels whose
+	// extensions differ only in case/order share one family entry.
+	type famAcc struct {
+		tags     []string
+		panelIDs []string
+	}
+	famOrder := []string{}
+	fams := map[string]*famAcc{}
+	for _, p := range dashboard.Panels {
+		if len(models.NormalizeTags(p.ConnectionTags)) == 0 {
+			continue
+		}
+		union := models.NormalizeTags(append(append([]string{}, cfg.Tags...), p.ConnectionTags...))
+		key := strings.Join(union, "\x00")
+		if fams[key] == nil {
+			fams[key] = &famAcc{tags: union}
+			famOrder = append(famOrder, key)
+		}
+		fams[key].panelIDs = append(fams[key].panelIDs, p.ID)
+	}
+
+	// Resolve one family: discover its connections, extract each one's key
+	// value, group by value.
+	resolveFamily := func(tags []string) ([]models.SwapResolution, map[string]struct{}, error) {
+		famCfg := *cfg
+		famCfg.Tags = tags
+		conns, err := s.discoverSwapConnections(ctx, dashboard.Namespace, &famCfg)
+		if err != nil {
+			return nil, nil, err
+		}
+		byValue := map[string][]*models.Connection{}
+		for _, c := range conns {
+			v := tagPrefixValue(c.Tags, prefix)
+			if v == "" {
+				continue // no key tag — not selectable in this mode
+			}
+			byValue[v] = append(byValue[v], c)
+		}
+		resolutions := make([]models.SwapResolution, 0, len(byValue))
+		seen := make(map[string]struct{}, len(byValue))
+		for v, matches := range byValue {
+			seen[v] = struct{}{}
+			// Deterministic pick: first by name.
+			slices.SortFunc(matches, func(a, b *models.Connection) int { return strings.Compare(a.Name, b.Name) })
+			resolutions = append(resolutions, models.SwapResolution{
+				Value:          v,
+				ConnectionID:   matches[0].ID,
+				ConnectionName: matches[0].Name,
+				Ambiguous:      len(matches) > 1,
+			})
+		}
+		slices.SortFunc(resolutions, func(a, b models.SwapResolution) int { return strings.Compare(a.Value, b.Value) })
+		return resolutions, seen, nil
+	}
+
+	families := []models.SwapFamily{}
+	valueFamilies := map[string]int{} // value -> families that resolve it
+
+	// Primary family first.
+	primRes, primSeen, err := resolveFamily(models.NormalizeTags(cfg.Tags))
+	if err != nil {
+		return nil, nil, err
+	}
+	families = append(families, models.SwapFamily{
+		Tags:        models.NormalizeTags(cfg.Tags),
+		Primary:     true,
+		Resolutions: primRes,
+	})
+	for v := range primSeen {
+		valueFamilies[v]++
+	}
+
+	for _, key := range famOrder {
+		fam := fams[key]
+		res, seen, err := resolveFamily(fam.tags)
+		if err != nil {
+			return nil, nil, err
+		}
+		families = append(families, models.SwapFamily{
+			Tags:        fam.tags,
+			PanelIDs:    fam.panelIDs,
+			Resolutions: res,
+		})
+		for v := range seen {
+			valueFamilies[v]++
+		}
+	}
+
+	total := len(families)
+	values := make([]models.SwapTagValue, 0, len(valueFamilies))
+	for v, matched := range valueFamilies {
+		values = append(values, models.SwapTagValue{
+			Value:           v,
+			FamiliesTotal:   total,
+			FamiliesMatched: matched,
+		})
+	}
+	slices.SortFunc(values, func(a, b models.SwapTagValue) int { return strings.Compare(a.Value, b.Value) })
+	return values, families, nil
+}
+
+// tagPrefixValue extracts the VALUE of the first `prefix:value` tag, or ""
+// when none is present. Mirrors the client's label-tag convention (prefixed
+// tags as a lightweight key-value store; one per prefix by convention).
+func tagPrefixValue(tags []string, prefix string) string {
+	if prefix == "" {
+		return ""
+	}
+	p := strings.ToLower(prefix) + ":"
+	for _, t := range tags {
+		lt := strings.ToLower(strings.TrimSpace(t))
+		if strings.HasPrefix(lt, p) && len(lt) > len(p) {
+			return strings.TrimSpace(strings.TrimSpace(t)[len(p):])
+		}
+	}
+	return ""
 }
 
 // referenceConnectionID returns the connection_id that the most panels'

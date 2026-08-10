@@ -68,6 +68,7 @@ import PanelTextModal from '../components/PanelTextModal';
 import ComponentEditorModal from '../components/ComponentEditorModal';
 import ComponentPickerModal from '../components/ComponentPickerModal';
 import ComponentSwapRulesModal from '../components/ComponentSwapRulesModal';
+import PanelConnectionTagsModal from '../components/PanelConnectionTagsModal';
 import AIPreflightModal from '../components/AIPreflightModal';
 import ColorSwatchPicker from '../components/shared/ColorSwatchPicker';
 import { TEXT_THRESHOLD_COLOR_PALETTE } from '../chart-spec/option-helpers';
@@ -270,6 +271,8 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     selectedConnId: dashVariableValue,
     setValue: setDashVariableValue,
     resolveConnectionId,
+    resolveSwapNoMatch,
+    swapMeta,
     resolveComponent,
     filterVariable: dashFilterVariable,
     filterValue: dashFilterValue,
@@ -464,6 +467,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // dropdown (e.g. "host" → show "trv-srv-001" from a "host:trv-srv-001" tag),
   // falling back to the connection name. Connection-swap only.
   const [editableVariableLabelTagPrefix, setEditableVariableLabelTagPrefix] = useState('');
+  // What the swap picker SELECTS: 'connection' (default — pick a connection,
+  // every panel follows it) or 'tag_value' (pick a key-tag value; every
+  // connection family follows it; label_tag_prefix becomes required as the
+  // join key). Stored as connection_swap.selection; absent = 'connection'.
+  const [editableVariableSelection, setEditableVariableSelection] = useState('connection');
   // Filter-type fields: how the header sources the value, and (for static) the
   // option list + default. Data-driven discovery (query the connection for valid
   // values) is a deferred seam — see the dashboard-variable-picker TODO.
@@ -552,6 +560,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         schemaStrict: editableVariableSchemaStrict,
         sameNamespace: editableVariableSameNamespace,
         labelTagPrefix: editableVariableLabelTagPrefix,
+        selection: editableVariableSelection,
         valueSource: editableVariableValueSource,
         options: editableVariableOptions,
         defaultValue: editableVariableDefault,
@@ -620,6 +629,8 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
 
   // Component-swap rules modal state (which panel's rules are being edited)
   const [swapRulesPanelId, setSwapRulesPanelId] = useState(null);
+  // Panel whose connection-tags modal is open (tag-value swap mode).
+  const [connectionTagsPanelId, setConnectionTagsPanelId] = useState(null);
 
   // AI pre-flight modal state
   const [aiPreflightOpen, setAiPreflightOpen] = useState(false);
@@ -838,6 +849,12 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     const map = {};
     for (const p of panels) {
       if (!p?.id) continue;
+      // A text panel renders its text_config even when a STALE component_id
+      // lingers from a chart→text conversion — so it reads no connection and
+      // must not be compat-checked. Including it produced a "columns
+      // unavailable" badge on a panel showing plain text (pre-existing; also
+      // visible on prod).
+      if (p.text_config) continue;
       const compId = resolveComponent ? resolveComponent(p) : p.component_id;
       if (compId) map[p.id] = compId;
     }
@@ -848,7 +865,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const { issuesByPanel: swapIssuesByPanel } = useSwapCompatibility({
     dashboardId: id,
     variableName: dashVariable?.name || '',
-    selectedConnId: dashVariableValue || '',
+    // Tag-value mode: the selection is a KEY VALUE, not a connection id.
+    // The swap-compatibility endpoint compares schemas against a connection
+    // id, so calling it with a value string produced garbage issues
+    // mis-attributed across panels (a text panel wearing a "4 columns
+    // unavailable" badge). Compatibility in this mode needs per-family
+    // targets — an open follow-up in multi-connection-swap.md — so until
+    // that exists the check is OFF, and the no-match empty state covers
+    // the wrong-connection failure class.
+    selectedConnId: swapMeta ? '' : (dashVariableValue || ''),
     panelComponents: effectivePanelComponents,
   });
 
@@ -2003,6 +2028,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       setEditableVariableSchemaStrict(v0?.connection_swap?.schema_strict || 'type_only');
       setEditableVariableSameNamespace(!!v0?.connection_swap?.same_namespace);
       setEditableVariableLabelTagPrefix(v0?.connection_swap?.label_tag_prefix || '');
+      setEditableVariableSelection(v0?.connection_swap?.selection || 'connection');
       setEditableVariableValueSource(v0?.filter_value?.value_source || 'static');
       setEditableVariableOptions(v0?.filter_value?.options || []);
       setEditableVariableDefault(v0?.filter_value?.default_value || '');
@@ -2224,9 +2250,17 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                     : undefined
                 }
                 onText={() => setTextPanel(panel.id)}
-                showSwapRulesOption={(!!dashVariable || !!dashFilterVariable) && hasChart}
+                showSwapRulesOption={editableVariablesEnabled
+                  && (editableVariableMode === 'connection_swap' || editableVariableMode === 'filter')
+                  && hasChart}
                 hasSwapRules={Array.isArray(panel.component_overrides) && panel.component_overrides.length > 0}
                 onEditSwapRules={() => openSwapRulesModal(panel.id)}
+                showConnectionTagsOption={editableVariablesEnabled
+                  && editableVariableMode === 'connection_swap'
+                  && editableVariableSelection === 'tag_value'
+                  && hasChart}
+                hasConnectionTags={Array.isArray(panel.connection_tags) && panel.connection_tags.length > 0}
+                onEditConnectionTags={() => setConnectionTagsPanelId(panel.id)}
               />
             )}
           </div>
@@ -2412,6 +2446,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                   schema_strict: editableVariableSchemaStrict || 'type_only',
                   same_namespace: editableVariableSameNamespace,
                   label_tag_prefix: (editableVariableLabelTagPrefix || '').trim(),
+                  // Persisted only in tag_value mode; absent means the
+                  // default connection mode (mirrors the model's omitempty).
+                  ...(editableVariableSelection === 'tag_value' ? { selection: 'tag_value' } : {}),
                 },
               },
         );
@@ -4230,6 +4267,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                 candidates={dashVariableCandidates}
                 value={dashVariableValue}
                 onChange={setDashVariableValue}
+                swapMeta={swapMeta}
               />
             )}
 
@@ -4812,6 +4850,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           chartsMap={chartsMap}
           dashboard={dashboard}
           resolveConnectionId={resolveConnectionId}
+          resolveSwapNoMatch={resolveSwapNoMatch}
           resolveComponent={resolveComponent}
           swapIssuesByPanel={swapIssuesByPanel}
           unauthorizedComponents={unauthorizedComponents}
@@ -4896,8 +4935,27 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           onSave={handleSaveSwapRules}
           panel={editablePanels.find((p) => p.id === swapRulesPanelId)}
           chartsMap={chartsMap}
-          variableMode={dashVariable ? 'connection_swap' : 'filter'}
-          variableLabel={(dashVariable || dashFilterVariable)?.label || (dashVariable || dashFilterVariable)?.name || 'variable'}
+          variableMode={editableVariableMode === 'filter' ? 'filter' : 'connection_swap'}
+          variableLabel={editableVariableLabel
+            || (dashVariable || dashFilterVariable)?.label
+            || (dashVariable || dashFilterVariable)?.name
+            || 'variable'}
+        />
+      )}
+
+      {/* Panel connection tags editor (edit mode, tag-value swap) */}
+      {connectionTagsPanelId && (
+        <PanelConnectionTagsModal
+          open={!!connectionTagsPanelId}
+          onClose={() => setConnectionTagsPanelId(null)}
+          panel={editablePanels.find((p) => p.id === connectionTagsPanelId)}
+          variableTags={editableVariableTags}
+          keyPrefix={editableVariableLabelTagPrefix}
+          sameNamespace={editableVariableSameNamespace}
+          dashboardNamespace={dashboard?.namespace || ''}
+          onSave={(tagsOrNull) => {
+            updateEditablePanel(connectionTagsPanelId, { connection_tags: tagsOrNull });
+          }}
         />
       )}
 
@@ -5041,6 +5099,14 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         open={varsModalOpen}
         onRequestClose={() => setVarsModalOpen(false)}
         onRequestSubmit={() => {
+          // Tag-value mode without its join key can't work (the server
+          // rejects it too) — keep the modal open with the field flagged
+          // rather than committing a draft that can never save.
+          if (varsDraft?.enabled && varsDraft?.mode === 'connection_swap'
+              && varsDraft?.selection === 'tag_value'
+              && !(varsDraft?.labelTagPrefix || '').trim()) {
+            return;
+          }
           // Commit the draft into the live editable* state on Apply.
           if (varsDraft) {
             setEditableVariablesEnabled(varsDraft.enabled);
@@ -5050,6 +5116,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             setEditableVariableSchemaStrict(varsDraft.schemaStrict);
             setEditableVariableSameNamespace(varsDraft.sameNamespace);
             setEditableVariableLabelTagPrefix(varsDraft.labelTagPrefix);
+            setEditableVariableSelection(varsDraft.selection || 'connection');
             setEditableVariableValueSource(varsDraft.valueSource);
             setEditableVariableOptions(varsDraft.options);
             setEditableVariableDefault(varsDraft.defaultValue);
@@ -5133,6 +5200,37 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
 
                       {varsDraft?.mode === 'connection_swap' && (
                         <>
+                          {/* Field order is the authoring thought sequence in
+                              tag-value mode: what kind of thing am I picking →
+                              which tag identifies it → which connections are
+                              candidates. "Swap by" leads because it changes
+                              what everything below means. */}
+                          <Select
+                            id="settings-variable-selection"
+                            labelText="Swap by"
+                            value={varsDraft?.selection ?? 'connection'}
+                            onChange={(e) => setVarsDraft((d) => ({ ...d, selection: e.target.value }))}
+                            helperText={varsDraft?.selection === 'tag_value'
+                              ? 'The dropdown lists tag values (each host once); every related connection follows the selected value. Panels needing a different connection set their own tags via the panel menu.'
+                              : 'The dropdown lists connections; selecting one repoints every panel.'}
+                          >
+                            <SelectItem value="connection" text="Connection" />
+                            <SelectItem value="tag_value" text="Tag value (multi-connection)" />
+                          </Select>
+                          <TextInput
+                            id="settings-variable-label-tag-prefix"
+                            labelText={varsDraft?.selection === 'tag_value'
+                              ? 'Label tag prefix (required)'
+                              : 'Label tag prefix (optional)'}
+                            value={varsDraft?.labelTagPrefix ?? ''}
+                            onChange={(e) => setVarsDraft((d) => ({ ...d, labelTagPrefix: e.target.value }))}
+                            placeholder="e.g. host"
+                            invalid={varsDraft?.selection === 'tag_value' && !(varsDraft?.labelTagPrefix || '').trim()}
+                            invalidText="Required when swapping by tag value — this is the key the dropdown dedupes on and connection families join through."
+                            helperText={varsDraft?.selection === 'tag_value'
+                              ? 'The tag that identifies each selectable value — "host" makes the dropdown list each host once, and every related connection follows the selected host.'
+                              : 'Show a connection\'s tag value in the dropdown instead of its name: prefix "host" shows "trv-srv-001" from a "host:trv-srv-001" tag. Falls back to the connection name when no matching tag.'}
+                          />
                           <TagInput
                             id="settings-variable-tags"
                             label="Connection tags"
@@ -5161,14 +5259,6 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                               onToggle={(checked) => setVarsDraft((d) => ({ ...d, sameNamespace: checked }))}
                             />
                           </div>
-                          <TextInput
-                            id="settings-variable-label-tag-prefix"
-                            labelText="Label tag prefix (optional)"
-                            value={varsDraft?.labelTagPrefix ?? ''}
-                            onChange={(e) => setVarsDraft((d) => ({ ...d, labelTagPrefix: e.target.value }))}
-                            placeholder="e.g. host"
-                            helperText="Show a connection's tag value in the dropdown instead of its name: prefix &quot;host&quot; shows &quot;trv-srv-001&quot; from a &quot;host:trv-srv-001&quot; tag. Falls back to the connection name when no matching tag."
-                          />
                         </>
                       )}
 

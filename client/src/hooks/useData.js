@@ -67,6 +67,22 @@ function isAbortError(err, signal = null) {
   return /input stream|NetworkError when attempting to fetch/i.test(msg);
 }
 
+// isAuthErrorMessage — did this error come from the SOURCE rejecting our
+// credentials (as opposed to a timeout, a network drop, or a bad query)?
+//
+// Message-matched because the data client flattens server errors to text.
+// The shapes this must catch, both produced server-side:
+//   "TSStore API error (status 401): {\"error\":\"API key required\"}"
+//   "authentication required: this store expects an API key but none is configured"
+// Deliberately does NOT match the dashboard's own session-auth failures
+// ("Authentication required" alone would — hence the source-shaped
+// patterns first) ... but a session failure surfacing on a panel is still
+// more honest than an eternal spinner, so the broad terms stay.
+function isAuthErrorMessage(err) {
+  return /status 40[13]\b|api key|authentication required|unauthorized/i.test(err?.message || '');
+}
+
+
 /**
  * Extract a nested value from an object using dot-notation path.
  * E.g., getNestedValue({a: {b: {c: 1}}}, 'a.b.c') → 1
@@ -426,10 +442,37 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
   // window supersedes this with a since:<window> backfill (set by the
   // editor codegen). Single-value charts (gauge, number) should pass an
   // explicit backfill with `params: { limit: 1 }` to avoid the wasted fetch.
+  // The component query's latest_by, as a stable primitive for the memo dep
+  // (the query object's identity churns per render).
+  const queryLatestBy = query?.params?.latest_by || '';
   const effectiveBackfill = useMemo(() => {
     if (backfill === false) return null;
     if (backfill) return backfill;
     if (datasourceType === 'tsstore' && datasourceTransport === 'streaming') {
+      // Current State (latest per series): when the component's own query
+      // carries latest_by, the seed IS the source-side reduction — one row
+      // per series — not a raw history slice for the client to throw away.
+      // Takes precedence over an active range: current state is a
+      // point-in-time view, and ts-store rejects latest_by combined with a
+      // stepped window anyway (the adapter suppresses step, but not the
+      // range intent itself). No limit param — the result is one row per
+      // series by construction. No group_by — it only partitions stepped
+      // downsamples, and latest_by never combines with a step.
+      // Live records then arrive per-series and the client-side dedupe
+      // (the streaming twin in DynamicComponentLoader) keeps each series'
+      // row current.
+      if (queryLatestBy) {
+        // BOUNDED with since:1h, for two reasons that happen to agree:
+        //  1. ts-store's latest_by without a time bound does a FULL-STORE
+        //     fetch+decode before deduping (the filter path got a default
+        //     1h lookback in the same handler; latest_by never did) — it
+        //     hangs 30s+ on ~24k-block stores and the server kills the
+        //     connection (ts-store#140). Bounded: 0.13s on the same store.
+        //  2. "Current state" semantics: a series silent for over an hour
+        //     isn't current — stale series aging out of the seed is right,
+        //     and the live stream keeps genuinely-current series fresh.
+        return { raw: 'since:1h', type: 'tsstore', params: { latest_by: queryLatestBy } };
+      }
       // When a dashboard range is active, the backfill should paint that WINDOW
       // rather than the latest N. Pass the range INTENT through unchanged — the
       // server's resolveRange/tsstoreRangeFromSpec translates it to since:/range:
@@ -448,7 +491,7 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
       return { raw: 'newest', type: 'tsstore', params: { limit: getStreamBufferSize() } };
     }
     return null;
-  }, [backfill, datasourceType, datasourceTransport, rangeValue, seriesCol]);
+  }, [backfill, datasourceType, datasourceTransport, rangeValue, seriesCol, queryLatestBy]);
   const effectiveBackfillKey = useMemo(() => JSON.stringify(effectiveBackfill), [effectiveBackfill]);
 
   // Re-init on a backfill-query change (stage 2 of #162): a dashboard range
@@ -650,7 +693,50 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
           // tripped the 15s default timeout — only the first few won the
           // race). Backfills can be large, so give them a longer timeout
           // than the default API call.
-          const result = await queryBackfillShared(connectionId, effectiveBackfill, { timeout: BACKFILL_TIMEOUT_MS });
+          //
+          // A latest_by seed (Current State per Series) gets ONE fallback:
+          // if the source-side reduction fails — ts-store's latest_by can
+          // exceed the timeout on large stores (ts-store#140) — retry as a
+          // plain `newest <buffer>` pull. The client-side dedupe reduces it
+          // to one row per series anyway, so the fallback costs transfer,
+          // not correctness; without it the panel sat blank for the whole
+          // timeout and then started from an empty buffer.
+          // The reduced seed gets a SHORT leash when a fallback exists: a
+          // healthy store answers latest_by in ~3s, so 10s is generous —
+          // and on a store where it hangs, waiting the full 45s just holds
+          // the panel blank before the inevitable fallback.
+          const seedTimeout = effectiveBackfill?.params?.latest_by ? 10_000 : BACKFILL_TIMEOUT_MS;
+          // Count-bounded fallback for the latest_by seed: `newest <buffer>`
+          // is bounded by record count, not time, so it is immune to a
+          // store's cadence — the client-side dedupe reduces it to
+          // newest-per-series either way. Used when the bounded seed FAILS
+          // or comes back EMPTY (below).
+          const plainNewestFallback = { raw: 'newest', type: 'tsstore', params: { limit: getStreamBufferSize() } };
+          let result;
+          try {
+            result = await queryBackfillShared(connectionId, effectiveBackfill, { timeout: seedTimeout });
+          } catch (seedErr) {
+            if (cancelled) return;
+            if (!effectiveBackfill?.params?.latest_by || isAbortError(seedErr)) throw seedErr;
+            console.warn('[useData] latest_by backfill failed, falling back to plain newest:', seedErr.message);
+            result = await queryBackfillShared(connectionId, plainNewestFallback, { timeout: BACKFILL_TIMEOUT_MS });
+          }
+          // An EMPTY bounded seed is a miss, not an answer. The since:1h
+          // bound assumes every current series reported within the hour —
+          // an assumption the store's API can't verify in advance (stats
+          // exposes store-level newest/oldest, but nothing reveals
+          // per-series cadence, and any time bound that admits a chatty
+          // series can starve a sparse one). A batch-loaded or
+          // slow-cadence store has valid newest-per-series data the bound
+          // returns zero rows for — and zero rows is a SUCCESS, so without
+          // this the fallback never fired and the panel silently started
+          // blank. Escalate to the count-bounded pull; if THAT is empty
+          // too, the store is genuinely empty and empty is the answer.
+          if (!cancelled
+              && effectiveBackfill?.params?.latest_by
+              && (result?.data?.rows?.length ?? 0) === 0) {
+            result = await queryBackfillShared(connectionId, plainNewestFallback, { timeout: BACKFILL_TIMEOUT_MS });
+          }
           // Superseded while awaiting (connection swap, range change,
           // unmount): drop the stale rows and stop — the replacement run
           // owns this panel now, and falling through would also subscribe
@@ -755,6 +841,21 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
           // With no live stream to fall back on, a failed backfill would
           // otherwise leave a silently empty panel — surface it.
           if (backfillError) setError(backfillError);
+        }
+        return;
+      }
+
+      // AUTH failures are terminal for the whole connection, not just the
+      // backfill: the live stream authenticates with the SAME credential,
+      // so the "streaming will start empty" rationale for swallowing other
+      // backfill errors is false here — nothing will ever paint and the
+      // panel spins forever (how four un-keyed ts-store connections
+      // presented: legend, no data, no error). Surface it and skip the
+      // doomed subscribe.
+      if (backfillError && isAuthErrorMessage(backfillError)) {
+        if (mountedRef.current) {
+          handleConnectionSuccess();
+          setError(backfillError);
         }
         return;
       }

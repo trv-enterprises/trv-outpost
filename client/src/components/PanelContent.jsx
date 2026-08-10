@@ -49,6 +49,12 @@ function PanelContent({
   unauthorizedReason = null,
   swapIssue = null,
   resolveConnectionId,
+  // Tag-value swap: (panel) => { value, tags } when this panel's connection
+  // family has no connection for the selected key value, else null. Gates
+  // rendering BEFORE the chart mounts — with host B selected, silently
+  // painting host A's (baseline) data would be a lie; an explicit empty
+  // state naming the gap is honest.
+  resolveSwapNoMatch = null,
   dashboardVariableText = '',
   variableValues = {},
   dashboardVariableValue = null,
@@ -64,6 +70,10 @@ function PanelContent({
   // drives the step-aware refresh below, so the two can't drift.
   const panelRange = RANGE_EXEMPT_CHART_TYPES.has(chart?.chart_type) ? null : rangeValue;
 
+  // Tag-value swap no-match (only ever non-null for chart panels with the
+  // mode active and a selection made).
+  const swapNoMatch = hasChart && resolveSwapNoMatch ? resolveSwapNoMatch(panel) : null;
+
   return (
     <PanelErrorBoundary
       resetKey={`${effectiveComponentId || panel.id}-${chart?.updated || ''}`}
@@ -73,17 +83,25 @@ function PanelContent({
           active swap connection is missing columns this component needs, so the
           user knows WHY the panel looks degraded instead of silently seeing a
           collapsed table. */}
-      {swapIssue && Array.isArray(swapIssue.missing) && swapIssue.missing.length > 0 && (
+      {hasChart && swapIssue && Array.isArray(swapIssue.missing) && swapIssue.missing.length > 0 && (
+        // Native `title`, NOT a Carbon Tooltip. Carbon positions its popovers
+        // `fixed`, but panels sit inside counter-transform wrappers in fit
+        // modes and a transformed ancestor is a containing block for fixed
+        // elements — the popover's viewport-computed coordinates get applied
+        // in the transform's coordinate space, so it rendered clipped,
+        // covered by sibling panels, or detached depending on which way it
+        // aligned. The native tooltip renders in the OS layer: immune to
+        // transforms, overflow, and z-index — and it can't collide with the
+        // panel's own hover title (nested title attrs: innermost wins).
         <div className="swap-issue-badge">
-          <Tooltip
-            align="left"
-            autoAlign
-            label={`${swapIssue.missing.length} column${swapIssue.missing.length === 1 ? '' : 's'} unavailable on this connection: ${swapIssue.missing.join(', ')}`}
+          <button
+            type="button"
+            className="swap-issue-badge__trigger"
+            title={`${swapIssue.missing.length} column${swapIssue.missing.length === 1 ? '' : 's'} unavailable on this connection: ${swapIssue.missing.join(', ')}`}
+            aria-label="Columns unavailable on this connection"
           >
-            <button type="button" className="swap-issue-badge__trigger" aria-label="Columns unavailable on this connection">
-              <WarningAltFilled size={16} />
-            </button>
-          </Tooltip>
+            <WarningAltFilled size={16} />
+          </button>
         </div>
       )}
       {unauthorizedReason ? (
@@ -97,6 +115,21 @@ function PanelContent({
             {unauthorizedReason === 'connection'
               ? 'This component reads from a connection in a namespace you don\'t have access to.'
               : 'This component is in a namespace you don\'t have access to.'}
+          </div>
+        </div>
+      ) : swapNoMatch ? (
+        // Tag-value swap: this panel's connection family has no connection
+        // for the selected value. The message is deliberately SPECIFIC — it
+        // only ever appears on a misconfigured or sparse family, where the
+        // selected value and the panel's tags are exactly what the author
+        // needs to fix it.
+        <div className="panel-swap-no-match">
+          <div className="panel-swap-no-match__title">No connection</div>
+          <div className="panel-swap-no-match__detail">
+            {`No connection for "${swapNoMatch.value}"`}
+            {swapNoMatch.tags.length > 0
+              ? ` matches this panel's tags (${swapNoMatch.tags.join(', ')}).`
+              : ' matches this dashboard\'s connection tags.'}
           </div>
         </div>
       ) : hasText ? (
@@ -150,7 +183,7 @@ function PanelContent({
                     dataMapping: chart.data_mapping,
                     // Dashboard-variable connection-swap: override the
                     // component's design-time connection when active.
-                    connectionId: resolveConnectionId ? resolveConnectionId(chart) : chart.connection_id,
+                    connectionId: resolveConnectionId ? resolveConnectionId(chart, panel) : chart.connection_id,
                     // Execute-by-reference (#23): view mode sends runtime
                     // values only; the server runs this component's stored
                     // query. `chart` is already the post-override effective
@@ -204,6 +237,7 @@ PanelContent.propTypes = {
     componentName: PropTypes.string,
   }),
   resolveConnectionId: PropTypes.func,
+  resolveSwapNoMatch: PropTypes.func,
   dashboardVariableText: PropTypes.string,
   variableValues: PropTypes.object,
   dashboardVariableValue: PropTypes.string,

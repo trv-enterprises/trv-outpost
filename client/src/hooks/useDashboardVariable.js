@@ -75,8 +75,17 @@ export function useDashboardVariable({ dashboard, globalEnabled, getSearchParam,
   const rangeVariableName = rangeVariable?.name || null;
 
   const [candidates, setCandidates] = useState([]);
-  // The selected connection_id for the active variable (null = none selected).
+  // The selection for the active variable (null = none selected).
+  // CONNECTION mode: a connection_id. TAG-VALUE mode: the key-tag VALUE
+  // string (e.g. "trv-srv-002") — the picker selects a value and every
+  // connection family follows it. Consumers treat it opaquely; the two
+  // resolve functions below encapsulate the difference.
   const [selectedConnId, setSelectedConnId] = useState(null);
+  // Tag-value mode payload from the candidates endpoint:
+  // { selection, key_prefix, values: [{value, families_matched, families_total}],
+  //   families: [{tags, primary, panel_ids, resolutions: [{value, connection_id,
+  //   connection_name, ambiguous}]}] }. Null in connection mode.
+  const [swapMeta, setSwapMeta] = useState(null);
   const loadedForRef = useRef(null);
 
   // The active value for the filter-mode variable (null = none/unset). A plain
@@ -102,9 +111,20 @@ export function useDashboardVariable({ dashboard, globalEnabled, getSearchParam,
       .then((res) => {
         if (cancelled) return;
         setCandidates(res?.candidates || []);
+        setSwapMeta(res?.selection === 'tag_value'
+          ? {
+              selection: res.selection,
+              keyPrefix: res.key_prefix || '',
+              values: res.values || [],
+              families: res.families || [],
+            }
+          : null);
       })
       .catch(() => {
-        if (!cancelled) setCandidates([]);
+        if (!cancelled) {
+          setCandidates([]);
+          setSwapMeta(null);
+        }
       });
     return () => {
       cancelled = true;
@@ -119,10 +139,18 @@ export function useDashboardVariable({ dashboard, globalEnabled, getSearchParam,
     // every candidate refresh — so we don't clobber a live user selection.
     const resolveKey = `${dashboardId}::${variableName}`;
     if (loadedForRef.current === resolveKey) return;
-    if (!candidates.length) return; // wait until we can validate against candidates
+    // Wait until we can validate: candidates in connection mode, the
+    // tag-value payload in tag_value mode (both arrive in one response, but
+    // an override-family value can exist with an empty primary candidate
+    // list, so either signal suffices).
+    if (!candidates.length && !swapMeta) return;
     loadedForRef.current = resolveKey;
 
-    const valid = (cid) => !!cid && candidates.some((c) => c.id === cid);
+    // What counts as a valid saved/URL selection depends on the mode: a
+    // known connection id, or a known key value.
+    const valid = swapMeta
+      ? (v) => !!v && swapMeta.values.some((x) => x.value === v)
+      : (cid) => !!cid && candidates.some((c) => c.id === cid);
 
     const fromUrl = getSearchParam?.()?.get(`var_${variableName}`);
     if (valid(fromUrl)) {
@@ -142,7 +170,7 @@ export function useDashboardVariable({ dashboard, globalEnabled, getSearchParam,
         setSelectedConnId(valid(saved) ? saved : null);
       })
       .catch(() => setSelectedConnId(null));
-  }, [dashboardId, variableName, candidates, getSearchParam]);
+  }, [dashboardId, variableName, candidates, swapMeta, getSearchParam]);
 
   // Set + persist the selected value. Updates state, writes the URL param, and
   // saves to userConfig (mirrors the fit-mode pattern incl. stale-id pruning).
@@ -341,27 +369,92 @@ export function useDashboardVariable({ dashboard, globalEnabled, getSearchParam,
     [dashboardId, rangeVariableName, setSearchParam],
   );
 
-  // Resolve a panel's effective connection_id for connection-swap. When the
-  // variable is active and a connection is selected, EVERY panel follows it —
-  // the connection IS the variable, so any panel is repointed. A panel that
-  // must stay fixed simply points its (default) component at a specific
-  // connection (the former per-panel pin_connection opt-out was replaced by the
-  // component-override mechanism). With no selection (or feature off) everything
-  // falls through to the component's design-time connection_id.
+  // Tag-value mode lookup tables, derived once per payload:
+  //   familyOfPanel: panel_id → family index (panels not listed → primary)
+  //   resolutionOf:  family index → Map(value → resolution)
+  const swapLookups = useMemo(() => {
+    if (!swapMeta) return null;
+    const familyOfPanel = new Map();
+    const resolutionOf = [];
+    let primaryIdx = 0;
+    swapMeta.families.forEach((fam, i) => {
+      if (fam.primary) primaryIdx = i;
+      (fam.panel_ids || []).forEach((pid) => familyOfPanel.set(pid, i));
+      const m = new Map();
+      (fam.resolutions || []).forEach((r) => m.set(r.value, r));
+      resolutionOf.push(m);
+    });
+    return { familyOfPanel, resolutionOf, primaryIdx };
+  }, [swapMeta]);
+
+  // Resolve a panel's effective connection_id for connection-swap.
+  //
+  // CONNECTION mode: when the variable is active and a connection is
+  // selected, EVERY panel follows it — the connection IS the variable. A
+  // panel that must stay fixed simply points its (default) component at a
+  // specific connection (the former per-panel pin_connection opt-out was
+  // replaced by the component-override mechanism).
+  //
+  // TAG-VALUE mode: the selection is a key VALUE and each panel follows its
+  // own family — the variable's tags for ordinary panels, the panel's
+  // connection_tags family for panels bound elsewhere (looked up by panel id
+  // from the server payload, so the client never re-derives tag matching).
+  // A family with no resolution for the value returns the BASELINE id here;
+  // callers gate rendering with resolveSwapNoMatch first, so the baseline is
+  // never painted as if it were the selected host's data.
+  //
+  // With no selection (or feature off) everything falls through to the
+  // component's design-time connection_id.
   const resolveConnectionId = useCallback(
-    (component) => {
+    (component, panel) => {
       const baseline = component?.connection_id;
       if (!variableName || !selectedConnId) return baseline;
+      if (swapLookups) {
+        const famIdx = panel?.id != null && swapLookups.familyOfPanel.has(panel.id)
+          ? swapLookups.familyOfPanel.get(panel.id)
+          : swapLookups.primaryIdx;
+        const res = swapLookups.resolutionOf[famIdx]?.get(selectedConnId);
+        return res ? res.connection_id : baseline;
+      }
       return selectedConnId;
     },
-    [variableName, selectedConnId],
+    [variableName, selectedConnId, swapLookups],
+  );
+
+  // Tag-value mode only: does this panel's family FAIL to resolve for the
+  // current selection? Returns { value, tags } for the empty-state render
+  // ("No connection for <value> matches this panel's tags"), or null when
+  // the panel resolves (or the mode/selection is inactive). Split from
+  // resolveConnectionId so the existing string-returning contract survives.
+  const resolveSwapNoMatch = useCallback(
+    (panel) => {
+      if (!swapLookups || !variableName || !selectedConnId) return null;
+      const famIdx = panel?.id != null && swapLookups.familyOfPanel.has(panel.id)
+        ? swapLookups.familyOfPanel.get(panel.id)
+        : swapLookups.primaryIdx;
+      if (swapLookups.resolutionOf[famIdx]?.has(selectedConnId)) return null;
+      return {
+        value: selectedConnId,
+        tags: swapMeta.families[famIdx]?.tags || [],
+      };
+    },
+    [swapLookups, swapMeta, variableName, selectedConnId],
   );
 
   // The selected connection-swap candidate (carries name + tags), or null.
-  const selectedCandidate = useMemo(
-    () => (selectedConnId ? candidates.find((c) => c.id === selectedConnId) || null : null),
-    [selectedConnId, candidates],
-  );
+  // In tag-value mode there is no single selected connection — the PRIMARY
+  // family's resolved connection stands in (it's what most panels read, and
+  // its prefix-tag value IS the selected value), null when the primary
+  // family doesn't resolve for the value.
+  const selectedCandidate = useMemo(() => {
+    if (!selectedConnId) return null;
+    if (swapLookups) {
+      const res = swapLookups.resolutionOf[swapLookups.primaryIdx]?.get(selectedConnId);
+      if (!res) return null;
+      return candidates.find((c) => c.id === res.connection_id) || null;
+    }
+    return candidates.find((c) => c.id === selectedConnId) || null;
+  }, [selectedConnId, candidates, swapLookups]);
 
   // Resolve a panel's effective component_id via its component-swap rules
   // (panel.component_overrides). Rules are evaluated in order; the first whose
@@ -386,16 +479,26 @@ export function useDashboardVariable({ dashboard, globalEnabled, getSearchParam,
       if (rules.length === 0) return fallback;
 
       // No active variable / no selection → nothing to match against → default.
-      const swapActive = !!variableName && !!selectedCandidate;
+      // Tag-value mode: the selection itself is the value, so a selection is
+      // active even when the primary family happens not to resolve for it
+      // (selectedCandidate null) — rules on the value must still match.
+      const swapActive = !!variableName && (swapLookups ? !!selectedConnId : !!selectedCandidate);
       const filterActive = !!filterVariableName && filterValue != null && filterValue !== '';
       if (!swapActive && !filterActive) return fallback;
 
-      // The "variable" subject's comparison string.
+      // The "variable" subject's comparison string. In tag-value mode that
+      // IS the selected value; in connection mode it's the selected
+      // connection's display value (prefix-tag value, else name) — identical
+      // strings whenever the primary family resolves, so existing rules
+      // carry over unchanged.
       const variableValue = swapActive
-        ? candidateLabel(selectedCandidate, variable?.connection_swap?.label_tag_prefix || '')
+        ? (swapLookups
+            ? selectedConnId
+            : candidateLabel(selectedCandidate, variable?.connection_swap?.label_tag_prefix || ''))
         : (filterActive ? String(filterValue) : '');
-      // The "tag" subject's candidate strings (connection_swap only).
-      const tagVals = swapActive ? tagValues(selectedCandidate.tags) : [];
+      // The "tag" subject's candidate strings (connection_swap only) — the
+      // selected/primary-resolved connection's prefixed tags.
+      const tagVals = swapActive && selectedCandidate ? tagValues(selectedCandidate.tags) : [];
 
       const cmp = (op, haystack, needle) => {
         const h = String(haystack).toLowerCase();
@@ -415,7 +518,7 @@ export function useDashboardVariable({ dashboard, globalEnabled, getSearchParam,
       }
       return fallback;
     },
-    [variableName, selectedCandidate, filterVariableName, filterValue, variable],
+    [variableName, selectedCandidate, selectedConnId, swapLookups, filterVariableName, filterValue, variable],
   );
 
   return {
@@ -427,10 +530,14 @@ export function useDashboardVariable({ dashboard, globalEnabled, getSearchParam,
     selectedConnId,
     /** set + persist the selection (pass null to clear) */
     setValue,
-    /** (component) => effective connection_id */
+    /** (component, panel) => effective connection_id */
     resolveConnectionId,
     /** (panel) => effective component_id (component-swap rules), else panel default */
     resolveComponent,
+    /** tag-value mode payload ({ selection, keyPrefix, values, families }), null in connection mode */
+    swapMeta,
+    /** (panel) => { value, tags } when the panel's family has no connection for the selection, else null */
+    resolveSwapNoMatch,
     /** the active filter-mode variable definition, or null when inactive */
     filterVariable,
     /** the active filter value (string), or null when unset */

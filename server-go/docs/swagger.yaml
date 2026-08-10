@@ -1294,6 +1294,13 @@ definitions:
       schema_strict:
         description: '"type_only" (default) | "superset" | "exact"'
         type: string
+      selection:
+        description: |-
+          Selection is what the picker selects: SwapSelectionConnection (default,
+          also when empty) or SwapSelectionTagValue. In tag_value mode the stored
+          selection (and URL param) is the tag VALUE string, not a connection id,
+          and LabelTagPrefix is required.
+        type: string
       tags:
         description: 'AND-matched discovery tags: a candidate must carry ALL of them
           (the Mongo query is OR/$in, then GetVariableCandidates narrows to AND)'
@@ -1775,6 +1782,25 @@ definitions:
           connection it wants.
         items:
           $ref: '#/definitions/models.ComponentOverride'
+        type: array
+      connection_tags:
+        description: |-
+          ConnectionTags binds this panel to a DIFFERENT connection family when
+          the dashboard's connection_swap variable is in tag_value mode. The
+          panel's connection resolves to the one matching ConnectionTags plus the
+          key tag (`prefix:<selected value>`) — these tags REPLACE the variable's
+          Tags for this panel (they do not union with them; a docker connection
+          does not carry the synology tags). Static: no reference to the variable
+          or any of its values, so one selection re-resolves every family.
+
+          Lives on the panel (not the component record, which is shared across
+          dashboards, and not a dashboard-level side map, which would need
+          panel-id remapping on duplicate the way panel_border adornments do).
+          Empty/nil = the panel follows the variable's primary family. Ignored
+          entirely outside tag_value mode; retained dormant when the variable is
+          disabled (keep-and-count policy — see multi-connection-swap.md).
+        items:
+          type: string
         type: array
       h:
         type: integer
@@ -3141,6 +3167,54 @@ definitions:
       variable:
         type: string
     type: object
+  models.SwapFamily:
+    properties:
+      panel_ids:
+        description: panels bound to this family (override families only)
+        items:
+          type: string
+        type: array
+      primary:
+        description: true for the variable's own Tags
+        type: boolean
+      resolutions:
+        description: |-
+          Resolutions holds one entry per key value the family resolves; a value
+          absent here is a no-match for this family (the panel renders its
+          empty state rather than baseline data).
+        items:
+          $ref: '#/definitions/models.SwapResolution'
+        type: array
+      tags:
+        description: normalized family tags
+        items:
+          type: string
+        type: array
+    type: object
+  models.SwapResolution:
+    properties:
+      ambiguous:
+        description: |-
+          Ambiguous flags >1 connection matching (family tags + key:value); the
+          first by name was chosen deterministically. Authoring-time warning
+          material — the config should be fixed, not silently tolerated.
+        type: boolean
+      connection_id:
+        type: string
+      connection_name:
+        type: string
+      value:
+        type: string
+    type: object
+  models.SwapTagValue:
+    properties:
+      families_matched:
+        type: integer
+      families_total:
+        type: integer
+      value:
+        type: string
+    type: object
   models.SynologyDSMConfig:
     properties:
       insecure_skip_verify:
@@ -3830,6 +3904,26 @@ definitions:
       candidates:
         items:
           $ref: '#/definitions/models.VariableCandidate'
+        type: array
+      families:
+        description: primary + each distinct panel connection_tags set, with per-value
+          resolution
+        items:
+          $ref: '#/definitions/models.SwapFamily'
+        type: array
+      key_prefix:
+        description: the LabelTagPrefix the values were extracted with
+        type: string
+      selection:
+        description: |-
+          Tag-value mode additions (Selection == SwapSelectionTagValue). Empty in
+          connection mode. Candidates above still lists the PRIMARY family's
+          connections in both modes, so existing clients keep working.
+        type: string
+      values:
+        description: distinct selectable key values, sorted
+        items:
+          $ref: '#/definitions/models.SwapTagValue'
         type: array
       variable:
         type: string

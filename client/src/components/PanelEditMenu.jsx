@@ -54,6 +54,11 @@ function PanelEditMenu({
   showSwapRulesOption = false,
   hasSwapRules = false,
   onEditSwapRules,
+  // Panel connection tags (tag-value swap mode). Shown only when the
+  // dashboard's swap variable selects by tag value.
+  showConnectionTagsOption = false,
+  hasConnectionTags = false,
+  onEditConnectionTags,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [dropdownStyle, setDropdownStyle] = useState({});
@@ -73,14 +78,15 @@ function PanelEditMenu({
       const updatePosition = () => {
         const buttonRect = buttonRef.current.getBoundingClientRect();
         const dropdownWidth = 200; // min-width from CSS
-        // Rough item heights for the "would the dropdown overflow
-        // below the viewport?" check. Each visible item ≈ 36px.
-        // The "Edit with AI" and "New with AI" items disappear when
-        // AI is disabled, so trim the estimate accordingly.
-        const hiddenAiItems = aiEnabled ? 0 : (hasExisting ? 2 : 1);
-        const dropdownHeight = (hasExisting ? 220 : 140)
-          - hiddenAiItems * 36
-          + (onDuplicate ? 36 : 0); // the Duplicate item
+        // MEASURE the rendered dropdown for the "would it overflow below
+        // the viewport?" check. This replaced a hand-maintained per-item
+        // height estimate that silently went stale every time the menu
+        // gained an item (it never counted the swap-rules item, then not
+        // the panel-connection-tags item either) — so the flip-up stopped
+        // triggering and the menu ran off the bottom of the screen. The
+        // effect runs after render, so the node exists by the time we're
+        // here; the fallback only covers the first frame edge.
+        const dropdownHeight = dropdownRef.current?.offsetHeight || 320;
 
         // Position below the button, centered horizontally
         // getBoundingClientRect() returns visual (screen) coordinates, which is what we want for fixed positioning
@@ -233,16 +239,36 @@ function PanelEditMenu({
       {/* Component-swap rules (only when the dashboard has an active variable
           and this panel has a component). Lets the panel render a different
           component per active variable value. */}
-      {showSwapRulesOption && (
+      {(showSwapRulesOption || showConnectionTagsOption) && (
         <>
           <div className="panel-edit-menu-divider" />
-          <button
-            className="panel-edit-menu-item"
-            onClick={() => handleAction(onEditSwapRules)}
-          >
-            {hasSwapRules ? <PinFilled size={16} /> : <Pin size={16} />}
-            <span>Connection-based components…</span>
-          </button>
+          {showSwapRulesOption && (
+            <button
+              className="panel-edit-menu-item"
+              onClick={() => handleAction(onEditSwapRules)}
+            >
+              {hasSwapRules ? <PinFilled size={16} /> : <Pin size={16} />}
+              <span>Connection-based components…</span>
+            </button>
+          )}
+          {/* Panel connection tags (tag-value swap mode only). Binds THIS
+              panel to a different connection family. Named around the PANEL
+              (dashboard-owned data) rather than the component — components
+              are shared across dashboards, and a "component-based" name
+              would imply exactly the cross-dashboard effect this doesn't
+              have. Visible even with no tags set: that's how they get set
+              the first time. The filled icon is the set-state indicator, so
+              scanning panels in edit mode shows which deviate from the
+              primary family. */}
+          {showConnectionTagsOption && (
+            <button
+              className="panel-edit-menu-item"
+              onClick={() => handleAction(onEditConnectionTags)}
+            >
+              {hasConnectionTags ? <PinFilled size={16} /> : <Pin size={16} />}
+              <span>Panel connection tags…</span>
+            </button>
+          )}
         </>
       )}
     </div>

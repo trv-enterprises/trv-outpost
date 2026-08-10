@@ -93,6 +93,8 @@ function MobileDashboardViewer({ canControl = false }) {
     selectedConnId: dashVariableValue,
     setValue: setDashVariableValue,
     resolveConnectionId,
+    resolveSwapNoMatch,
+    swapMeta,
     resolveComponent,
     filterVariable: dashFilterVariable,
     filterValue: dashFilterValue,
@@ -326,6 +328,7 @@ function MobileDashboardViewer({ canControl = false }) {
               candidates={dashVariableCandidates}
               value={dashVariableValue}
               onChange={setDashVariableValue}
+              swapMeta={swapMeta}
             />
             <FilterVariablePicker
               variable={dashFilterVariable}
@@ -439,6 +442,7 @@ function MobileDashboardViewer({ canControl = false }) {
         unauthorizedReason={derived.unauthorizedReason}
         swapIssue={null}
         resolveConnectionId={resolveConnectionId}
+        resolveSwapNoMatch={resolveSwapNoMatch}
         dashboardVariableText={dashboardVariableText}
         variableValues={variableValues}
         // GOTCHA: the prop named dashboardVariableValue carries the FILTER value

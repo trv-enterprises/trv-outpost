@@ -58,6 +58,7 @@ function DashboardGrid({
   chartsMap,
   dashboard,
   resolveConnectionId,
+  resolveSwapNoMatch = null,
   resolveComponent,
   swapIssuesByPanel = {},
   // #4: component_id → "component" | "connection" for panels whose
@@ -438,6 +439,7 @@ function DashboardGrid({
                   unauthorizedReason={unauthorizedReason}
                   swapIssue={swapIssuesByPanel[panel.id] || null}
                   resolveConnectionId={resolveConnectionId}
+                  resolveSwapNoMatch={resolveSwapNoMatch}
                   dashboardVariableText={dashboardVariableText}
                   variableValues={variableValues}
                   dashboardVariableValue={dashboardVariableValue}
@@ -498,6 +500,7 @@ DashboardGrid.propTypes = {
   chartsMap: PropTypes.object,
   dashboard: PropTypes.object,
   resolveConnectionId: PropTypes.func,
+  resolveSwapNoMatch: PropTypes.func,
   resolveComponent: PropTypes.func,
   swapIssuesByPanel: PropTypes.object,
   unauthorizedComponents: PropTypes.object,

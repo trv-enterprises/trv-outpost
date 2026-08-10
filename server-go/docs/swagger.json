@@ -9004,6 +9004,10 @@
                     "description": "\"type_only\" (default) | \"superset\" | \"exact\"",
                     "type": "string"
                 },
+                "selection": {
+                    "description": "Selection is what the picker selects: SwapSelectionConnection (default,\nalso when empty) or SwapSelectionTagValue. In tag_value mode the stored\nselection (and URL param) is the tag VALUE string, not a connection id,\nand LabelTagPrefix is required.",
+                    "type": "string"
+                },
                 "tags": {
                     "description": "AND-matched discovery tags: a candidate must carry ALL of them (the Mongo query is OR/$in, then GetVariableCandidates narrows to AND)",
                     "type": "array",
@@ -9647,6 +9651,13 @@
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/models.ComponentOverride"
+                    }
+                },
+                "connection_tags": {
+                    "description": "ConnectionTags binds this panel to a DIFFERENT connection family when\nthe dashboard's connection_swap variable is in tag_value mode. The\npanel's connection resolves to the one matching ConnectionTags plus the\nkey tag (`prefix:\u003cselected value\u003e`) — these tags REPLACE the variable's\nTags for this panel (they do not union with them; a docker connection\ndoes not carry the synology tags). Static: no reference to the variable\nor any of its values, so one selection re-resolves every family.\n\nLives on the panel (not the component record, which is shared across\ndashboards, and not a dashboard-level side map, which would need\npanel-id remapping on duplicate the way panel_border adornments do).\nEmpty/nil = the panel follows the variable's primary family. Ignored\nentirely outside tag_value mode; retained dormant when the variable is\ndisabled (keep-and-count policy — see multi-connection-swap.md).",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
                     }
                 },
                 "h": {
@@ -11467,6 +11478,68 @@
                 }
             }
         },
+        "models.SwapFamily": {
+            "type": "object",
+            "properties": {
+                "panel_ids": {
+                    "description": "panels bound to this family (override families only)",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "primary": {
+                    "description": "true for the variable's own Tags",
+                    "type": "boolean"
+                },
+                "resolutions": {
+                    "description": "Resolutions holds one entry per key value the family resolves; a value\nabsent here is a no-match for this family (the panel renders its\nempty state rather than baseline data).",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.SwapResolution"
+                    }
+                },
+                "tags": {
+                    "description": "normalized family tags",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "models.SwapResolution": {
+            "type": "object",
+            "properties": {
+                "ambiguous": {
+                    "description": "Ambiguous flags \u003e1 connection matching (family tags + key:value); the\nfirst by name was chosen deterministically. Authoring-time warning\nmaterial — the config should be fixed, not silently tolerated.",
+                    "type": "boolean"
+                },
+                "connection_id": {
+                    "type": "string"
+                },
+                "connection_name": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.SwapTagValue": {
+            "type": "object",
+            "properties": {
+                "families_matched": {
+                    "type": "integer"
+                },
+                "families_total": {
+                    "type": "integer"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
         "models.SynologyDSMConfig": {
             "type": "object",
             "required": [
@@ -12367,6 +12440,28 @@
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/models.VariableCandidate"
+                    }
+                },
+                "families": {
+                    "description": "primary + each distinct panel connection_tags set, with per-value resolution",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.SwapFamily"
+                    }
+                },
+                "key_prefix": {
+                    "description": "the LabelTagPrefix the values were extracted with",
+                    "type": "string"
+                },
+                "selection": {
+                    "description": "Tag-value mode additions (Selection == SwapSelectionTagValue). Empty in\nconnection mode. Candidates above still lists the PRIMARY family's\nconnections in both modes, so existing clients keep working.",
+                    "type": "string"
+                },
+                "values": {
+                    "description": "distinct selectable key values, sorted",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.SwapTagValue"
                     }
                 },
                 "variable": {

@@ -81,6 +81,20 @@ jobs:
         working-directory: server-go
         run: go vet ./...
 
+      # govulncheck — reachability-aware Go vulnerability scan. Added
+      # 2026-08-07 after it caught two REACHABLE vulns in the v0.51.0
+      # dependency sweep that Dependabot never reported (Dependabot matches
+      # manifests; govulncheck analyzes the call graph, so it both finds
+      # vulns in indirect deps and stays quiet about unreachable ones).
+      # The tool is installed at latest — its vuln DB is fetched live at
+      # run time either way, so pinning the binary buys no reproducibility
+      # on findings, only staleness in the analyzer.
+      - name: govulncheck
+        working-directory: server-go
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
       # gofmt, scoped to the Go files THIS PR touches.
       #
       # Deliberately not `gofmt -l ./...`: a large number of files predate
