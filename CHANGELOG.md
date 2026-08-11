@@ -6,6 +6,30 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.52.1] — 2026-08-11
+
+### Fixed
+
+- **Text panels follow the tag-value swap selection again.** In the new
+  Swap-by-tag-value mode a `{{variable:…}}` token in a text panel rendered
+  the baseline host's value no matter what the picker said (the viewer
+  looked the selection up as a connection id, which a tag value never
+  matches, and fell back to the reference connection). The selection is
+  now used directly as the display string, on desktop and mobile viewers
+  and in the text-panel editor's live preview. Connection mode was never
+  affected. (#186 regression)
+
+### Security
+
+- **Dependency updates resolving 5 Dependabot alerts** (PR #250):
+  js-cookie 3.0.7 via Clerk's own `@clerk/shared` 3.47.8 pin (the
+  cookie-attribute-injection advisory — Clerk login verified on pre-prod),
+  nanoid 3.3.18 in client and udoc, and udoc overrides moving
+  serialize-javascript to 7.x and uuid to 11.x now that patched forward
+  releases exist. The two `image-size` advisories have no patched release
+  upstream and are recorded in `security/accepted-vulns.yaml` (build-time
+  docs tooling only) pending an upstream fix.
+
 ## [0.52.0] — 2026-08-10
 
 ### Added
