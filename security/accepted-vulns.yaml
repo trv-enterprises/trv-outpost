@@ -52,28 +52,13 @@ exceptions:
       from our code touches it. Kept as an explicit, audited acceptance.
     remediation: Fixed in edwards25519 v1.1.1; resolves when an ancestor module bumps its pin.
 
-  - id: GHSA-qjx8-664m-686j
-    scanner: npm-audit
-    module: js-cookie (transitive, via @clerk/shared)
-    accepted_by: Tom Viviano
-    accepted_on: 2026-06-10
-    expires_on: 2026-09-01
-    reason: >
-      js-cookie's ONLY consumer in our tree is @clerk/shared (Clerk's browser
-      SDK) — our own code never imports it. @clerk/shared pins js-cookie@3.0.5
-      EXACTLY. We briefly overrode it to 3.0.8 (the patched line) in v0.29.0
-      and it BROKE Clerk login (the 3.0.6 cookie-attribute change caused Clerk's
-      cookie writes to be rejected — "__clerk_test_etld rejected for invalid
-      domain"). Reverted the override in v0.29.1. The advisory (per-instance
-      prototype hijack in assign() enabling cookie-attribute injection) requires
-      attacker-controlled input into a js-cookie instance's assign(); in Clerk's
-      usage js-cookie only writes Clerk's own session cookies with Clerk-
-      controlled attributes, so the practical exposure here is negligible.
-      This is Clerk's dependency to fix.
-    remediation: >
-      Bump @clerk/clerk-react / @clerk/shared once Clerk ships a release that
-      pins a patched js-cookie (>=3.0.6). Do NOT force it via npm overrides —
-      that breaks Clerk's cookie handling.
+# GHSA-qjx8-664m-686j (js-cookie, via @clerk/shared) was here but is resolved
+  # 2026-08-11 by the remediation the entry prescribed: @clerk/shared 3.47.8 is
+  # an in-range patch that pins js-cookie 3.0.7 (Clerk's own bump, NOT an npm
+  # override — overriding js-cookie >=3.0.6 under Clerk 3.47.5 broke login in
+  # v0.29.0, "__clerk_test_etld rejected for invalid domain", reverted v0.29.1).
+  # Given that history, any Clerk/js-cookie movement still requires the auth
+  # smoke test called out in pinned-versions.yaml.
 
   - id: GHSA-qwww-vcr4-c8h2
     scanner: npm-audit
@@ -111,65 +96,48 @@ exceptions:
       No 7.x fix exists — the range is unpatched through 8.2.x.
 
   # ── udoc/ (Docusaurus docs site) ────────────────────────────────────────────
-  # All three below share the same blast-radius argument, restated per entry so
-  # each stands on its own in an audit. udoc is `"private": true` — a static
-  # Docusaurus site built locally by `make build-docs` and served by the Go
-  # server from a bundled /app/udoc/build. It is NOT an npm-published package
-  # and has no server-side runtime of its own. All three findings are in
-  # BUILD-TIME tooling (webpack/terser/docusaurus internals) that runs on a
+  # udoc is `"private": true` — a static Docusaurus site built locally by
+  # `make build-docs` and served by the Go server from a bundled
+  # /app/udoc/build. It is NOT an npm-published package and has no server-side
+  # runtime of its own. Findings here are in BUILD-TIME tooling that runs on a
   # developer machine or in CI over first-party markdown we author ourselves —
   # never over attacker-supplied input, and never in the deployed artifact.
-  # `npm audit fix` already took every semver-safe fix here (38 -> 21 findings,
-  # clearing both criticals: shell-quote and websocket-driver). What remains is
-  # reachable ONLY via a DOWNGRADE of @docusaurus/core 3.7.0 -> 3.5.2, which npm
-  # itself flags semver-major. We decline to move backwards to silence them.
-  - id: GHSA-5c6j-r48x-rmvq
+  #
+  # Three entries (serialize-javascript GHSA-5c6j-r48x-rmvq + GHSA-qj8w-gfj5-8c6v,
+  # uuid GHSA-w5hq-g745-h8pq, accepted 2026-08-01) were removed 2026-08-11:
+  # when they were accepted the only npm-offered fix was a semver-major
+  # DOWNGRADE of @docusaurus/core; patched FORWARD releases now exist, so
+  # udoc/package.json carries `overrides` (serialize-javascript ^7.0.5,
+  # uuid ^11.1.1) instead of acceptances. Production docs build verified green
+  # with both overrides; drop the overrides when @docusaurus/core's own pins
+  # catch up.
+  - id: GHSA-w3rx-r6r6-pgpr
     scanner: npm-audit
-    module: serialize-javascript (transitive, via @docusaurus/core -> terser-webpack-plugin)
+    module: image-size (transitive, via @docusaurus/mdx-loader)
     accepted_by: Tom Viviano
-    accepted_on: 2026-08-01
+    accepted_on: 2026-08-11
     expires_on: 2026-11-01
     reason: >
-      RCE via RegExp.flags / Date.prototype.toISOString() in serialize-javascript
-      <=7.0.2. Reached only through @docusaurus/core's webpack minification
-      chain, which serializes OUR OWN build output at docs-build time on a
-      developer machine or in CI. No attacker-controlled value reaches
-      serialize-javascript, and the package is not present in the deployed
-      artifact (the docs ship as pre-rendered static HTML). The only fix npm
-      offers is a downgrade to @docusaurus/core 3.5.2.
+      ICNS parser infinite loop (DoS) in image-size <=2.0.2. NO PATCHED RELEASE
+      EXISTS — 2.0.2 is the latest published version, so there is nothing to
+      bump or override to. Reached only at docs-build time when mdx-loader
+      probes image dimensions in our own docs tree; triggering it would require
+      a malicious .icns committed to first-party content we author. Not present
+      in the deployed static artifact.
     remediation: >
-      Resolves when Docusaurus bumps its terser-webpack-plugin pin to a
-      serialize-javascript >=7.0.5. Re-check on the next Docusaurus minor.
+      Bump image-size (directly or via @docusaurus/mdx-loader) as soon as a
+      release >2.0.2 ships with the parser fixes. Re-check at expiry.
 
-  - id: GHSA-qj8w-gfj5-8c6v
+  - id: GHSA-5p2g-fcmc-qvqq
     scanner: npm-audit
-    module: serialize-javascript (transitive, via @docusaurus/core -> terser-webpack-plugin)
+    module: image-size (transitive, via @docusaurus/mdx-loader)
     accepted_by: Tom Viviano
-    accepted_on: 2026-08-01
+    accepted_on: 2026-08-11
     expires_on: 2026-11-01
     reason: >
-      CPU-exhaustion DoS via crafted array-like objects in serialize-javascript
-      >=5.0.0 <7.0.5. Same reachability as GHSA-5c6j-r48x-rmvq — build-time
-      minification of our own first-party docs content, on a developer machine
-      or in CI. A DoS against our own build is self-inflicted at worst, needs
-      attacker-controlled input we never supply, and cannot affect a running
-      deployment because the package is absent from the shipped static site.
+      JXL/HEIF parser infinite loops (DoS) in image-size <=2.0.2. Same
+      situation as GHSA-w3rx-r6r6-pgpr: no patched release exists (2.0.2 is
+      latest), build-time only, input is our own committed docs images, absent
+      from the deployed static site.
     remediation: >
-      Same as GHSA-5c6j-r48x-rmvq — a Docusaurus-side pin bump to
-      serialize-javascript >=7.0.5.
-
-  - id: GHSA-w5hq-g745-h8pq
-    scanner: npm-audit
-    module: uuid (transitive, via @docusaurus/core)
-    accepted_by: Tom Viviano
-    accepted_on: 2026-08-01
-    expires_on: 2026-11-01
-    reason: >
-      Missing buffer bounds check in uuid v3/v5/v6 when an explicit `buf`
-      argument is provided (uuid <11.1.1). Docusaurus uses uuid internally for
-      build-time id generation and does not pass a caller-supplied buffer; our
-      own code does not import uuid in udoc at all. Build-time only, not in the
-      deployed static output. Fix is gated on a Docusaurus downgrade.
-    remediation: >
-      Resolves when @docusaurus/core pins uuid >=11.1.1. Re-check on the next
-      Docusaurus minor.
+      Same as GHSA-w3rx-r6r6-pgpr — take the first image-size release >2.0.2.

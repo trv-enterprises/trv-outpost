@@ -287,19 +287,22 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     setSearchParam,
   });
 
-  // Resolved display value of the connection-swap variable: the selected
-  // connection's label (tag-prefix label when configured, else its name),
-  // falling back to the reference (baseline) connection when nothing is
-  // selected. Empty when the feature is inactive.
+  // Resolved display value of the connection-swap variable. Tag-value mode:
+  // the selection IS the display string (a key-tag value, not a connection
+  // id — a candidate lookup by id would miss and wrongly fall back to the
+  // baseline). Connection mode: the selected connection's label (tag-prefix
+  // label when configured, else its name), falling back to the reference
+  // (baseline) connection when nothing is selected. Empty when inactive.
   const dashboardVariableText = useMemo(() => {
     if (!dashVariable) return '';
+    if (swapMeta && dashVariableValue) return String(dashVariableValue);
     const cands = dashVariableCandidates || [];
     const prefix = dashVariable.connection_swap?.label_tag_prefix || '';
     const selected = cands.find((c) => c.id === dashVariableValue);
     if (selected) return candidateLabel(selected, prefix);
     const reference = cands.find((c) => c.reference);
     return reference ? candidateLabel(reference, prefix) : '';
-  }, [dashVariable, dashVariableCandidates, dashVariableValue]);
+  }, [dashVariable, dashVariableCandidates, dashVariableValue, swapMeta]);
 
   // Map of variable NAME → resolved display value, for {{variable:NAME}} tokens
   // embedded in text-panel content. Covers both variable kinds: the
