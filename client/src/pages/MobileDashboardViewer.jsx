@@ -124,16 +124,19 @@ function MobileDashboardViewer({ canControl = false }) {
   });
 
   // Resolved display value of the connection-swap variable (tag-prefix label or
-  // name), for {{variable:NAME}} tokens in text panels. Mirrors the viewer.
+  // name), for {{variable:NAME}} tokens in text panels. Mirrors the viewer:
+  // in tag-value mode the selection IS the display string (a key-tag value,
+  // not a connection id).
   const dashboardVariableText = useMemo(() => {
     if (!dashVariable) return '';
+    if (swapMeta && dashVariableValue) return String(dashVariableValue);
     const cands = dashVariableCandidates || [];
     const prefix = dashVariable.connection_swap?.label_tag_prefix || '';
     const selected = cands.find((c) => c.id === dashVariableValue);
     if (selected) return candidateLabel(selected, prefix);
     const reference = cands.find((c) => c.reference);
     return reference ? candidateLabel(reference, prefix) : '';
-  }, [dashVariable, dashVariableCandidates, dashVariableValue]);
+  }, [dashVariable, dashVariableCandidates, dashVariableValue, swapMeta]);
 
   // name → value map for {{variable:NAME}} tokens (both variable kinds).
   const variableValues = useMemo(() => {
