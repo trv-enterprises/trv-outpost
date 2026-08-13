@@ -17,13 +17,13 @@ import (
 
 // Manager orchestrates multiple streaming connections
 type Manager struct {
-	streams      map[string]Streamer
-	failed       map[string]*failedStream // connections whose last start failed (backoff memory)
-	mu           sync.RWMutex
-	repo         *repository.ConnectionRepository
-	config       ManagerConfig
-	ctx          context.Context
-	cancelFunc   context.CancelFunc
+	streams    map[string]Streamer
+	failed     map[string]*failedStream // connections whose last start failed (backoff memory)
+	mu         sync.RWMutex
+	repo       *repository.ConnectionRepository
+	config     ManagerConfig
+	ctx        context.Context
+	cancelFunc context.CancelFunc
 }
 
 // failedStream remembers a stream whose Start failed so the Manager doesn't
@@ -39,21 +39,21 @@ type failedStream struct {
 
 // ManagerConfig holds configuration for the stream manager
 type ManagerConfig struct {
-	BufferSize          int           // Records to buffer per stream (default 100)
-	CleanupGracePeriod  time.Duration // Time to keep stream alive with no subscribers (default 60s)
-	CleanupInterval     time.Duration // How often to check for cleanup (default 30s)
-	RetryBaseDelay      time.Duration // Backoff base for transient start failures (default 1s)
-	RetryMaxDelay       time.Duration // Backoff cap (default 30s)
+	BufferSize         int           // Records to buffer per stream (default 100)
+	CleanupGracePeriod time.Duration // Time to keep stream alive with no subscribers (default 60s)
+	CleanupInterval    time.Duration // How often to check for cleanup (default 30s)
+	RetryBaseDelay     time.Duration // Backoff base for transient start failures (default 1s)
+	RetryMaxDelay      time.Duration // Backoff cap (default 30s)
 }
 
 // DefaultManagerConfig returns default manager configuration
 func DefaultManagerConfig() ManagerConfig {
 	return ManagerConfig{
-		BufferSize:          100,
-		CleanupGracePeriod:  60 * time.Second,
-		CleanupInterval:     30 * time.Second,
-		RetryBaseDelay:      1 * time.Second,
-		RetryMaxDelay:       30 * time.Second,
+		BufferSize:         100,
+		CleanupGracePeriod: 60 * time.Second,
+		CleanupInterval:    30 * time.Second,
+		RetryBaseDelay:     1 * time.Second,
+		RetryMaxDelay:      30 * time.Second,
 	}
 }
 
@@ -213,6 +213,13 @@ func (m *Manager) createStream(ctx context.Context, connectionID string) (Stream
 	case models.ConnectionTypeTSStore:
 		if ds.Config.TSStore == nil {
 			return fail(&StreamStartError{Terminal: true, Message: fmt.Sprintf("connection %s has no ts-store configuration", connectionID)})
+		}
+		// #248 PR 1 gate: streaming channels are still keyed by connection id,
+		// so an endpoint-scoped connection (no pinned store) cannot stream yet
+		// — per-component store channels land with the channel-identity work
+		// (PR 2). REST components on endpoint-scoped connections work today.
+		if ds.Config.TSStore.StoreName == "" {
+			return fail(&StreamStartError{Terminal: true, Message: fmt.Sprintf("connection %s is endpoint-scoped (no pinned store) — streaming requires a pinned store until per-component store channels land", connectionID)})
 		}
 		stream = NewTSStoreStream(connectionID, ds.Config.TSStore, streamConfig)
 

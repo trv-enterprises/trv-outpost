@@ -54,6 +54,7 @@ failed Bearer returns 401 immediately rather than falling through.
 | POST       | `/api/connections/:id/health`               | Re-run health check                       |
 | POST       | `/api/connections/:id/query`                | Execute a query against the connection    |
 | GET        | `/api/connections/:id/schema`               | Get schema (for types that support it)    |
+| GET        | `/api/connections/:id/stores`               | Store discovery for endpoint-scoped multi-store connections (tsstore, #248) |
 | GET        | `/api/connections/:id/stream`               | SSE data stream (with optional `?topics=`) |
 | GET        | `/api/connections/:id/stream/status`        | Stream status                             |
 | POST       | `/api/connections/:id/stream/aggregated`    | Subscribe to bucket-aggregated stream     |

@@ -2872,6 +2872,57 @@ const docTemplate = `{
                 }
             }
         },
+        "/connections/{id}/stores": {
+            "get": {
+                "description": "Store discovery for endpoint-scoped connections (tsstore). Each entry carries the connection key's access classes on that store.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "connections"
+                ],
+                "summary": "List stores behind a multi-store connection",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "namespace not granted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "connection not found, or type without store discovery",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/connections/{id}/stream": {
             "get": {
                 "description": "Opens an SSE connection to stream real-time data from a socket connection",
@@ -11603,8 +11654,7 @@ const docTemplate = `{
             "required": [
                 "host",
                 "port",
-                "protocol",
-                "store_name"
+                "protocol"
             ],
             "properties": {
                 "api_key": {
@@ -11659,7 +11709,7 @@ const docTemplate = `{
                     ]
                 },
                 "store_name": {
-                    "description": "Name of the store to query",
+                    "description": "Optional PINNED store. Set → the connection is bound to exactly this store (components cannot override). Unset → endpoint-scoped: components choose per-query via query_config.params.store (#248)",
                     "type": "string"
                 },
                 "timeout": {

@@ -1121,16 +1121,15 @@ func (s *ConnectionService) validateCSVConfig(config *models.CSVConfig) error {
 	return nil
 }
 
-// validateTSStoreConfig validates TSStore configuration
+// validateTSStoreConfig validates TSStore configuration. StoreName is
+// optional (#248): set → the connection is pinned to that store; unset →
+// endpoint-scoped, components name a store per-query.
 func (s *ConnectionService) validateTSStoreConfig(config *models.TSStoreConfig) error {
 	if config.Host == "" {
 		return fmt.Errorf("host is required")
 	}
 	if config.Port == 0 {
 		return fmt.Errorf("port is required")
-	}
-	if config.StoreName == "" {
-		return fmt.Errorf("store name is required")
 	}
 
 	return nil
@@ -1414,6 +1413,20 @@ func (s *ConnectionService) testTSStoreConnection(ctx context.Context, config *m
 			Success: false,
 			Status:  models.HealthStatusUnhealthy,
 			Message: fmt.Sprintf("Connection failed: %v", err),
+		}
+	}
+
+	// Endpoint-scoped connection (no pinned store): report how many stores
+	// the key can access instead of a single store name (#248).
+	if config.StoreName == "" {
+		msg := "Connection successful (endpoint-scoped)"
+		if stores, err := tsDS.ListStores(ctx); err == nil {
+			msg = fmt.Sprintf("Connection successful (%d stores accessible)", len(stores))
+		}
+		return &models.TestConnectionResponse{
+			Success: true,
+			Status:  models.HealthStatusHealthy,
+			Message: msg,
 		}
 	}
 
@@ -1729,6 +1742,46 @@ func (s *ConnectionService) QueryConnection(ctx context.Context, id string, req 
 		ResultSet: resultSet,
 		Duration:  duration,
 	}, nil
+}
+
+// ErrStoreDiscoveryUnsupported is returned by ListConnectionStores for
+// connection types that don't implement registry.StoreLister. The handler
+// maps it to HTTP 404.
+var ErrStoreDiscoveryUnsupported = errors.New("connection type does not support store discovery")
+
+// ListConnectionStores lists the stores discoverable behind a multi-store
+// connection (#248): the tsstore adapter proxies ts-store's keyed GET
+// /api/stores, so the browser gets the listing (names, roles, data types,
+// and the key's per-store access classes) without the API key ever leaving
+// the server. Namespace grants are enforced the same as every other
+// per-connection operation.
+func (s *ConnectionService) ListConnectionStores(ctx context.Context, id string) ([]registry.StoreInfo, error) {
+	ds, err := s.findAuthorized(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	factory := connection.NewConnectionFactory()
+	dataSource, err := factory.CreateFromConfig(ds)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create connection: %w", err)
+	}
+	defer dataSource.Close()
+
+	lister, ok := dataSource.(registry.StoreLister)
+	if !ok {
+		return nil, ErrStoreDiscoveryUnsupported
+	}
+	stores, err := lister.ListStores(ctx)
+	if err != nil {
+		// The wrapper implements the interface unconditionally and reports
+		// non-supporting inner adapters via this error string.
+		if strings.Contains(err.Error(), "does not support store discovery") {
+			return nil, ErrStoreDiscoveryUnsupported
+		}
+		return nil, err
+	}
+	return stores, nil
 }
 
 // GetSchema retrieves schema information for a connection that supports it

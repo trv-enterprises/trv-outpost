@@ -451,6 +451,44 @@ func (h *ConnectionHandler) GetConnectionSchema(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// ListConnectionStores lists the stores discoverable behind a multi-store
+// connection (#248). Backed by registry.StoreLister (tsstore today): proxies
+// ts-store's keyed GET /api/stores so the browser gets names, roles, data
+// types, and the key's per-store access classes without seeing the key.
+// @Summary List stores behind a multi-store connection
+// @Description Store discovery for endpoint-scoped connections (tsstore). Each entry carries the connection key's access classes on that store.
+// @Tags connections
+// @Produce json
+// @Param id path string true "Connection ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{} "namespace not granted"
+// @Failure 404 {object} map[string]interface{} "connection not found, or type without store discovery"
+// @Router /connections/{id}/stores [get]
+func (h *ConnectionHandler) ListConnectionStores(c *gin.Context) {
+	id := c.Param("id")
+
+	stores, err := h.service.ListConnectionStores(c.Request.Context(), id)
+	if err != nil {
+		// #4: a namespace-grant miss is a 403, not a bad request.
+		if respondIfNamespaceForbidden(c, err) {
+			return
+		}
+		if err.Error() == "connection not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Connection not found"})
+			return
+		}
+		if errors.Is(err, service.ErrStoreDiscoveryUnsupported) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"stores": stores, "count": len(stores)})
+}
+
 // GetVariableValues lists the distinct values of a column on a connection, used
 // to populate a dashboard-variable picker.
 // @Summary List distinct column values for a dashboard-variable picker

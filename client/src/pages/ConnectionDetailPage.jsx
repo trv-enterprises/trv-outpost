@@ -1323,11 +1323,11 @@ function ConnectionDetailPage() {
 
         <TextInput
           id="tsstore-store-name"
-          labelText="Store Name"
+          labelText="Pinned store (optional)"
           value={tsstoreConfig.store_name || ''}
           onChange={(e) => updateConfig('tsstore.store_name', e.target.value)}
           placeholder="my-timeseries-store"
-          helperText="Name of the timeseries store to connect to"
+          helperText="Pin this connection to a single store. Leave empty for an endpoint-scoped connection — each component then chooses its own store."
         />
 
         <SecretTextInput

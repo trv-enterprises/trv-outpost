@@ -535,7 +535,7 @@ func chartQueryConfigSchema() map[string]interface{} {
 			},
 			"params": map[string]interface{}{
 				"type":        "object",
-				"description": "Optional query parameters (named bind vars for sql, query-string params for api, etc). ts-store REST connections also take limit / filter / filter_ignore_case / latest_by here — see get_connection_type_guidance for the shapes.",
+				"description": "Optional query parameters (named bind vars for sql, query-string params for api, etc). ts-store REST connections also take limit / filter / filter_ignore_case / latest_by here, plus store (REQUIRED on an endpoint-scoped ts-store connection — one with no pinned store_name; ignored when the connection pins a store) — see get_connection_type_guidance for the shapes.",
 			},
 		},
 	}

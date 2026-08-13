@@ -26,6 +26,7 @@ import {
   Slider,
   Modal,
   Checkbox,
+  ComboBox,
   Toggletip,
   ToggletipButton,
   ToggletipContent,
@@ -844,6 +845,24 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // mark uses_dashboard_variable and to gate the #18 backfill substitution.
   const tsstoreFilterUsesVariable = tsstoreFilterSource === 'variable';
 
+  // #248 endpoint-scoped tsstore: the per-component store choice. Only
+  // meaningful when the selected connection has NO pinned store_name — a pin
+  // wins server-side and the picker isn't shown. Options come from
+  // GET /api/connections/:id/stores (read-granted stores); null = list
+  // unavailable → the picker falls back to a free-text input.
+  const [tsstoreStore, setTsstoreStore] = useState('');
+  const [tsstoreStoreOptions, setTsstoreStoreOptions] = useState(null);
+
+  // Params carrying the component's store on an endpoint-scoped connection.
+  // {} for pinned connections (the pin wins; storing a stray param would
+  // just be noise in the record) and when no store is chosen yet.
+  const buildTsstoreStoreParams = useCallback(() => {
+    const pinned = selectedDatasource?.config?.tsstore?.store_name;
+    const store = (tsstoreStore || '').trim();
+    if (pinned || !store) return {};
+    return { store };
+  }, [selectedDatasource, tsstoreStore]);
+
   // Params for the 'latest' query type (ts-store v0.19.0 latest_by): the
   // newest record per distinct value of a field — "current state per series".
   // {} when the type isn't 'latest' or the field is blank (the query then
@@ -1414,6 +1433,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         }
         setTsstoreFilterIgnoreCase(!!chart.query_config?.params?.filter_ignore_case);
       }
+      // #248: restore the per-component store (endpoint-scoped connections).
+      // Set unconditionally so switching between charts never leaks a store.
+      const savedTsStore = chart.query_config?.params?.store;
+      setTsstoreStore(typeof savedTsStore === 'string' ? savedTsStore : '');
       // Prometheus query config: restore instant/range + window/step from the
       // saved params. Restore whenever a Prometheus query_type param is present
       // (documentary type may say "prometheus" or "sql"/"api" on agent-built
@@ -1530,6 +1553,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       const loadedTsstoreFilterSource = loadedTsFilter === DASHBOARD_VARIABLE_TOKEN ? 'variable' : 'literal';
       const loadedTsstoreFilter = (typeof loadedTsFilter === 'string' && loadedTsFilter !== DASHBOARD_VARIABLE_TOKEN) ? loadedTsFilter : '';
       const loadedTsstoreFilterIgnoreCase = !!chart.query_config?.params?.filter_ignore_case;
+      // #248: mirror the setTsstoreStore restore above.
+      const loadedTsstoreStoreParam = chart.query_config?.params?.store;
+      const loadedTsstoreStore = typeof loadedTsstoreStoreParam === 'string' ? loadedTsstoreStoreParam : '';
       // Prometheus params — mirror the setProm* restore above so the snapshot
       // matches state and the form doesn't read dirty on load.
       const loadedPromQt = chart.query_config?.params?.query_type;
@@ -1571,6 +1597,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         tsstoreFilter: loadedTsstoreFilter,
         tsstoreFilterSource: loadedTsstoreFilterSource,
         tsstoreFilterIgnoreCase: loadedTsstoreFilterIgnoreCase,
+        tsstoreStore: loadedTsstoreStore,
         edgelakeDatabase: loadedEdgelakeDatabase,
         xAxisColumn: chart.data_mapping?.x_axis || '',
         xAxisLabel: chart.data_mapping?.x_axis_label || '',
@@ -1653,6 +1680,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         tsstoreFilter: '',
         tsstoreFilterSource: 'literal',
         tsstoreFilterIgnoreCase: false,
+        tsstoreStore: '',
         edgelakeDatabase: '',
         xAxisColumn: '',
         xAxisLabel: '',
@@ -1740,6 +1768,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       tsstoreFilter,
       tsstoreFilterSource,
       tsstoreFilterIgnoreCase,
+      tsstoreStore,
       edgelakeDatabase,
       xAxisColumn,
       xAxisLabel,
@@ -1788,7 +1817,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   }, [
     name, title, description, namespace, tags, componentType, chartType,
     controlConfig, displayConfig, selectedConnectionId, queryRaw, queryType,
-    tsstoreQueryType, tsstoreSinceDuration, tsstoreRangeFrom, tsstoreRangeTo, tsstoreLimit, tsstoreLatestBy, promQueryType, promTimeRange, promStep, tsstoreFilter, tsstoreFilterSource, tsstoreFilterIgnoreCase, edgelakeDatabase,
+    tsstoreQueryType, tsstoreSinceDuration, tsstoreRangeFrom, tsstoreRangeTo, tsstoreLimit, tsstoreLatestBy, promQueryType, promTimeRange, promStep, tsstoreFilter, tsstoreFilterSource, tsstoreFilterIgnoreCase, tsstoreStore, edgelakeDatabase,
     xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, yAxisColors,
     groupByColumn, seriesColumn, filters, aggregation,
     slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol,
@@ -1901,6 +1930,12 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     selectedDatasource?.type === 'sql' ||
     selectedDatasource?.type === 'edgelake';
   const isTSStoreStreaming = isTSStore && selectedDatasource?.config?.tsstore?.transport === 'streaming';
+  // #248: endpoint-scoped = no pinned store on the connection → the component
+  // chooses its store. The adapter declares this via the store_list query
+  // surface; the tsstore editor branch predates surfaces, so the flag keys
+  // off the connection config directly (a registry fetch failure must not
+  // leave endpoint-scoped components unable to pick a store).
+  const isTSStoreEndpointScoped = isTSStore && !selectedDatasource?.config?.tsstore?.store_name;
   const isSocket = selectedDatasource?.type === 'socket';
   const isMQTT = selectedDatasource?.type === 'mqtt';
   const isAPI = selectedDatasource?.type === 'api';
@@ -1915,6 +1950,26 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // for the dashboard dropdown to read without a costly view-time capture.
   // tsstore/API/SQL/EdgeLake re-discover on demand via a query, so no persist.
   const shouldPersistDiscovered = isSocket || isMQTT;
+
+  // #248: load the store list for an endpoint-scoped tsstore connection so
+  // the store picker offers real names. Filtered to read-granted stores (the
+  // access classes ride on each entry). Failure → null keeps the free-text
+  // fallback input usable.
+  useEffect(() => {
+    if (!selectedConnectionId || !isTSStoreEndpointScoped) {
+      setTsstoreStoreOptions(null);
+      return undefined;
+    }
+    let cancelled = false;
+    apiClient.getConnectionStores(selectedConnectionId)
+      .then((resp) => {
+        if (cancelled) return;
+        const stores = Array.isArray(resp?.stores) ? resp.stores : [];
+        setTsstoreStoreOptions(stores.filter((s) => !Array.isArray(s.access) || s.access.includes('read')));
+      })
+      .catch(() => { if (!cancelled) setTsstoreStoreOptions(null); });
+    return () => { cancelled = true; };
+  }, [selectedConnectionId, isTSStoreEndpointScoped]);
 
   // Stop an in-flight live discovery capture (raw socket/mqtt). Leaves the
   // picker open with what was accumulated so the user can pick.
@@ -2508,6 +2563,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         if (!(tsstoreFilterUsesVariable && !effectiveVarValue)) {
           Object.assign(queryParams, buildTsstoreFilterParams());
         }
+        Object.assign(queryParams, buildTsstoreStoreParams());
       } else if (isSocket) {
         rawQuery = ''; // Raw socket has no query API — adapter collects from the live stream
       } else if (isTSStore) {
@@ -2534,6 +2590,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         if (!(tsstoreFilterUsesVariable && !effectiveVarValue)) {
           Object.assign(queryParams, buildTsstoreFilterParams());
         }
+        Object.assign(queryParams, buildTsstoreStoreParams());
       } else if (selectedDatasource?.type === 'prometheus') {
         // Preview must use the chosen instant/range so the editor shows the
         // same shape the saved chart will render. (Raw mode's radio group;
@@ -2690,8 +2747,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     // Build queryParams based on datasource type (same logic as fetchPreview)
     let queryParams = {};
     let rawQuery = queryRaw;
-    // Source-side filter params (shared with backfill below).
-    const tsstoreFilterParams = buildTsstoreFilterParams();
+    // Source-side params (shared with backfill below): the substring filter
+    // plus, on an endpoint-scoped connection, the component's store (#248) —
+    // both must ride on the streaming backfill or it silently reads the
+    // wrong/default store.
+    const tsstoreFilterParams = { ...buildTsstoreFilterParams(), ...buildTsstoreStoreParams() };
     if (isTSStoreStreaming) {
       // Streaming TS-STORE — no query needed, data arrives via SSE. The
       // source-side filter still rides on the live stream params.
@@ -2757,7 +2817,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       : null;
 
     return getDataDrivenChartCode(chartType, selectedConnectionId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, chart?.id || '', isTSStoreStreaming, true, tsstoreFilterParams);
-  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, yAxisColors, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, title, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, tsstoreRangeFrom, tsstoreRangeTo, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle, previewVariableValue, buildTsstoreFilterParams, buildTsstoreLatestByParams, buildPrometheusParams]);
+  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, yAxisColors, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, title, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, tsstoreRangeFrom, tsstoreRangeTo, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle, previewVariableValue, buildTsstoreFilterParams, buildTsstoreLatestByParams, buildTsstoreStoreParams, buildPrometheusParams]);
 
   const filteredPreviewData = useMemo(() => {
     if (!previewData) return null;
@@ -2898,7 +2958,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           // use the limit. 'latest' omits it too — there the limit would cap
           // DISTINCT SERIES, and ts-store's own default (up to 1000 groups) is
           // the right ceiling.
-          ? { ...(tsstoreQueryType === 'since' || tsstoreQueryType === 'range' || tsstoreQueryType === 'latest' ? {} : { limit: tsstoreLimit }), ...buildTsstoreLatestByParams(), ...buildTsstoreFilterParams() }
+          ? { ...(tsstoreQueryType === 'since' || tsstoreQueryType === 'range' || tsstoreQueryType === 'latest' ? {} : { limit: tsstoreLimit }), ...buildTsstoreLatestByParams(), ...buildTsstoreFilterParams(), ...buildTsstoreStoreParams() }
           : selectedDatasource?.type === 'prometheus'
             ? buildPrometheusParams()
             : selectedDatasource?.type === 'edgelake' && edgelakeDatabase
@@ -3873,6 +3933,39 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     </div>
                   ) : isTSStore ? (
                     <div className="tsstore-query-section">
+                      {/* #248: endpoint-scoped connection → the component
+                          chooses its store. Pinned connections never show
+                          this (the pin wins server-side). ComboBox when the
+                          store list loaded; free-text fallback otherwise. */}
+                      {isTSStoreEndpointScoped && (
+                        <div className="tsstore-query-row">
+                          <div className="tsstore-query-row__col">
+                            {Array.isArray(tsstoreStoreOptions) ? (
+                              <ComboBox
+                                id="tsstore-store-picker"
+                                titleText="Store"
+                                placeholder="Choose a store"
+                                items={tsstoreStoreOptions.map((s) => s.name)}
+                                selectedItem={tsstoreStore || null}
+                                allowCustomValue
+                                onChange={({ selectedItem, inputValue }) => {
+                                  setTsstoreStore(selectedItem ?? inputValue ?? '');
+                                }}
+                                helperText={tsstoreStore ? undefined : 'Required — this connection is endpoint-scoped'}
+                              />
+                            ) : (
+                              <TextInput
+                                id="tsstore-store-picker"
+                                labelText="Store"
+                                placeholder="store name"
+                                value={tsstoreStore}
+                                onChange={(e) => setTsstoreStore(e.target.value)}
+                                helperText="Required — this connection is endpoint-scoped (store list unavailable, enter the name)"
+                              />
+                            )}
+                          </div>
+                        </div>
+                      )}
                       {/* Flex row inside the half-width query card.
                           Each control takes half the row, fully
                           filling the card horizontally — Carbon's

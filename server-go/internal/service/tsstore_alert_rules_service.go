@@ -171,6 +171,13 @@ func (s *TSStoreAlertRulesService) ListAll(ctx context.Context) (*TSStoreAggrega
 		if conn.Config.TSStore == nil {
 			continue
 		}
+		// #248 PR 1: endpoint-scoped connections (no pinned store) are
+		// skipped — alert rules are store-scoped, and the per-store fan-out
+		// for endpoint-scoped connections lands with the alerts rework
+		// (PR 3). Pinned connections behave exactly as before.
+		if conn.Config.TSStore.StoreName == "" {
+			continue
+		}
 		k := backendKey{BaseURL: conn.Config.TSStore.BaseURL(), StoreName: conn.Config.TSStore.StoreName}
 		if _, seen := groups[k]; !seen {
 			groupOrder = append(groupOrder, k)
@@ -238,11 +245,11 @@ func (s *TSStoreAlertRulesService) ListAll(ctx context.Context) (*TSStoreAggrega
 // tsStoreAlertStatus mirrors ts-store's GET /api/stores/:store/alerts
 // response shape — only the fields the dashboard cares about.
 type tsStoreAlertStatus struct {
-	ID            string `json:"id"`
-	Type          string `json:"type"`
-	Target        string `json:"target"`
-	AlertsFired   int64  `json:"alerts_fired"`
-	State         string `json:"state"`
+	ID          string `json:"id"`
+	Type        string `json:"type"`
+	Target      string `json:"target"`
+	AlertsFired int64  `json:"alerts_fired"`
+	State       string `json:"state"`
 }
 
 // tsStoreAlertDetail mirrors GET /api/stores/:store/alerts/:id under
@@ -513,12 +520,12 @@ func (s *TSStoreAlertRulesService) ProbeConnectionAuth(ctx context.Context, conn
 //     connection. Provides broker creds; the topic lives on the rule
 //     (per ts-store's API), not on the connection.
 type CreateAlertRequest struct {
-	Type          string `json:"type" binding:"required"`          // "webhook" | "mqtt"
-	ConnectionID  string `json:"connection_id" binding:"required"` // TSStore connection (rule owner)
-	RuleName      string `json:"rule_name" binding:"required"`
-	Condition     string `json:"condition" binding:"required"`
-	Cooldown      string `json:"cooldown,omitempty"`     // "5m" etc., ts-store duration
-	DashboardID   string `json:"dashboard_id,omitempty"` // optional bell deep-link target
+	Type         string `json:"type" binding:"required"`          // "webhook" | "mqtt"
+	ConnectionID string `json:"connection_id" binding:"required"` // TSStore connection (rule owner)
+	RuleName     string `json:"rule_name" binding:"required"`
+	Condition    string `json:"condition" binding:"required"`
+	Cooldown     string `json:"cooldown,omitempty"`     // "5m" etc., ts-store duration
+	DashboardID  string `json:"dashboard_id,omitempty"` // optional bell deep-link target
 	// DashboardVars pre-scopes the deep-linked dashboard: variable name →
 	// value, appended to the bell link as ?var_<name>=<value> so the dashboard
 	// opens already scoped to the alert's context (e.g. the connection that
@@ -526,8 +533,8 @@ type CreateAlertRequest struct {
 	// ts-store's external_ref alongside dashboard_id (#125).
 	DashboardVars map[string]string `json:"dashboard_vars,omitempty"`
 	PollInterval  string            `json:"poll_interval,omitempty"`
-	RestartPolicy string `json:"restart_policy,omitempty"` // "now" (default) or "resume"
-	MaxReplay     string `json:"max_replay,omitempty"`     // e.g. "1h"; only valid when restart_policy=="resume"
+	RestartPolicy string            `json:"restart_policy,omitempty"` // "now" (default) or "resume"
+	MaxReplay     string            `json:"max_replay,omitempty"`     // e.g. "1h"; only valid when restart_policy=="resume"
 
 	// Webhook-sink fields (type=webhook):
 	// Timeout applies only to the webhook block. Optional override is

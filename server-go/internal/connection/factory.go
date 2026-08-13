@@ -180,3 +180,13 @@ func (w *RegistryAdapterWrapper) Close() error {
 func (w *RegistryAdapterWrapper) GetAdapter() registry.Adapter {
 	return w.adapter
 }
+
+// ListStores forwards store discovery to the wrapped adapter when it
+// implements registry.StoreLister (#248), so callers can assert the wrapper
+// itself against the interface regardless of which path built the adapter.
+func (w *RegistryAdapterWrapper) ListStores(ctx context.Context) ([]registry.StoreInfo, error) {
+	if lister, ok := w.adapter.(registry.StoreLister); ok {
+		return lister.ListStores(ctx)
+	}
+	return nil, fmt.Errorf("connection type does not support store discovery")
+}

@@ -36,10 +36,10 @@ const (
 	ConnectionTypeAPI        ConnectionType = "api"
 	ConnectionTypeTSStore    ConnectionType = "tsstore"
 	ConnectionTypePrometheus ConnectionType = "prometheus"
-	ConnectionTypeEdgeLake  ConnectionType = "edgelake"
-	ConnectionTypeMQTT     ConnectionType = "mqtt"
-	ConnectionTypeFrigate  ConnectionType = "frigate"
-	ConnectionTypeSynology ConnectionType = "synology"
+	ConnectionTypeEdgeLake   ConnectionType = "edgelake"
+	ConnectionTypeMQTT       ConnectionType = "mqtt"
+	ConnectionTypeFrigate    ConnectionType = "frigate"
+	ConnectionTypeSynology   ConnectionType = "synology"
 )
 
 // HealthStatus represents the health status of a data source
@@ -58,9 +58,9 @@ const SecretMaskedValue = "********"
 
 // Query represents a query to execute against a datasource
 type Query struct {
-	Raw    string                 `json:"raw" bson:"raw"`                         // Raw query string (SQL, filter expression, etc.)
+	Raw    string                 `json:"raw" bson:"raw"`                           // Raw query string (SQL, filter expression, etc.)
 	Params map[string]interface{} `json:"params,omitempty" bson:"params,omitempty"` // Query parameters
-	Type   QueryType              `json:"type" bson:"type"`                       // Query type
+	Type   QueryType              `json:"type" bson:"type"`                         // Query type
 }
 
 // Record represents a single record in a stream
@@ -68,9 +68,9 @@ type Record map[string]interface{}
 
 // ResultSet represents query results in a normalized format
 type ResultSet struct {
-	Columns  []string                 `json:"columns" bson:"columns"`             // Column names
-	Rows     [][]interface{}          `json:"rows" bson:"rows"`                   // Data rows
-	Metadata map[string]interface{}   `json:"metadata,omitempty" bson:"metadata,omitempty"` // Additional metadata
+	Columns  []string               `json:"columns" bson:"columns"`                       // Column names
+	Rows     [][]interface{}        `json:"rows" bson:"rows"`                             // Data rows
+	Metadata map[string]interface{} `json:"metadata,omitempty" bson:"metadata,omitempty"` // Additional metadata
 }
 
 // ConnectionAdapter is the interface that all datasource implementations must satisfy
@@ -350,15 +350,15 @@ func (d *Connection) GetEffectiveConfig() map[string]interface{} {
 
 // ConnectionConfig holds type-specific configuration
 type ConnectionConfig struct {
-	SQL        *SQLConfig        `json:"sql,omitempty" bson:"sql,omitempty"`
-	CSV        *CSVConfig        `json:"csv,omitempty" bson:"csv,omitempty"`
-	Socket     *SocketConfig     `json:"socket,omitempty" bson:"socket,omitempty"`
-	API        *APIConfig        `json:"api,omitempty" bson:"api,omitempty"`
-	TSStore    *TSStoreConfig    `json:"tsstore,omitempty" bson:"tsstore,omitempty"`
-	Prometheus *PrometheusConfig `json:"prometheus,omitempty" bson:"prometheus,omitempty"`
-	EdgeLake   *EdgeLakeConfig   `json:"edgelake,omitempty" bson:"edgelake,omitempty"`
-	MQTT       *MQTTConfig       `json:"mqtt,omitempty" bson:"mqtt,omitempty"`
-	Frigate    *FrigateConfig    `json:"frigate,omitempty" bson:"frigate,omitempty"`
+	SQL        *SQLConfig         `json:"sql,omitempty" bson:"sql,omitempty"`
+	CSV        *CSVConfig         `json:"csv,omitempty" bson:"csv,omitempty"`
+	Socket     *SocketConfig      `json:"socket,omitempty" bson:"socket,omitempty"`
+	API        *APIConfig         `json:"api,omitempty" bson:"api,omitempty"`
+	TSStore    *TSStoreConfig     `json:"tsstore,omitempty" bson:"tsstore,omitempty"`
+	Prometheus *PrometheusConfig  `json:"prometheus,omitempty" bson:"prometheus,omitempty"`
+	EdgeLake   *EdgeLakeConfig    `json:"edgelake,omitempty" bson:"edgelake,omitempty"`
+	MQTT       *MQTTConfig        `json:"mqtt,omitempty" bson:"mqtt,omitempty"`
+	Frigate    *FrigateConfig     `json:"frigate,omitempty" bson:"frigate,omitempty"`
 	Synology   *SynologyDSMConfig `json:"synology,omitempty" bson:"synology,omitempty"`
 }
 
@@ -369,10 +369,10 @@ type ConnectionConfig struct {
 // 105. DSM also ships a self-signed certificate, so InsecureSkipVerify is
 // usually required unless the cert has been replaced or trusted.
 type SynologyDSMConfig struct {
-	URL      string `json:"url" bson:"url" binding:"required"`             // DSM base URL incl. port, e.g. https://nas.example:5001
-	Username string `json:"username" bson:"username" binding:"required"`   // DSM account
-	Password string `json:"password" bson:"password" binding:"required"`   // DSM password
-	Timeout  int    `json:"timeout,omitempty" bson:"timeout,omitempty"`    // Request timeout in seconds (default 30)
+	URL      string `json:"url" bson:"url" binding:"required"`           // DSM base URL incl. port, e.g. https://nas.example:5001
+	Username string `json:"username" bson:"username" binding:"required"` // DSM account
+	Password string `json:"password" bson:"password" binding:"required"` // DSM password
+	Timeout  int    `json:"timeout,omitempty" bson:"timeout,omitempty"`  // Request timeout in seconds (default 30)
 	// InsecureSkipVerify disables TLS certificate verification. Same two-gate
 	// model as APIConfig — the server-level api.allow_insecure_tls must also
 	// be true for this to take effect.
@@ -381,13 +381,13 @@ type SynologyDSMConfig struct {
 
 // SQLConfig represents configuration for SQL databases
 type SQLConfig struct {
-	Driver         string `json:"driver" bson:"driver" binding:"required,oneof=postgres mysql sqlite mssql oracle"`
-	Host           string `json:"host,omitempty" bson:"host,omitempty"`
-	Port           int    `json:"port,omitempty" bson:"port,omitempty"`
-	Database       string `json:"database,omitempty" bson:"database,omitempty"`
-	Username       string `json:"username,omitempty" bson:"username,omitempty"`
-	Password       string `json:"password,omitempty" bson:"password,omitempty"`
-	SSL            bool   `json:"ssl,omitempty" bson:"ssl,omitempty"`
+	Driver   string `json:"driver" bson:"driver" binding:"required,oneof=postgres mysql sqlite mssql oracle"`
+	Host     string `json:"host,omitempty" bson:"host,omitempty"`
+	Port     int    `json:"port,omitempty" bson:"port,omitempty"`
+	Database string `json:"database,omitempty" bson:"database,omitempty"`
+	Username string `json:"username,omitempty" bson:"username,omitempty"`
+	Password string `json:"password,omitempty" bson:"password,omitempty"`
+	SSL      bool   `json:"ssl,omitempty" bson:"ssl,omitempty"`
 	// InsecureSkipVerify disables TLS certificate verification when
 	// SSL is true. Same two-gate model as APIConfig — the server-
 	// level api.allow_insecure_tls must also be true. Driver-specific
@@ -397,9 +397,9 @@ type SQLConfig struct {
 	//   mssql    → TrustServerCertificate=true (vs default when off)
 	//   sqlite, oracle → ignored (sqlite has no TLS; oracle is
 	//   driver-specific and not yet covered).
-	InsecureSkipVerify bool `json:"insecure_skip_verify,omitempty" bson:"insecure_skip_verify,omitempty"`
-	MaxConnections     int  `json:"max_connections,omitempty" bson:"max_connections,omitempty"`
-	Timeout            int  `json:"timeout,omitempty" bson:"timeout,omitempty"` // seconds
+	InsecureSkipVerify bool   `json:"insecure_skip_verify,omitempty" bson:"insecure_skip_verify,omitempty"`
+	MaxConnections     int    `json:"max_connections,omitempty" bson:"max_connections,omitempty"`
+	Timeout            int    `json:"timeout,omitempty" bson:"timeout,omitempty"` // seconds
 	Options            string `json:"options,omitempty" bson:"options,omitempty"` // Optional connection parameters (e.g., "sslmode=require&connect_timeout=10")
 }
 
@@ -415,21 +415,21 @@ type CSVConfig struct {
 
 // SocketConfig represents configuration for socket/WebSocket streams
 type SocketConfig struct {
-	URL              string              `json:"url" bson:"url" binding:"required"`
-	Protocol         string              `json:"protocol" bson:"protocol" binding:"required,oneof=tcp websocket"`
+	URL      string `json:"url" bson:"url" binding:"required"`
+	Protocol string `json:"protocol" bson:"protocol" binding:"required,oneof=tcp websocket"`
 	// InsecureSkipVerify disables TLS certificate verification when
 	// the URL uses wss://. Same two-gate model as APIConfig — the
 	// server-level api.allow_insecure_tls must also be true. Plain
 	// ws:// and tcp:// connections ignore this entirely.
-	InsecureSkipVerify bool `json:"insecure_skip_verify,omitempty" bson:"insecure_skip_verify,omitempty"`
-	Bidirectional    bool                `json:"bidirectional,omitempty" bson:"bidirectional,omitempty"`     // WebSocket only — when true, resolves to stream.websocket-bidir (write-capable, used for control commands)
-	Headers          map[string]string   `json:"headers,omitempty" bson:"headers,omitempty"`
-	ReconnectOnError bool                `json:"reconnect_on_error" bson:"reconnect_on_error"`
-	ReconnectDelay   int                 `json:"reconnect_delay,omitempty" bson:"reconnect_delay,omitempty"` // milliseconds
-	PingInterval     int                 `json:"ping_interval,omitempty" bson:"ping_interval,omitempty"`     // seconds
-	MessageFormat    string              `json:"message_format,omitempty" bson:"message_format,omitempty"`   // json, text
-	BufferSize       int                 `json:"buffer_size,omitempty" bson:"buffer_size,omitempty"`         // number of messages to buffer
-	Parser           *SocketParserConfig `json:"parser,omitempty" bson:"parser,omitempty"`                   // parser configuration
+	InsecureSkipVerify bool                `json:"insecure_skip_verify,omitempty" bson:"insecure_skip_verify,omitempty"`
+	Bidirectional      bool                `json:"bidirectional,omitempty" bson:"bidirectional,omitempty"` // WebSocket only — when true, resolves to stream.websocket-bidir (write-capable, used for control commands)
+	Headers            map[string]string   `json:"headers,omitempty" bson:"headers,omitempty"`
+	ReconnectOnError   bool                `json:"reconnect_on_error" bson:"reconnect_on_error"`
+	ReconnectDelay     int                 `json:"reconnect_delay,omitempty" bson:"reconnect_delay,omitempty"` // milliseconds
+	PingInterval       int                 `json:"ping_interval,omitempty" bson:"ping_interval,omitempty"`     // seconds
+	MessageFormat      string              `json:"message_format,omitempty" bson:"message_format,omitempty"`   // json, text
+	BufferSize         int                 `json:"buffer_size,omitempty" bson:"buffer_size,omitempty"`         // number of messages to buffer
+	Parser             *SocketParserConfig `json:"parser,omitempty" bson:"parser,omitempty"`                   // parser configuration
 }
 
 // SocketParserConfig specifies how to parse incoming socket messages into tabular data
@@ -460,16 +460,16 @@ type SocketParserConfig struct {
 
 // APIConfig represents configuration for REST API data sources
 type APIConfig struct {
-	URL             string             `json:"url" bson:"url" binding:"required"`                       // Full API endpoint URL
-	Method          string             `json:"method" bson:"method"`                                    // HTTP method (GET, POST, etc.)
-	Headers         map[string]string  `json:"headers,omitempty" bson:"headers,omitempty"`              // Request headers
-	AuthType        string             `json:"auth_type,omitempty" bson:"auth_type,omitempty"`          // none, bearer, basic, api-key
+	URL             string             `json:"url" bson:"url" binding:"required"`              // Full API endpoint URL
+	Method          string             `json:"method" bson:"method"`                           // HTTP method (GET, POST, etc.)
+	Headers         map[string]string  `json:"headers,omitempty" bson:"headers,omitempty"`     // Request headers
+	AuthType        string             `json:"auth_type,omitempty" bson:"auth_type,omitempty"` // none, bearer, basic, api-key
 	AuthCredentials map[string]string  `json:"auth_credentials,omitempty" bson:"auth_credentials,omitempty"`
-	QueryParams     map[string]string  `json:"query_params,omitempty" bson:"query_params,omitempty"`    // Query parameters
-	Body            string             `json:"body,omitempty" bson:"body,omitempty"`                    // Request body template
-	Timeout         int                `json:"timeout,omitempty" bson:"timeout,omitempty"`              // seconds
+	QueryParams     map[string]string  `json:"query_params,omitempty" bson:"query_params,omitempty"` // Query parameters
+	Body            string             `json:"body,omitempty" bson:"body,omitempty"`                 // Request body template
+	Timeout         int                `json:"timeout,omitempty" bson:"timeout,omitempty"`           // seconds
 	RetryCount      int                `json:"retry_count,omitempty" bson:"retry_count,omitempty"`
-	RetryDelay      int                `json:"retry_delay,omitempty" bson:"retry_delay,omitempty"`      // milliseconds
+	RetryDelay      int                `json:"retry_delay,omitempty" bson:"retry_delay,omitempty"`         // milliseconds
 	ResponseConfig  *APIResponseConfig `json:"response_config,omitempty" bson:"response_config,omitempty"` // Response parsing config
 	// InsecureSkipVerify disables TLS certificate verification for
 	// this connection. The adapter only honors this when the server
@@ -510,18 +510,18 @@ type TSStoreTransport string
 
 const (
 	TSStoreTransportREST      TSStoreTransport = "rest"      // HTTP polling (default)
-	TSStoreTransportStreaming  TSStoreTransport = "streaming" // WebSocket push (real-time)
+	TSStoreTransportStreaming TSStoreTransport = "streaming" // WebSocket push (real-time)
 )
 
 // TSStoreConfig represents configuration for TSStore (timeseries store) data sources
 // TSStore stores arbitrary objects at timestamps, using a block-based storage system.
 // Data does not have a predefined schema - schema is inferred from the first N records.
 type TSStoreConfig struct {
-	Transport TSStoreTransport  `json:"transport,omitempty" bson:"transport,omitempty"`                // Transport mode: "rest" (default) or "streaming"
+	Transport TSStoreTransport  `json:"transport,omitempty" bson:"transport,omitempty"`               // Transport mode: "rest" (default) or "streaming"
 	Protocol  TSStoreProtocol   `json:"protocol" bson:"protocol" binding:"required,oneof=http https"` // Protocol: "http" (HTTP/WS) or "https" (HTTPS/WSS)
 	Host      string            `json:"host" bson:"host" binding:"required"`                          // Hostname or IP address
 	Port      int               `json:"port" bson:"port" binding:"required"`                          // Port number
-	StoreName string            `json:"store_name" bson:"store_name" binding:"required"`              // Name of the store to query
+	StoreName string            `json:"store_name,omitempty" bson:"store_name,omitempty"`             // Optional PINNED store. Set → the connection is bound to exactly this store (components cannot override). Unset → endpoint-scoped: components choose per-query via query_config.params.store (#248)
 	DataType  TSStoreDataType   `json:"data_type,omitempty" bson:"data_type,omitempty"`               // Store data type: json, schema, text (default: json)
 	APIKey    string            `json:"api_key,omitempty" bson:"api_key,omitempty"`                   // Optional API key for authentication
 	Headers   map[string]string `json:"headers,omitempty" bson:"headers,omitempty"`                   // Additional HTTP headers
@@ -588,7 +588,7 @@ func (c *TSStoreConfig) BaseURL() string {
 
 // PrometheusConfig represents configuration for Prometheus data sources
 type PrometheusConfig struct {
-	URL      string `json:"url" bson:"url" binding:"required"`           // Prometheus server URL (e.g., "http://localhost:9090")
+	URL      string `json:"url" bson:"url" binding:"required"`            // Prometheus server URL (e.g., "http://localhost:9090")
 	Username string `json:"username,omitempty" bson:"username,omitempty"` // Basic auth username (optional)
 	Password string `json:"password,omitempty" bson:"password,omitempty"` // Basic auth password (optional)
 	Timeout  int    `json:"timeout,omitempty" bson:"timeout,omitempty"`   // Query timeout in seconds (default: 30)
@@ -600,24 +600,24 @@ type PrometheusConfig struct {
 
 // MQTTConfig represents configuration for MQTT broker connections
 type MQTTConfig struct {
-	BrokerURL  string `json:"broker_url" bson:"broker_url" binding:"required"`   // mqtt://host:1883 or mqtts://host:8883
+	BrokerURL  string `json:"broker_url" bson:"broker_url" binding:"required"`    // mqtt://host:1883 or mqtts://host:8883
 	ClientID   string `json:"client_id" bson:"client_id"`                         // MQTT client identifier (auto-generated if empty)
-	Username   string `json:"username,omitempty" bson:"username,omitempty"`        // Auth username (optional)
-	Password   string `json:"password,omitempty" bson:"password,omitempty"`        // Auth password (optional)
+	Username   string `json:"username,omitempty" bson:"username,omitempty"`       // Auth username (optional)
+	Password   string `json:"password,omitempty" bson:"password,omitempty"`       // Auth password (optional)
 	TLS        bool   `json:"tls" bson:"tls"`                                     // Use TLS (mqtts://)
-	KeepAlive  int    `json:"keep_alive,omitempty" bson:"keep_alive,omitempty"`    // Seconds (default 60)
+	KeepAlive  int    `json:"keep_alive,omitempty" bson:"keep_alive,omitempty"`   // Seconds (default 60)
 	QoS        int    `json:"qos,omitempty" bson:"qos,omitempty"`                 // Default Quality of Service (0, 1, or 2)
 	CleanStart bool   `json:"clean_start" bson:"clean_start"`                     // Clean session on connect
-	BufferSize int    `json:"buffer_size,omitempty" bson:"buffer_size,omitempty"`  // Message buffer size (default 100)
+	BufferSize int    `json:"buffer_size,omitempty" bson:"buffer_size,omitempty"` // Message buffer size (default 100)
 }
 
 // FrigateConfig represents configuration for Frigate NVR connections
 type FrigateConfig struct {
-	Host       string `json:"host" bson:"host" binding:"required"`                           // Frigate hostname or IP
-	Port       int    `json:"port" bson:"port"`                                              // Frigate API port (default: 5000)
-	Username   string `json:"username,omitempty" bson:"username,omitempty"`                   // Basic auth username (optional)
-	Password   string `json:"password,omitempty" bson:"password,omitempty"`                   // Basic auth password (optional)
-	Go2RTCPort int    `json:"go2rtc_port,omitempty" bson:"go2rtc_port,omitempty"`             // go2rtc port (default: 1984)
+	Host       string `json:"host" bson:"host" binding:"required"`                // Frigate hostname or IP
+	Port       int    `json:"port" bson:"port"`                                   // Frigate API port (default: 5000)
+	Username   string `json:"username,omitempty" bson:"username,omitempty"`       // Basic auth username (optional)
+	Password   string `json:"password,omitempty" bson:"password,omitempty"`       // Basic auth password (optional)
+	Go2RTCPort int    `json:"go2rtc_port,omitempty" bson:"go2rtc_port,omitempty"` // go2rtc port (default: 1984)
 }
 
 // BaseURL returns the Frigate API base URL
@@ -649,29 +649,29 @@ func (c *FrigateConfig) Go2RTCURL() string {
 
 // EdgeLakeConfig represents configuration for EdgeLake data sources
 type EdgeLakeConfig struct {
-	Host                string `json:"host" bson:"host" binding:"required"`                                   // EdgeLake node IP/hostname
-	Port                int    `json:"port" bson:"port" binding:"required"`                                   // REST API port (default: 32049)
-	Timeout             int    `json:"timeout,omitempty" bson:"timeout,omitempty"`                             // Request timeout in seconds (default: 20)
-	UseDistributedQuery bool   `json:"use_distributed_query" bson:"use_distributed_query"`                     // Add "destination: network" header
+	Host                string `json:"host" bson:"host" binding:"required"`                // EdgeLake node IP/hostname
+	Port                int    `json:"port" bson:"port" binding:"required"`                // REST API port (default: 32049)
+	Timeout             int    `json:"timeout,omitempty" bson:"timeout,omitempty"`         // Request timeout in seconds (default: 20)
+	UseDistributedQuery bool   `json:"use_distributed_query" bson:"use_distributed_query"` // Add "destination: network" header
 }
 
 // EdgeLakeSchemaInfo represents EdgeLake schema information
 type EdgeLakeSchemaInfo struct {
-	Databases []string              `json:"databases"`           // Available databases
-	Tables    []EdgeLakeTableInfo   `json:"tables,omitempty"`    // Tables (populated when database is selected)
+	Databases []string            `json:"databases"`        // Available databases
+	Tables    []EdgeLakeTableInfo `json:"tables,omitempty"` // Tables (populated when database is selected)
 }
 
 // EdgeLakeTableInfo represents information about an EdgeLake table
 type EdgeLakeTableInfo struct {
-	Database string                `json:"database"`
-	Name     string                `json:"name"`
-	Columns  []EdgeLakeColumnInfo  `json:"columns,omitempty"`
+	Database string               `json:"database"`
+	Name     string               `json:"name"`
+	Columns  []EdgeLakeColumnInfo `json:"columns,omitempty"`
 }
 
 // EdgeLakeColumnInfo represents a column in an EdgeLake table
 type EdgeLakeColumnInfo struct {
-	Name     string `json:"name"`
-	Type     string `json:"type"`
+	Name string `json:"name"`
+	Type string `json:"type"`
 }
 
 // PrometheusQueryType represents the type of Prometheus query
@@ -838,15 +838,15 @@ type SchemaProvider interface {
 
 // SchemaInfo represents database schema information
 type SchemaInfo struct {
-	Database string      `json:"database"`          // Current database name
-	Tables   []TableInfo `json:"tables"`            // Tables in the database
+	Database string      `json:"database"` // Current database name
+	Tables   []TableInfo `json:"tables"`   // Tables in the database
 }
 
 // TableInfo represents a database table
 type TableInfo struct {
-	Name    string       `json:"name"`              // Table name
-	Schema  string       `json:"schema,omitempty"`  // Schema/namespace (e.g., "public" for PostgreSQL)
-	Columns []ColumnInfo `json:"columns"`           // Columns in the table
+	Name    string       `json:"name"`             // Table name
+	Schema  string       `json:"schema,omitempty"` // Schema/namespace (e.g., "public" for PostgreSQL)
+	Columns []ColumnInfo `json:"columns"`          // Columns in the table
 }
 
 // ColumnInfo represents a database column
@@ -860,11 +860,11 @@ type ColumnInfo struct {
 
 // SchemaResponse represents the API response for schema discovery
 type SchemaResponse struct {
-	Success          bool                    `json:"success"`
-	Schema           *SchemaInfo             `json:"schema,omitempty"`              // For SQL datasources
-	PrometheusSchema *PrometheusSchemaInfo   `json:"prometheus_schema,omitempty"`   // For Prometheus datasources
-	Error            string                  `json:"error,omitempty"`
-	Duration         int64                   `json:"duration"` // milliseconds
+	Success          bool                  `json:"success"`
+	Schema           *SchemaInfo           `json:"schema,omitempty"`            // For SQL datasources
+	PrometheusSchema *PrometheusSchemaInfo `json:"prometheus_schema,omitempty"` // For Prometheus datasources
+	Error            string                `json:"error,omitempty"`
+	Duration         int64                 `json:"duration"` // milliseconds
 }
 
 // PrometheusSchemaInfo represents Prometheus schema information
