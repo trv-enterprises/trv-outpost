@@ -445,6 +445,10 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
   // The component query's latest_by, as a stable primitive for the memo dep
   // (the query object's identity churns per render).
   const queryLatestBy = query?.params?.latest_by || '';
+  // #248: the component's store on an endpoint-scoped tsstore connection.
+  // Must ride on every synthesized backfill or the seed silently reads the
+  // wrong store. Same stable-primitive pattern as queryLatestBy.
+  const queryStore = query?.params?.store || '';
   const effectiveBackfill = useMemo(() => {
     if (backfill === false) return null;
     if (backfill) return backfill;
@@ -471,7 +475,9 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
         //  2. "Current state" semantics: a series silent for over an hour
         //     isn't current — stale series aging out of the seed is right,
         //     and the live stream keeps genuinely-current series fresh.
-        return { raw: 'since:1h', type: 'tsstore', params: { latest_by: queryLatestBy } };
+        const params = { latest_by: queryLatestBy };
+        if (queryStore) params.store = queryStore;
+        return { raw: 'since:1h', type: 'tsstore', params };
       }
       // When a dashboard range is active, the backfill should paint that WINDOW
       // rather than the latest N. Pass the range INTENT through unchanged — the
@@ -486,12 +492,15 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
         // WITH a step; the adapter's setGroupByParam no-ops it without one.
         const params = { range: rangeValue };
         if (seriesCol) params.group_by = seriesCol;
+        if (queryStore) params.store = queryStore;
         return { raw: 'newest', type: 'tsstore', params };
       }
-      return { raw: 'newest', type: 'tsstore', params: { limit: getStreamBufferSize() } };
+      const params = { limit: getStreamBufferSize() };
+      if (queryStore) params.store = queryStore;
+      return { raw: 'newest', type: 'tsstore', params };
     }
     return null;
-  }, [backfill, datasourceType, datasourceTransport, rangeValue, seriesCol, queryLatestBy]);
+  }, [backfill, datasourceType, datasourceTransport, rangeValue, seriesCol, queryLatestBy, queryStore]);
   const effectiveBackfillKey = useMemo(() => JSON.stringify(effectiveBackfill), [effectiveBackfill]);
 
   // Re-init on a backfill-query change (stage 2 of #162): a dashboard range

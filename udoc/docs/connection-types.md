@@ -88,8 +88,19 @@ Connect to a TS-Store time-series database.
 **Configuration**:
 - Protocol (http/https)
 - Host and Port
-- Store name
+- Pinned store (optional — see below)
 - API key
+
+**Pinned vs endpoint-scoped**: the store field is an optional *pin*.
+Set it and the connection is bound to exactly that store — every
+component on it reads that store, and today's connections keep working
+unchanged. Leave it empty and the connection is **endpoint-scoped**: it
+identifies just the ts-store server and API key, and each component
+chooses its own store from a dropdown in the component editor (the list
+shows the stores the key can read). One endpoint-scoped connection can
+serve components reading many different stores — like one SQL
+connection serving many tables. Streaming transport currently requires
+a pinned store; endpoint-scoped streaming is planned.
 
 **Usage**: Time-series data queries for monitoring dashboards. Supports
 server-side downsampling: under a dashboard [time-range variable](dashboard-variables.md#range-options),

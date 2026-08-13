@@ -1517,7 +1517,7 @@
     },
     {
       "name": "connections",
-      "description": "connections endpoints (24).",
+      "description": "connections endpoints (25).",
       "item": [
         {
           "name": "Check connection health",
@@ -2279,6 +2279,41 @@
               ]
             },
             "description": "List distinct column values for a dashboard-variable picker\n\nReturns the distinct values of a column (SQL/EdgeLake via GROUP BY). Column + table from query params; limit optional.\n\n\nResponses: 200, 400, 403, 404"
+          },
+          "response": []
+        },
+        {
+          "name": "List stores behind a multi-store connection",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-ID",
+                "value": "{{userId}}",
+                "description": "Legacy identity-assertion path (dev only). Disabled by default — Bearer token (collection auth) is preferred.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections/{id}/stores",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "connections",
+                ":id",
+                "stores"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Connection ID"
+                }
+              ]
+            },
+            "description": "List stores behind a multi-store connection\n\nStore discovery for endpoint-scoped connections (tsstore). Each entry carries the connection key's access classes on that store.\n\n\nResponses: 200, 400, 403, 404"
           },
           "response": []
         },

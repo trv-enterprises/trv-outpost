@@ -93,6 +93,17 @@ const (
 	// mechanics. Used by adapters that front a fixed RPC-ish API set
 	// rather than a query language.
 	QuerySurfaceCatalog = "catalog"
+
+	// QuerySurfaceStoreList — the type supports a per-component store
+	// choice, orthogonal to the query itself: the backend endpoint hosts
+	// multiple named stores and a component on an endpoint-scoped
+	// connection names one in query_config.params.store. The store list
+	// is per-connection dynamic (scoped to the connection's key), so it
+	// is NOT carried as static presets here — the editor fetches it from
+	// GET /api/connections/:id/stores (adapters implementing StoreLister)
+	// and renders a store picker when the selected connection has no
+	// pinned store. (#248)
+	QuerySurfaceStoreList = "store_list"
 )
 
 // QueryPreset is one named, ready-to-run query: a human label plus the
@@ -148,4 +159,28 @@ type TypeInfo struct {
 // SchemaProvider is an optional interface for adapters that support schema discovery
 type SchemaProvider interface {
 	GetSchema(ctx context.Context) (interface{}, error)
+}
+
+// StoreInfo is one entry from a multi-store backend's store listing,
+// mirroring ts-store's GET /api/stores response (v0.20.0-rc.2+): identity,
+// role, per-store data type, and the caller's effective access classes on
+// that store ("read"/"write"/"manage" — independent flags, not a hierarchy).
+// Consumers filter on Access: the component editor's store picker wants
+// "read", the alerts wizard wants "manage".
+type StoreInfo struct {
+	Name     string   `json:"name"`
+	DataType string   `json:"data_type,omitempty"`
+	Role     string   `json:"role,omitempty"`      // "store" | "source" | "rollup"
+	RollupOf string   `json:"rollup_of,omitempty"` // set when Role == "rollup"
+	Window   string   `json:"window,omitempty"`    // set when Role == "rollup"
+	Access   []string `json:"access,omitempty"`
+}
+
+// StoreLister is an optional interface for adapters whose backend hosts
+// multiple named stores discoverable at runtime (declared alongside a
+// QuerySurfaceStoreList surface). The listing is scoped server-side to what
+// the connection's credentials can see — it backs GET
+// /api/connections/:id/stores so the key never reaches the browser. (#248)
+type StoreLister interface {
+	ListStores(ctx context.Context) ([]StoreInfo, error)
 }

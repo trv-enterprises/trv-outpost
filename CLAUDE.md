@@ -384,6 +384,7 @@ dashboard/
 | POST | `/api/connections/test` | Test connection |
 | POST | `/api/connections/:id/duplicate` | Copy a connection (secrets included; server-side because the API masks secrets on read). Always lands in the source's namespace — no destination param, so credentials can't cross a namespace boundary. |
 | POST | `/api/connections/:id/query` | Execute query |
+| GET | `/api/connections/:id/stores` | Store discovery for endpoint-scoped multi-store connections (tsstore): proxies ts-store's keyed store listing server-side; entries carry the key's per-store access classes (#248) |
 | **Controls** |||
 | POST | `/api/controls/:id/execute` | Execute control command |
 | **Components** |||

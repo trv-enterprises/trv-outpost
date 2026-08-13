@@ -3304,7 +3304,9 @@ definitions:
           Only used when Transport is "streaming". Dashboard calls ts-store API to create
           a push connection and ts-store dials out to dashboard's inbound WebSocket endpoint.
       store_name:
-        description: Name of the store to query
+        description: 'Optional PINNED store. Set → the connection is bound to exactly
+          this store (components cannot override). Unset → endpoint-scoped: components
+          choose per-query via query_config.params.store (#248)'
         type: string
       timeout:
         description: 'Request timeout in seconds (default: 30)'
@@ -3317,7 +3319,6 @@ definitions:
     - host
     - port
     - protocol
-    - store_name
     type: object
   models.TSStoreDataType:
     enum:
@@ -6424,6 +6425,42 @@ paths:
             additionalProperties: true
             type: object
       summary: Get database schema for a SQL connection
+      tags:
+      - connections
+  /connections/{id}/stores:
+    get:
+      description: Store discovery for endpoint-scoped connections (tsstore). Each
+        entry carries the connection key's access classes on that store.
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: namespace not granted
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: connection not found, or type without store discovery
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List stores behind a multi-store connection
       tags:
       - connections
   /connections/{id}/stream:

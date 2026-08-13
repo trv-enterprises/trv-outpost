@@ -273,6 +273,27 @@ is by the connection's type, not the query's). Use "api" for REST-
 mode connections and "stream_filter" for streaming-mode — that's
 what the editor and tooling expect.
 
+# Pinned vs endpoint-scoped connections (#248)
+
+A ts-store connection's store_name is an optional PIN:
+  - store_name SET → the connection is bound to exactly that store.
+    Components cannot override it — never put params.store on a
+    component using a pinned connection (it is ignored).
+  - store_name UNSET → the connection is ENDPOINT-SCOPED: it
+    identifies only the ts-store server + API key, and EVERY
+    component must name its store via params.store:
+
+    { "raw": "newest", "type": "api",
+      "params": { "store": "home-env", "limit": 100 } }
+
+    A query with neither a pin nor params.store fails with
+    "no store selected". Discover valid store names with
+    GET /api/connections/:id/stores (the component editor's store
+    picker uses it; entries carry the key's per-store access
+    classes — a component can read any store with "read").
+    Streaming transport on an endpoint-scoped connection is not
+    yet supported — pin a store for streaming.
+
 # REST mode (transport: rest or unset)
 
 query_config shapes:

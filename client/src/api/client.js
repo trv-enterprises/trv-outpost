@@ -1040,6 +1040,15 @@ class APIClient {
     return this.request(`/api/connections/${id}/schema`, { connectionId: id });
   }
 
+  // Store discovery for endpoint-scoped multi-store connections (tsstore,
+  // #248): proxies ts-store's keyed GET /api/stores server-side, so each
+  // entry carries name/role/data_type plus the key's access classes on that
+  // store — filter on access ("read" for component pickers, "manage" for the
+  // alerts wizard). 404 for connection types without store discovery.
+  async getConnectionStores(id) {
+    return this.request(`/api/connections/${id}/stores`, { connectionId: id });
+  }
+
   // Distinct values of a column on a connection, for a dashboard-variable
   // picker. column (+ table for SQL/EdgeLake, database for EdgeLake) identify
   // what to list. Pass opts.signal to support a Stop button on slow/streaming

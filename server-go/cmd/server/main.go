@@ -873,6 +873,7 @@ func main() {
 			connections.POST("/:id/health", connectionHandler.CheckConnectionHealth)
 			connections.POST("/:id/query", connectionHandler.QueryConnection)
 			connections.GET("/:id/schema", connectionHandler.GetConnectionSchema)
+			connections.GET("/:id/stores", connectionHandler.ListConnectionStores)                              // Multi-store discovery (tsstore, #248)
 			connections.GET("/:id/variable-values", connectionHandler.GetVariableValues)                        // Dashboard-variable distinct value discovery
 			connections.PUT("/:id/discovered-values", connectionHandler.SaveDiscoveredValues)                   // Persist client-captured variable values (design-gated)
 			connections.GET("/:id/prometheus/labels/:label/values", connectionHandler.GetPrometheusLabelValues) // Prometheus label values

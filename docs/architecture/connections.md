@@ -292,7 +292,19 @@ ts-store is a Go-based time-series circular-buffer store (the
 simulators live in the [trv-outpost-sim](https://github.com/trv-enterprises/trv-outpost-sim)
 repo for local testing).
 
-- **Config**: base URL, API key, store name, ring size
+- **Config**: base URL, API key, optional **pinned store** (#248):
+  `store_name` set → the connection is bound to that one store and a
+  component cannot override it; unset → the connection is
+  **endpoint-scoped** and every component names its store via
+  `query_config.params.store` (a reserved query param). Effective
+  store = pin, else `params.store`, else error. Store discovery for
+  the editor's picker: `GET /api/connections/:id/stores` (adapter
+  `registry.StoreLister`, proxying ts-store's keyed `GET /api/stores`
+  — entries carry the key's per-store access classes). The store's
+  `data_type` is resolved per store (cached) on endpoint-scoped
+  connections; streaming currently requires a pin (channel identity
+  lands in the #248 PR 2 work). Full design:
+  [`docs/design-notes/tsstore-endpoint-scoped-connections.md`](../design-notes/tsstore-endpoint-scoped-connections.md)
 - **Capabilities**: read, stream (via WebSocket push)
 - **Schema**: discovered at runtime by sampling recent objects and
   probing JSON structure

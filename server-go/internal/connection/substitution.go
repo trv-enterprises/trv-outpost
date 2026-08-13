@@ -66,6 +66,14 @@ const GroupByParam = "group_by"
 // "Current State" query type. Non-ts-store adapters ignore it.
 const LatestByParam = "latest_by"
 
+// StoreParam is the key under which a component on an endpoint-scoped tsstore
+// connection names its target store (query_config.params.store). A connection
+// with a pinned store_name ignores it — the pin wins, so a same-type swap onto
+// a pinned connection stays coherent instead of erroring. Only the tsstore
+// adapters consume it; it is reserved so SQL adapters never bind it
+// positionally.
+const StoreParam = "store"
+
 // reservedQueryParams are param keys consumed by token substitution / structured
 // range handling — they must NOT be appended as stray positional bind args by
 // the SQL adapters.
@@ -74,6 +82,7 @@ var reservedQueryParams = map[string]bool{
 	RangeParam:             true,
 	GroupByParam:           true,
 	LatestByParam:          true,
+	StoreParam:             true,
 }
 
 // ErrDashboardVariableNotSet is returned when a query contains the
@@ -127,6 +136,14 @@ func resolveGroupByParam(params map[string]interface{}) string {
 // type). Empty when absent.
 func resolveLatestByParam(params map[string]interface{}) string {
 	s, _ := params[LatestByParam].(string)
+	return strings.TrimSpace(s)
+}
+
+// resolveStoreParam reads the component-selected store name from Query.Params
+// (authored by the component editor's store picker on endpoint-scoped tsstore
+// connections). Empty when absent.
+func resolveStoreParam(params map[string]interface{}) string {
+	s, _ := params[StoreParam].(string)
 	return strings.TrimSpace(s)
 }
 
@@ -259,7 +276,7 @@ type tsstoreRange struct {
 	Since     string // relative token, e.g. "1h" (Relative)
 	FromEpoch int64  // absolute lower bound, Unix seconds
 	ToEpoch   int64  // absolute upper bound, Unix seconds
-	Step       string // optional downsampling resolution, e.g. "1m" (clamped)
+	Step      string // optional downsampling resolution, e.g. "1m" (clamped)
 }
 
 // tsstoreRangeFromSpec maps a RangeSpec to a tsstoreRange. ok is false when the
@@ -534,6 +551,7 @@ var edgeLakeNumericLiteral = regexp.MustCompile(`^[+-]?(?:\d+\.?\d*|\.\d+)$`)
 // quoting for them), so the substitution must emit a valid literal itself:
 //   - numeric values stay BARE (`dataset = 42`) so they match numeric columns,
 //   - everything else becomes a single-quoted, escaped string (`dataset = 'FD001'`).
+//
 // Without the quotes, EdgeLake's parser reads the value as an identifier and
 // rejects the query — the original "queries not working" bug.
 func edgeLakeVariableLiteral(value string) string {
