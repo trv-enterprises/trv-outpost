@@ -35,7 +35,7 @@ func TestGate_TerminalNeverRedials(t *testing.T) {
 	m.failed[id] = &failedStream{err: wantErr, terminal: true, attempts: 1}
 
 	m.mu.Lock()
-	stream, err := m.getOrCreateStream(context.Background(), id)
+	stream, _, err := m.getOrCreateStream(context.Background(), id, "")
 	m.mu.Unlock()
 
 	if stream != nil {
@@ -60,7 +60,7 @@ func TestGate_TransientCoolingDown(t *testing.T) {
 	}
 
 	m.mu.Lock()
-	stream, err := m.getOrCreateStream(context.Background(), id)
+	stream, _, err := m.getOrCreateStream(context.Background(), id, "")
 	m.mu.Unlock()
 
 	if stream != nil {
@@ -80,7 +80,7 @@ func TestGate_LiveStreamWins(t *testing.T) {
 	m.streams[id] = stub
 
 	m.mu.Lock()
-	stream, err := m.getOrCreateStream(context.Background(), id)
+	stream, _, err := m.getOrCreateStream(context.Background(), id, "")
 	m.mu.Unlock()
 
 	if err != nil {
@@ -164,12 +164,12 @@ func TestStreamStartError_AsAndClassification(t *testing.T) {
 // stubStreamer is a minimal Streamer for the live-stream gate test.
 type stubStreamer struct{}
 
-func (s *stubStreamer) Start(ctx context.Context) error      { return nil }
-func (s *stubStreamer) Stop()                                {}
-func (s *stubStreamer) Subscribe() chan models.Record        { return make(chan models.Record) }
-func (s *stubStreamer) Unsubscribe(ch chan models.Record)    {}
-func (s *stubStreamer) GetBuffer() []models.Record           { return nil }
-func (s *stubStreamer) BufferCount() int                     { return 0 }
-func (s *stubStreamer) SubscriberCount() int                 { return 0 }
-func (s *stubStreamer) IsConnected() bool                    { return true }
-func (s *stubStreamer) LastError() error                     { return nil }
+func (s *stubStreamer) Start(ctx context.Context) error   { return nil }
+func (s *stubStreamer) Stop()                             {}
+func (s *stubStreamer) Subscribe() chan models.Record     { return make(chan models.Record) }
+func (s *stubStreamer) Unsubscribe(ch chan models.Record) {}
+func (s *stubStreamer) GetBuffer() []models.Record        { return nil }
+func (s *stubStreamer) BufferCount() int                  { return 0 }
+func (s *stubStreamer) SubscriberCount() int              { return 0 }
+func (s *stubStreamer) IsConnected() bool                 { return true }
+func (s *stubStreamer) LastError() error                  { return nil }

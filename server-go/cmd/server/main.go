@@ -1103,8 +1103,13 @@ func main() {
 	mcpHandler.SetupRoutes(mcpGroup)
 
 	// Inbound WebSocket endpoint for ts-store push connections (outside /api group, no auth required)
-	// ts-store dials out to this endpoint to push data
+	// ts-store dials out to this endpoint to push data. Two shapes (#248 PR 2):
+	// the single segment is a pinned connection's channel (the pre-#248 URL,
+	// unchanged so existing ts-store push registrations keep working); the
+	// two-segment form addresses a per-component store channel on an
+	// endpoint-scoped connection (<connID>/<channel-hash>).
 	router.GET("/api/streams/inbound/:connectionId", inboundHandler.HandleInboundWebSocket)
+	router.GET("/api/streams/inbound/:connectionId/:channel", inboundHandler.HandleInboundWebSocket)
 
 	// Swagger documentation. The committed spec has a static @host
 	// (localhost:3001), but the UI is reached over many origins (homelab

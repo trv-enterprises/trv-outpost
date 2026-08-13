@@ -321,7 +321,13 @@ repo for local testing).
   [streaming.md](streaming.md)
 - **Push direction**: ts-store can also push data into the dashboard
   via `GET /api/streams/inbound/:datasourceId` — an inbound WebSocket
-  endpoint the ts-store server dials into
+  endpoint the ts-store server dials into. On an endpoint-scoped
+  connection each per-component store gets its own channel at
+  `/api/streams/inbound/:datasourceId/:channelHash` (#248): one
+  `TSStoreStream` + one ts-store push registration per distinct
+  (connection, store), shared by every component on that store; the
+  hash is a pure config hash so the URL is stable across restarts.
+  Pinned connections keep the single-segment URL unchanged.
 
 ### `frigate`
 

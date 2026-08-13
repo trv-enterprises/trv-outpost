@@ -582,6 +582,7 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
           processStreamRecord(record);
         },
         {
+          store: queryStore, // #248: per-component store channel (endpoint-scoped tsstore)
           onConnect: () => {
             if (mountedRef.current) {
               handleConnectionSuccess();
@@ -646,6 +647,7 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
         },
         {
           topics: topicFilter,
+          store: queryStore, // #248: per-component store channel (endpoint-scoped tsstore)
           skipBufferReplay: !!effectiveBackfill,
           onConnect: () => {
             if (mountedRef.current) {
@@ -905,7 +907,7 @@ export function useData({ connectionId, query, componentId = null, refreshInterv
         eventSourceRef.current = null;
       }
     };
-  }, [connectionId, datasourceType, datasourceTransport, typeLoading, processStreamRecord, useAggregated, timeBucketKey, effectiveBackfillKey, handleConnectionError, handleConnectionSuccess]);
+  }, [connectionId, datasourceType, datasourceTransport, typeLoading, processStreamRecord, useAggregated, timeBucketKey, effectiveBackfillKey, queryStore, handleConnectionError, handleConnectionSuccess]);
 
   // === POLLING LOGIC (for non-socket datasources) ===
   // isInitialFetch tracks whether this is the first load (shows loading state)

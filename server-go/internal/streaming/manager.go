@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,10 +16,17 @@ import (
 	"github.com/trv-enterprises/trve-dashboard/internal/repository"
 )
 
-// Manager orchestrates multiple streaming connections
+// Manager orchestrates multiple streaming connections.
+//
+// Maps are keyed by STREAM KEY (#248 PR 2): the bare connection id for every
+// non-tsstore stream and for pinned tsstore connections (identical to the
+// pre-#248 identity), or connectionID+"/"+hash for a per-component store
+// channel on an endpoint-scoped tsstore connection — see channel_key.go.
+// Two components landing the same (connection, store) share one stream and
+// therefore exactly one ts-store push registration.
 type Manager struct {
 	streams    map[string]Streamer
-	failed     map[string]*failedStream // connections whose last start failed (backoff memory)
+	failed     map[string]*failedStream // channels whose last start failed (backoff memory)
 	mu         sync.RWMutex
 	repo       *repository.ConnectionRepository
 	config     ManagerConfig
@@ -90,7 +98,7 @@ func (m *Manager) SubscribeWithTopics(ctx context.Context, connectionID string, 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	stream, err := m.getOrCreateStream(ctx, connectionID)
+	stream, _, err := m.getOrCreateStream(ctx, connectionID, "")
 	if err != nil {
 		return nil, err
 	}
@@ -104,10 +112,11 @@ func (m *Manager) SubscribeWithTopics(ctx context.Context, connectionID string, 
 }
 
 // GetBufferFiltered returns buffered records filtered by topic patterns (for MQTT streams).
-// For non-MQTT streams, returns the full buffer.
-func (m *Manager) GetBufferFiltered(connectionID string, topics []string) []models.Record {
+// For non-MQTT streams, returns the full buffer. streamKey is the key returned
+// by SubscribeAndGetChannelStore (bare connection id for non-store channels).
+func (m *Manager) GetBufferFiltered(streamKey string, topics []string) []models.Record {
 	m.mu.RLock()
-	stream, exists := m.streams[connectionID]
+	stream, exists := m.streams[streamKey]
 	m.mu.RUnlock()
 
 	if !exists {
@@ -121,33 +130,62 @@ func (m *Manager) GetBufferFiltered(connectionID string, topics []string) []mode
 	return stream.GetBuffer()
 }
 
-// getOrCreateStream returns a live stream for the connection, applying the
-// failed-stream backoff gate so a broken connection (e.g. a tsstore stream with
-// a rejected api-key) doesn't get re-dialed on every subscribe. Must be called
-// with m.mu held. Returns the live stream, or an error describing why it can't
-// be established (the cached error within the backoff window, or a fresh start
-// failure).
-func (m *Manager) getOrCreateStream(ctx context.Context, connectionID string) (Streamer, error) {
-	if stream, exists := m.streams[connectionID]; exists {
-		return stream, nil
+// ResolveStreamKey computes the Manager/inbound key for a (connection, store)
+// pair without creating the stream. store == "" (every non-tsstore caller,
+// and every component without a per-component store) resolves to the bare
+// connection id — the pre-#248 identity. A non-empty store composes a
+// per-channel key only on an endpoint-scoped tsstore connection; a PINNED
+// connection ignores the store entirely (the pin wins, matching the REST
+// adapter's resolveEffectiveStore semantics).
+func (m *Manager) ResolveStreamKey(ctx context.Context, connectionID, store string) (string, error) {
+	if store == "" {
+		return connectionID, nil
+	}
+	ds, err := m.repo.FindByID(ctx, connectionID)
+	if err != nil {
+		return "", fmt.Errorf("could not load connection %s: %v", connectionID, err)
+	}
+	if ds == nil {
+		return "", fmt.Errorf("connection %s not found", connectionID)
+	}
+	if ds.Type != models.ConnectionTypeTSStore || ds.Config.TSStore == nil || ds.Config.TSStore.StoreName != "" {
+		return connectionID, nil
+	}
+	return composeStreamKey(connectionID, store, ds.Config.TSStore.Push), nil
+}
+
+// getOrCreateStream returns a live stream for the (connection, store) channel,
+// applying the failed-stream backoff gate so a broken connection (e.g. a
+// tsstore stream with a rejected api-key) doesn't get re-dialed on every
+// subscribe. Must be called with m.mu held. Returns the live stream and its
+// stream key, or an error describing why it can't be established (the cached
+// error within the backoff window, or a fresh start failure).
+func (m *Manager) getOrCreateStream(ctx context.Context, connectionID, store string) (Streamer, string, error) {
+	key, err := m.ResolveStreamKey(ctx, connectionID, store)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if stream, exists := m.streams[key]; exists {
+		return stream, key, nil
 	}
 
 	// Honor the backoff/terminal memory before re-dialing.
-	if f, ok := m.failed[connectionID]; ok {
+	if f, ok := m.failed[key]; ok {
 		if f.terminal {
-			return nil, f.err // never auto-retry an auth failure
+			return nil, "", f.err // never auto-retry an auth failure
 		}
 		if time.Now().Before(f.nextRetry) {
-			return nil, f.err // still cooling down — return cached error, no re-dial
+			return nil, "", f.err // still cooling down — return cached error, no re-dial
 		}
 		// past the cooldown → fall through and retry
 	}
 
-	stream, err := m.createStream(ctx, connectionID)
+	stream, err := m.createStream(ctx, connectionID, store, key)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return stream, nil
+	return stream, key, nil
 }
 
 // backoffDelay computes the exponential backoff for the Nth transient failure.
@@ -179,14 +217,15 @@ func (m *Manager) recordFailure(connectionID string, err error) {
 	m.failed[connectionID] = f
 }
 
-// createStream creates and starts a new stream for the given datasource. Must
-// be called with m.mu held. On failure it records the failure for backoff and
-// returns the error (so callers can surface it); on success it caches the live
-// stream and clears any prior failure memory.
-func (m *Manager) createStream(ctx context.Context, connectionID string) (Streamer, error) {
+// createStream creates and starts a new stream for the given (connection,
+// store) channel under the pre-resolved stream key. Must be called with m.mu
+// held. On failure it records the failure for backoff and returns the error
+// (so callers can surface it); on success it caches the live stream and
+// clears any prior failure memory.
+func (m *Manager) createStream(ctx context.Context, connectionID, store, key string) (Streamer, error) {
 	fail := func(err error) (Streamer, error) {
-		log.Printf("[StreamManager] Failed to start stream for %s: %v", connectionID, err)
-		m.recordFailure(connectionID, err)
+		log.Printf("[StreamManager] Failed to start stream for %s: %v", key, err)
+		m.recordFailure(key, err)
 		return nil, err
 	}
 
@@ -214,14 +253,17 @@ func (m *Manager) createStream(ctx context.Context, connectionID string) (Stream
 		if ds.Config.TSStore == nil {
 			return fail(&StreamStartError{Terminal: true, Message: fmt.Sprintf("connection %s has no ts-store configuration", connectionID)})
 		}
-		// #248 PR 1 gate: streaming channels are still keyed by connection id,
-		// so an endpoint-scoped connection (no pinned store) cannot stream yet
-		// — per-component store channels land with the channel-identity work
-		// (PR 2). REST components on endpoint-scoped connections work today.
-		if ds.Config.TSStore.StoreName == "" {
-			return fail(&StreamStartError{Terminal: true, Message: fmt.Sprintf("connection %s is endpoint-scoped (no pinned store) — streaming requires a pinned store until per-component store channels land", connectionID)})
+		// Effective store: the pin wins (matching the REST adapter's
+		// resolveEffectiveStore); endpoint-scoped requires the component's
+		// store, which arrived via the subscription (#248 PR 2).
+		effStore := ds.Config.TSStore.StoreName
+		if effStore == "" {
+			effStore = store
 		}
-		stream = NewTSStoreStream(connectionID, ds.Config.TSStore, streamConfig)
+		if effStore == "" {
+			return fail(&StreamStartError{Terminal: true, Message: fmt.Sprintf("connection %s is endpoint-scoped (no pinned store) — the component must select a store to stream", connectionID)})
+		}
+		stream = NewTSStoreStream(connectionID, key, effStore, ds.Config.TSStore, streamConfig)
 
 	case models.ConnectionTypeMQTT:
 		if ds.Config.MQTT == nil {
@@ -237,30 +279,42 @@ func (m *Manager) createStream(ctx context.Context, connectionID string) (Stream
 		return fail(err)
 	}
 
-	m.streams[connectionID] = stream
-	delete(m.failed, connectionID) // success clears failure memory
-	log.Printf("[StreamManager] Created stream for datasource %s (type: %s)", connectionID, ds.Type)
+	m.streams[key] = stream
+	delete(m.failed, key) // success clears failure memory
+	log.Printf("[StreamManager] Created stream %s (connection: %s, type: %s)", key, connectionID, ds.Type)
 	return stream, nil
 }
 
 // SubscribeAndGetChannel creates or gets a stream for the datasource and returns a bidirectional channel
 // This is useful when the caller needs to pass the channel to Unsubscribe later
 func (m *Manager) SubscribeAndGetChannel(ctx context.Context, connectionID string) (chan models.Record, error) {
+	ch, _, err := m.SubscribeAndGetChannelStore(ctx, connectionID, "")
+	return ch, err
+}
+
+// SubscribeAndGetChannelStore is the store-aware subscribe (#248 PR 2): a
+// non-empty store selects the per-component store channel on an
+// endpoint-scoped tsstore connection. Returns the stream key alongside the
+// channel — the caller needs it for Unsubscribe and buffer replay, and (for
+// aggregated subscriptions) as the aggregator feed key.
+func (m *Manager) SubscribeAndGetChannelStore(ctx context.Context, connectionID, store string) (chan models.Record, string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	stream, err := m.getOrCreateStream(ctx, connectionID)
+	stream, key, err := m.getOrCreateStream(ctx, connectionID, store)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return stream.Subscribe(), nil
+	return stream.Subscribe(), key, nil
 }
 
-// Unsubscribe removes a subscriber from a stream
+// Unsubscribe removes a subscriber from a stream. streamKey is the key
+// returned by SubscribeAndGetChannelStore (the bare connection id for every
+// non-store subscription, so pre-#248 callers are unchanged).
 // Note: The caller must pass a bidirectional channel that was returned by Subscribe()
-func (m *Manager) Unsubscribe(connectionID string, ch chan models.Record) {
+func (m *Manager) Unsubscribe(streamKey string, ch chan models.Record) {
 	m.mu.RLock()
-	stream, exists := m.streams[connectionID]
+	stream, exists := m.streams[streamKey]
 	m.mu.RUnlock()
 
 	if !exists {
@@ -278,6 +332,18 @@ func (m *Manager) GetStreamStatus(connectionID string) *StreamStatus {
 	m.mu.RLock()
 	stream, exists := m.streams[connectionID]
 	f := m.failed[connectionID]
+	if !exists {
+		// Per-component store channels key as "<connID>/<hash>" — report the
+		// first live channel so an endpoint-scoped connection's status isn't
+		// a false "not streaming" (#248 PR 2).
+		prefix := connectionID + "/"
+		for key, s := range m.streams {
+			if strings.HasPrefix(key, prefix) {
+				stream, exists = s, true
+				break
+			}
+		}
+	}
 	m.mu.RUnlock()
 
 	if exists {
@@ -305,15 +371,25 @@ func (m *Manager) GetStreamStatus(connectionID string) *StreamStatus {
 // InvalidateStream clears any cached live stream and failure/backoff memory for
 // a connection. Call this when the connection's config changes (e.g. the admin
 // fixes a rejected api-key and re-saves) so the next subscribe rebuilds the
-// stream with the new config — no server restart needed.
+// stream with the new config — no server restart needed. Covers the bare
+// connection-id channel AND every "<connID>/<hash>" per-store channel (#248
+// PR 2) — a push-config edit changes the hash, so the old channels must die
+// here rather than lingering until idle cleanup.
 func (m *Manager) InvalidateStream(connectionID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if stream, ok := m.streams[connectionID]; ok {
-		stream.Stop()
-		delete(m.streams, connectionID)
+	prefix := connectionID + "/"
+	for key, stream := range m.streams {
+		if key == connectionID || strings.HasPrefix(key, prefix) {
+			stream.Stop()
+			delete(m.streams, key)
+		}
 	}
-	delete(m.failed, connectionID)
+	for key := range m.failed {
+		if key == connectionID || strings.HasPrefix(key, prefix) {
+			delete(m.failed, key)
+		}
+	}
 }
 
 // StreamStatus contains status information for a stream

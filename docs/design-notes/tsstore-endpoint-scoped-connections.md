@@ -294,6 +294,20 @@ cannot be unioned like MQTT topics or post-processed like `data_path`.
 
 ### Channel key **[decided in issue: `(connection_id, store, agg-config-hash)`; composition proposed]**
 
+> **Implementation deviation (PR 2, risk-reducing):** pinned connections
+> KEEP the bare `connection_id` as their channel key and inbound URL —
+> the composite `connID/<hash>` shape applies only to per-component store
+> channels on endpoint-scoped connections. Consequences: existing
+> deployments see zero re-keying, zero inbound-URL change, no reconnect
+> blip, and no legacy sweep for pinned connections (invariants 1–2 in § 9
+> become moot for them); the eviction hazard the composite key solves
+> only ever existed for the new per-store case, which gets distinct URLs.
+> The legacy-URL sweep survives in one narrow form: a per-store channel
+> also deletes push connections targeting `/inbound/<connID>` on ITS
+> store, covering a connection that was pinned and later unpinned. The
+> `BucketConfig.ConnectionID` field now carries the feed key (the stream
+> key) rather than strictly a connection id.
+
 ```
 channelKey = connectionID + "/" + hex(sha256(
     store | format | filter | filterIgnoreCase |
