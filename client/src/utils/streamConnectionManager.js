@@ -149,9 +149,16 @@ class StreamConnectionManager {
       return () => {};
     }
 
+    // #248: a per-component store on an endpoint-scoped tsstore connection
+    // gets its own client-side stream key, so two stores on one connection
+    // fan out independently (mirroring the server's per-store channels).
+    // This key is CLIENT-LOCAL — the server derives its own channel hash;
+    // the store rides the subscription payload verbatim.
+    const streamKey = options.store ? `${connectionId}|s:${options.store}` : connectionId;
+
     // Initialize subscribers set
-    if (!this.subscribers.has(connectionId)) {
-      this.subscribers.set(connectionId, new Set());
+    if (!this.subscribers.has(streamKey)) {
+      this.subscribers.set(streamKey, new Set());
     }
 
     // Create subscriber entry with topic filter for client-side routing
@@ -165,18 +172,18 @@ class StreamConnectionManager {
       onReconnecting: options.onReconnecting || (() => {})
     };
 
-    this.subscribers.get(connectionId).add(subscriber);
+    this.subscribers.get(streamKey).add(subscriber);
 
     // Cancel any pending grace period cleanup
-    const pendingTimeout = this.gracePeriodTimeouts.get(connectionId);
+    const pendingTimeout = this.gracePeriodTimeouts.get(streamKey);
     if (pendingTimeout) {
       clearTimeout(pendingTimeout);
-      this.gracePeriodTimeouts.delete(connectionId);
-      console.log(`[StreamConnectionManager] Grace period cancelled for ${connectionId} — reusing connection`);
+      this.gracePeriodTimeouts.delete(streamKey);
+      console.log(`[StreamConnectionManager] Grace period cancelled for ${streamKey} — reusing connection`);
     }
 
-    const connection = this.connections.get(connectionId);
-    const newTopics = this._getCombinedTopics(connectionId);
+    const connection = this.connections.get(streamKey);
+    const newTopics = this._getCombinedTopics(streamKey);
 
     if (connection) {
       // Connection exists — check if topics changed
@@ -184,7 +191,7 @@ class StreamConnectionManager {
         subscriber.onConnect();
         // Replay buffered records matching this subscriber's topics (unless opted out)
         if (!subscriber.skipBufferReplay) {
-          const buffer = this.buffers.get(connectionId);
+          const buffer = this.buffers.get(streamKey);
           if (buffer && buffer.length > 0) {
             buffer.forEach(record => {
               if (this._matchesTopic(record, subscriber)) {
@@ -198,15 +205,15 @@ class StreamConnectionManager {
       // If topics changed, schedule a debounced reconnect so a burst of
       // new subscribers during dashboard mount produces one reconnect.
       if (newTopics !== connection.topics) {
-        this._scheduleTopicReconnect(connectionId, 'Topics changed');
+        this._scheduleTopicReconnect(streamKey, 'Topics changed');
       }
     } else {
       // No connection yet — create one
-      this._connect(connectionId, newTopics);
+      this._connect(streamKey, newTopics, connectionId, options.store || '');
     }
 
     return () => {
-      this._unsubscribe(connectionId, subscriber);
+      this._unsubscribe(streamKey, subscriber);
     };
   }
 
@@ -217,11 +224,12 @@ class StreamConnectionManager {
    * this is the SSE-layer aggregation sharing (aggregation-sharing.md).
    * The order/normalization mirrors the server's BucketConfig.ConfigKey().
    */
-  _aggStreamKey(connectionId, bucketConfig) {
+  _aggStreamKey(connectionId, bucketConfig, store = '') {
     const cols = [...(bucketConfig.value_cols || [])].sort().join(',');
     return [
       'agg',
       connectionId,
+      store, // #248: per-component store — different stores never share an aggregator
       bucketConfig.interval,
       bucketConfig.function || 'avg',
       bucketConfig.timestamp_col || '',
@@ -247,7 +255,7 @@ class StreamConnectionManager {
       console.error('[StreamConnectionManager] connectionId is required');
       return () => {};
     }
-    const streamKey = this._aggStreamKey(connectionId, bucketConfig);
+    const streamKey = this._aggStreamKey(connectionId, bucketConfig, options.store || '');
 
     if (!this.subscribers.has(streamKey)) {
       this.subscribers.set(streamKey, new Set());
@@ -274,7 +282,7 @@ class StreamConnectionManager {
     if (connection) {
       if (connection.connected) subscriber.onConnect();
     } else {
-      this._connectAggregated(streamKey, connectionId, bucketConfig);
+      this._connectAggregated(streamKey, connectionId, bucketConfig, options.store || '');
     }
 
     return () => {
@@ -318,23 +326,28 @@ class StreamConnectionManager {
    * (connected/topics/reconnect bookkeeping) but no longer owns its own
    * EventSource — the transport is the single pipe.
    */
-  _connect(connectionId, topics) {
-    if (this.connections.has(connectionId)) return;
+  _connect(streamKey, topics, connectionId, store) {
+    if (this.connections.has(streamKey)) return;
 
-    this.connections.set(connectionId, {
+    this.connections.set(streamKey, {
       connected: false,
-      connectionId,
+      connectionId: streamKey,
       topics // Combined topics string or null
     });
 
-    if (!this.buffers.has(connectionId)) {
-      this.buffers.set(connectionId, []);
+    if (!this.buffers.has(streamKey)) {
+      this.buffers.set(streamKey, []);
     }
 
     // Record the desired subscription and queue an `add` delta on the
     // shared pipe (opening the pipe lazily if this is the first stream).
-    this.muxDesired.set(connectionId, { topics });
-    this._queueMuxDelta(connectionId, 'add');
+    // For a store-scoped tsstore sub (#248) the streamKey is synthetic, so
+    // the entry carries the real connId + store for the server payload.
+    const desired = { topics };
+    if (connectionId && connectionId !== streamKey) desired.connId = connectionId;
+    if (store) desired.store = store;
+    this.muxDesired.set(streamKey, desired);
+    this._queueMuxDelta(streamKey, 'add');
     this._ensureMuxPipe();
   }
 
@@ -344,7 +357,7 @@ class StreamConnectionManager {
    * bucket config, and there is no topic/buffer state. streamKey is the
    * synthetic agg key so matching charts dedupe onto one pipe subscription.
    */
-  _connectAggregated(streamKey, connectionId, bucketConfig) {
+  _connectAggregated(streamKey, connectionId, bucketConfig, store = '') {
     if (this.connections.has(streamKey)) return;
 
     this.connections.set(streamKey, {
@@ -353,7 +366,7 @@ class StreamConnectionManager {
       topics: null,
     });
 
-    this.muxDesired.set(streamKey, {
+    const desired = {
       topics: '',
       connId: connectionId,
       agg: {
@@ -363,7 +376,9 @@ class StreamConnectionManager {
         timestamp_col: bucketConfig.timestamp_col,
         series_col: bucketConfig.series_col || '',
       },
-    });
+    };
+    if (store) desired.store = store;
+    this.muxDesired.set(streamKey, desired);
     this._queueMuxDelta(streamKey, 'add');
     this._ensureMuxPipe();
   }
@@ -408,7 +423,10 @@ class StreamConnectionManager {
     }
 
     connection.topics = newTopics;
-    this.muxDesired.set(connectionId, { topics: newTopics });
+    // Preserve connId/store on the desired entry (#248): a topic change on
+    // a store-scoped key must not strip the store from the re-add payload.
+    const prevDesired = this.muxDesired.get(connectionId) || {};
+    this.muxDesired.set(connectionId, { ...prevDesired, topics: newTopics });
     // Remove then re-add so the server drops the old broker filter and
     // subscribes the new one. The flush sends both in one POST.
     this._queueMuxDelta(connectionId, 'remove');
@@ -692,6 +710,7 @@ class StreamConnectionManager {
           connection_id: desired.connId || streamKey,
           topics: desired.topics || '',
         };
+        if (desired.store) entry.store = desired.store; // #248 per-component store channel
         if (desired.agg) entry.agg = desired.agg;
         add.push(entry);
       }

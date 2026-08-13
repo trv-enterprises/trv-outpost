@@ -7640,6 +7640,9 @@ const docTemplate = `{
                 "key": {
                     "type": "string"
                 },
+                "store": {
+                    "type": "string"
+                },
                 "topics": {
                     "type": "string"
                 }

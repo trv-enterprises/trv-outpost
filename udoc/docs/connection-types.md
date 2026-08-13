@@ -99,8 +99,10 @@ identifies just the ts-store server and API key, and each component
 chooses its own store from a dropdown in the component editor (the list
 shows the stores the key can read). One endpoint-scoped connection can
 serve components reading many different stores — like one SQL
-connection serving many tables. Streaming transport currently requires
-a pinned store; endpoint-scoped streaming is planned.
+connection serving many tables. Streaming transport works with both:
+on an endpoint-scoped connection, components on the same store share
+one live push channel, and components on different stores get
+independent channels automatically.
 
 **Usage**: Time-series data queries for monitoring dashboards. Supports
 server-side downsampling: under a dashboard [time-range variable](dashboard-variables.md#range-options),

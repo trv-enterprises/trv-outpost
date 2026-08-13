@@ -19,7 +19,7 @@ import (
 
 // BucketConfig defines the configuration for time-bucketed aggregation
 type BucketConfig struct {
-	ConnectionID string   // Source datasource
+	ConnectionID string   // Source FEED key: the upstream stream key — the bare connection id, or "<connID>/<hash>" for a per-component store channel (#248 PR 2). Streams feed the registry under this key; it must match or records never reach the aggregator.
 	Interval     int      // Bucket interval in seconds
 	Function     string   // Aggregation function: avg, min, max, sum, count
 	ValueCols    []string // Columns to aggregate

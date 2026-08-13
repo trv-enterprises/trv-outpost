@@ -291,8 +291,9 @@ A ts-store connection's store_name is an optional PIN:
     GET /api/connections/:id/stores (the component editor's store
     picker uses it; entries carry the key's per-store access
     classes — a component can read any store with "read").
-    Streaming transport on an endpoint-scoped connection is not
-    yet supported — pin a store for streaming.
+    Works on BOTH transports: on a streaming connection, components
+    sharing a store share one live push channel; different stores
+    get independent channels automatically.
 
 # REST mode (transport: rest or unset)
 

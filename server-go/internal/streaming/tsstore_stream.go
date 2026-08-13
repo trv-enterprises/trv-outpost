@@ -12,6 +12,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"sync"
 	"time"
@@ -26,15 +27,23 @@ import (
 // 3. Dashboard receives data on the inbound endpoint
 type TSStoreStream struct {
 	connectionID string
-	config       *models.TSStoreConfig
-	subscribers  map[chan models.Record]struct{}
-	buffer       *RingBuffer
-	mu           sync.RWMutex
-	cancelFunc   context.CancelFunc
-	connected    bool
-	lastError    error
-	pushID       string             // ts-store push connection ID (server-side identifier for the push lifecycle)
-	inboundChan  chan models.Record // channel to receive from inbound handler
+	// streamKey is this channel's identity everywhere: the Manager map, the
+	// InboundHandler maps, the inbound URL path, and the aggregator feed.
+	// Bare connection id for a pinned connection; connID+"/"+hash for a
+	// per-component store channel on an endpoint-scoped connection (#248).
+	streamKey string
+	// store is the EFFECTIVE store this channel reads (the pin, or the
+	// component-selected store) — every ts-store API URL uses it.
+	store       string
+	config      *models.TSStoreConfig
+	subscribers map[chan models.Record]struct{}
+	buffer      *RingBuffer
+	mu          sync.RWMutex
+	cancelFunc  context.CancelFunc
+	connected   bool
+	lastError   error
+	pushID      string             // ts-store push connection ID (server-side identifier for the push lifecycle)
+	inboundChan chan models.Record // channel to receive from inbound handler
 }
 
 // tsStorePushConnectionRequest is the request body for creating a push connection
@@ -60,8 +69,10 @@ type tsStorePushConnectionResponse struct {
 	Error     string `json:"error,omitempty"`
 }
 
-// NewTSStoreStream creates a new stream for a TSStore datasource
-func NewTSStoreStream(connectionID string, config *models.TSStoreConfig, streamConfig StreamConfig) Streamer {
+// NewTSStoreStream creates a new stream for one TSStore channel. streamKey is
+// the Manager-resolved channel identity (see channel_key.go); store is the
+// effective store the channel reads.
+func NewTSStoreStream(connectionID, streamKey, store string, config *models.TSStoreConfig, streamConfig StreamConfig) Streamer {
 	bufferSize := streamConfig.BufferSize
 	if bufferSize <= 0 {
 		bufferSize = 100
@@ -69,6 +80,8 @@ func NewTSStoreStream(connectionID string, config *models.TSStoreConfig, streamC
 
 	return &TSStoreStream{
 		connectionID: connectionID,
+		streamKey:    streamKey,
+		store:        store,
 		config:       config,
 		subscribers:  make(map[chan models.Record]struct{}),
 		buffer:       NewRingBuffer(bufferSize),
@@ -82,11 +95,11 @@ func (ts *TSStoreStream) Start(ctx context.Context) error {
 
 	// Subscribe to inbound handler to receive data from ts-store
 	inboundHandler := GetInboundHandler()
-	ts.inboundChan = inboundHandler.Subscribe(ts.connectionID)
+	ts.inboundChan = inboundHandler.Subscribe(ts.streamKey)
 
 	// Create push connection with ts-store
 	if err := ts.createPushConnection(streamCtx); err != nil {
-		inboundHandler.Unsubscribe(ts.connectionID, ts.inboundChan)
+		inboundHandler.Unsubscribe(ts.streamKey, ts.inboundChan)
 		ts.mu.Lock()
 		ts.lastError = err
 		ts.mu.Unlock()
@@ -104,11 +117,17 @@ func (ts *TSStoreStream) Start(ctx context.Context) error {
 	return nil
 }
 
-// cleanupStalePushConnections lists existing push connections on ts-store and deletes
-// any that target our inbound URL. This clears persisted cursors so the new connection
-// starts fresh with from=-1 instead of resuming from a stale position.
+// cleanupStalePushConnections lists this STORE's push connections on ts-store
+// and deletes any that target our inbound URL. This clears persisted cursors
+// so the new connection starts fresh with from=-1 instead of resuming from a
+// stale position. For a per-component store channel it additionally sweeps
+// the legacy single-segment URL (/api/streams/inbound/<connID>, matched by
+// path so a DASHBOARD_HOST change can't hide it): a connection that was
+// pinned to this store and then unpinned would otherwise leave its old push
+// connection — and its persisted cursor — pushing at a URL nothing listens
+// on anymore (#248 PR 2).
 func (ts *TSStoreStream) cleanupStalePushConnections(ctx context.Context, inboundURL string) {
-	apiURL := fmt.Sprintf("%s/api/stores/%s/ws/connections", ts.config.BaseURL(), ts.config.StoreName)
+	apiURL := fmt.Sprintf("%s/api/stores/%s/ws/connections", ts.config.BaseURL(), ts.store)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
@@ -153,10 +172,27 @@ func (ts *TSStoreStream) cleanupStalePushConnections(ctx context.Context, inboun
 		}
 	}
 
-	log.Printf("[TSStoreStream %s] Found %d existing push connections, looking for URL: %s", ts.connectionID, len(connections), inboundURL)
+	// A composite channel also owns the legacy bare-connection-id path on
+	// THIS store (the pre-unpin identity). Compare by URL path so the match
+	// survives a dashboard host/IP change.
+	legacyPath := "/api/streams/inbound/" + ts.connectionID
+	isStale := func(rawURL string) bool {
+		if rawURL == inboundURL {
+			return true
+		}
+		if ts.streamKey == ts.connectionID {
+			return false // pinned channel: exact match only, same as always
+		}
+		if u, err := url.Parse(rawURL); err == nil {
+			return u.Path == legacyPath
+		}
+		return false
+	}
+
+	log.Printf("[TSStoreStream %s] Found %d existing push connections, looking for URL: %s", ts.streamKey, len(connections), inboundURL)
 	for _, conn := range connections {
-		if conn.URL == inboundURL {
-			log.Printf("[TSStoreStream %s] Deleting stale push connection %s (URL: %s)", ts.connectionID, conn.ID, conn.URL)
+		if isStale(conn.URL) {
+			log.Printf("[TSStoreStream %s] Deleting stale push connection %s (URL: %s)", ts.streamKey, conn.ID, conn.URL)
 			delURL := fmt.Sprintf("%s/%s", apiURL, conn.ID)
 			delReq, err := http.NewRequestWithContext(ctx, "DELETE", delURL, nil)
 			if err != nil {
@@ -176,10 +212,13 @@ func (ts *TSStoreStream) cleanupStalePushConnections(ctx context.Context, inboun
 
 // createPushConnection calls ts-store API to create a push connection
 func (ts *TSStoreStream) createPushConnection(ctx context.Context) error {
-	// Build the inbound URL that ts-store will connect to
-	// Use the configured dashboard host or default to localhost
+	// Build the inbound URL that ts-store will connect to. The path carries
+	// the stream key — connID for a pinned channel (unchanged pre-#248
+	// shape), connID/<hash> for a per-component store channel — so two
+	// stores' pushers can never share (and evict each other from) one
+	// inbound socket.
 	dashboardHost := ts.getDashboardHost()
-	inboundURL := GetInboundURL(dashboardHost, ts.connectionID)
+	inboundURL := GetInboundURL(dashboardHost, ts.streamKey)
 
 	// Clean up any stale push connections that target our inbound URL
 	// This ensures ts-store doesn't resume from a persisted cursor
@@ -216,7 +255,7 @@ func (ts *TSStoreStream) createPushConnection(ctx context.Context) error {
 	log.Printf("[TSStoreStream %s] Push request: %s", ts.connectionID, string(reqBody))
 
 	// Build API URL
-	apiURL := fmt.Sprintf("%s/api/stores/%s/ws/connections", ts.config.BaseURL(), ts.config.StoreName)
+	apiURL := fmt.Sprintf("%s/api/stores/%s/ws/connections", ts.config.BaseURL(), ts.store)
 
 	log.Printf("[TSStoreStream %s] Creating push connection to %s, inbound URL: %s", ts.connectionID, apiURL, inboundURL)
 
@@ -253,9 +292,9 @@ func (ts *TSStoreStream) createPushConnection(ctx context.Context) error {
 		// Classify: auth failures are TERMINAL (a missing/wrong api_key won't
 		// self-heal, so don't retry in a loop); everything else is transient.
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			msg := fmt.Sprintf("ts-store API key rejected by store '%s' (HTTP %d) — the api_key is missing or invalid in this store's keys.json on the ts-store host", ts.config.StoreName, resp.StatusCode)
+			msg := fmt.Sprintf("ts-store API key rejected by store '%s' (HTTP %d) — the api_key is missing or invalid in this store's keys.json on the ts-store host", ts.store, resp.StatusCode)
 			if ts.config.APIKey == "" {
-				msg = fmt.Sprintf("ts-store store '%s' requires an API key but none is configured on this connection (HTTP %d)", ts.config.StoreName, resp.StatusCode)
+				msg = fmt.Sprintf("ts-store store '%s' requires an API key but none is configured on this connection (HTTP %d)", ts.store, resp.StatusCode)
 			}
 			return &StreamStartError{Code: resp.StatusCode, Terminal: true, Message: msg}
 		}
@@ -285,7 +324,7 @@ func (ts *TSStoreStream) deletePushConnection(ctx context.Context) error {
 		return nil
 	}
 
-	apiURL := fmt.Sprintf("%s/api/stores/%s/ws/connections/%s", ts.config.BaseURL(), ts.config.StoreName, ts.pushID)
+	apiURL := fmt.Sprintf("%s/api/stores/%s/ws/connections/%s", ts.config.BaseURL(), ts.store, ts.pushID)
 
 	httpReq, err := http.NewRequestWithContext(ctx, "DELETE", apiURL, nil)
 	if err != nil {
@@ -394,8 +433,11 @@ func (ts *TSStoreStream) broadcast(records []models.Record) {
 		// Add to buffer
 		ts.buffer.Push(record)
 
-		// Feed to bucket aggregators for this datasource
-		registry.FeedRecord(ts.connectionID, record)
+		// Feed to bucket aggregators for this CHANNEL — the feed key is the
+		// stream key, so aggregators over different stores on one connection
+		// never blend (#248 PR 2). Bare connection id for pinned channels,
+		// i.e. unchanged for every pre-#248 aggregated chart.
+		registry.FeedRecord(ts.streamKey, record)
 
 		// Send to all subscribers (non-blocking)
 		for _, ch := range subscribers {
@@ -469,24 +511,31 @@ func (ts *TSStoreStream) Stop() {
 	}
 }
 
-// cleanup removes the push connection and cleans up resources
+// cleanup removes the push connection and cleans up resources.
+//
+// The HTTP DELETE runs OUTSIDE ts.mu: it can take up to 10s, and holding the
+// write lock across it blocked every concurrent Subscribe/broadcast for the
+// duration (the pre-#248 lock-hold noted in the design review). pushID and
+// inboundChan are only ever written by this stream's own lifecycle
+// goroutine, so the network call needs no lock; the mutex guards just the
+// field mutations at the end.
 func (ts *TSStoreStream) cleanup(ctx context.Context) {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-
-	// Delete the push connection from ts-store
+	// Delete the push connection from ts-store (lock-free network call).
 	cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := ts.deletePushConnection(cleanupCtx); err != nil {
-		log.Printf("[TSStoreStream %s] Error deleting push connection: %v", ts.connectionID, err)
+		log.Printf("[TSStoreStream %s] Error deleting push connection: %v", ts.streamKey, err)
 	}
 
-	// Unsubscribe from inbound handler
-	if ts.inboundChan != nil {
-		GetInboundHandler().Unsubscribe(ts.connectionID, ts.inboundChan)
-		ts.inboundChan = nil
+	// Unsubscribe from inbound handler (takes the handler's own lock).
+	inboundChan := ts.inboundChan
+	if inboundChan != nil {
+		GetInboundHandler().Unsubscribe(ts.streamKey, inboundChan)
 	}
 
+	ts.mu.Lock()
+	ts.inboundChan = nil
 	ts.connected = false
-	log.Printf("[TSStoreStream %s] Cleaned up", ts.connectionID)
+	ts.mu.Unlock()
+	log.Printf("[TSStoreStream %s] Cleaned up", ts.streamKey)
 }

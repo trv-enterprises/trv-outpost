@@ -16,18 +16,25 @@ import (
 	clientreg "github.com/trv-enterprises/trve-dashboard/internal/registry"
 )
 
-// InboundHandler manages incoming WebSocket connections from external data sources (e.g., ts-store push)
+// InboundHandler manages incoming WebSocket connections from external data
+// sources (e.g., ts-store push).
+//
+// Maps are keyed by STREAM KEY (#248 PR 2): the bare connection id for a
+// pinned tsstore connection (unchanged pre-#248 identity), or
+// "<connID>/<hash>" for a per-component store channel. Keying by channel is
+// what stops two stores' pushers from evicting each other's socket — the
+// one-socket-per-key rule below is per CHANNEL, not per connection.
 type InboundHandler struct {
 	upgrader    websocket.Upgrader
-	connections map[string]*inboundConnection // keyed by datasource ID
-	listeners   map[string][]chan models.Record // listeners for each datasource
+	connections map[string]*inboundConnection   // keyed by stream key
+	listeners   map[string][]chan models.Record // listeners per stream key
 	mu          sync.RWMutex
 }
 
 // inboundConnection represents an active inbound WebSocket connection
 type inboundConnection struct {
 	conn             *websocket.Conn
-	connectionID     string
+	streamKey        string
 	stopChan         chan struct{}
 	clientRegistryID uint64
 }
@@ -62,30 +69,39 @@ func GetInboundHandler() *InboundHandler {
 }
 
 // HandleInboundWebSocket handles incoming WebSocket connections from ts-store
-// Route: GET /api/streams/inbound/:connectionId
+// Routes: GET /api/streams/inbound/:connectionId            (pinned channel)
+//
+//	GET /api/streams/inbound/:connectionId/:channel    (per-store channel, #248)
+//
+// The path IS the stream key — a pinned connection's pusher dials the bare
+// connection id exactly as before #248; a per-component store channel's
+// pusher dials connID/<hash>.
 //
 // Deliberately excluded from swagger: this is a machine-to-machine
 // WebSocket endpoint (ts-store push producers dial in), not a REST API
 // surface for interactive clients.
 func (h *InboundHandler) HandleInboundWebSocket(c *gin.Context) {
-	connectionID := c.Param("connectionId")
-	if connectionID == "" {
+	streamKey := c.Param("connectionId")
+	if streamKey == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "connectionId is required"})
 		return
+	}
+	if channel := c.Param("channel"); channel != "" {
+		streamKey += "/" + channel
 	}
 
 	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Printf("[InboundHandler] Failed to upgrade connection for %s: %v", connectionID, err)
+		log.Printf("[InboundHandler] Failed to upgrade connection for %s: %v", streamKey, err)
 		return
 	}
 
-	log.Printf("[InboundHandler] Accepted inbound connection for datasource %s from %s", connectionID, c.Request.RemoteAddr)
+	log.Printf("[InboundHandler] Accepted inbound connection for channel %s from %s", streamKey, c.Request.RemoteAddr)
 
 	// Register the connection
 	h.mu.Lock()
-	// Close existing connection if any
-	if existing, exists := h.connections[connectionID]; exists {
+	// Close existing connection if any — one socket per CHANNEL.
+	if existing, exists := h.connections[streamKey]; exists {
 		close(existing.stopChan)
 		existing.conn.Close()
 	}
@@ -93,17 +109,17 @@ func (h *InboundHandler) HandleInboundWebSocket(c *gin.Context) {
 	// Register with client registry
 	clientRegistry := clientreg.GetClientRegistry()
 	clientRegistryID := clientRegistry.Register(clientreg.ConnectionTypeInbound, map[string]interface{}{
-		"connection_id": connectionID,
+		"connection_id": streamKey,
 		"remote_addr":   c.Request.RemoteAddr,
 	})
 
 	ic := &inboundConnection{
 		conn:             conn,
-		connectionID:     connectionID,
+		streamKey:        streamKey,
 		stopChan:         make(chan struct{}),
 		clientRegistryID: clientRegistryID,
 	}
-	h.connections[connectionID] = ic
+	h.connections[streamKey] = ic
 	h.mu.Unlock()
 
 	// Start reading messages
@@ -114,8 +130,8 @@ func (h *InboundHandler) HandleInboundWebSocket(c *gin.Context) {
 func (h *InboundHandler) readLoop(ic *inboundConnection) {
 	defer func() {
 		h.mu.Lock()
-		if current, exists := h.connections[ic.connectionID]; exists && current == ic {
-			delete(h.connections, ic.connectionID)
+		if current, exists := h.connections[ic.streamKey]; exists && current == ic {
+			delete(h.connections, ic.streamKey)
 		}
 		h.mu.Unlock()
 
@@ -126,7 +142,7 @@ func (h *InboundHandler) readLoop(ic *inboundConnection) {
 		}
 
 		ic.conn.Close()
-		log.Printf("[InboundHandler] Connection closed for datasource %s", ic.connectionID)
+		log.Printf("[InboundHandler] Connection closed for datasource %s", ic.streamKey)
 	}()
 
 	for {
@@ -137,7 +153,7 @@ func (h *InboundHandler) readLoop(ic *inboundConnection) {
 			_, message, err := ic.conn.ReadMessage()
 			if err != nil {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-					log.Printf("[InboundHandler] Read error for %s: %v", ic.connectionID, err)
+					log.Printf("[InboundHandler] Read error for %s: %v", ic.streamKey, err)
 				}
 				return
 			}
@@ -145,7 +161,7 @@ func (h *InboundHandler) readLoop(ic *inboundConnection) {
 			// Parse the ts-store message
 			var msg tsStorePushMessage
 			if err := json.Unmarshal(message, &msg); err != nil {
-				log.Printf("[InboundHandler] Failed to parse message for %s: %v", ic.connectionID, err)
+				log.Printf("[InboundHandler] Failed to parse message for %s: %v", ic.streamKey, err)
 				continue
 			}
 
@@ -157,7 +173,7 @@ func (h *InboundHandler) readLoop(ic *inboundConnection) {
 			record := h.messageToRecord(&msg)
 
 			// Broadcast to listeners
-			h.broadcast(ic.connectionID, record)
+			h.broadcast(ic.streamKey, record)
 		}
 	}
 }
@@ -202,10 +218,10 @@ func (h *InboundHandler) messageToRecord(msg *tsStorePushMessage) models.Record 
 	return record
 }
 
-// broadcast sends a record to all listeners for a datasource
-func (h *InboundHandler) broadcast(connectionID string, record models.Record) {
+// broadcast sends a record to all listeners for a channel
+func (h *InboundHandler) broadcast(streamKey string, record models.Record) {
 	h.mu.RLock()
-	listeners := h.listeners[connectionID]
+	listeners := h.listeners[streamKey]
 	h.mu.RUnlock()
 
 	for _, ch := range listeners {
@@ -217,38 +233,44 @@ func (h *InboundHandler) broadcast(connectionID string, record models.Record) {
 	}
 }
 
-// Subscribe adds a listener for a datasource and returns a channel for receiving records
-func (h *InboundHandler) Subscribe(connectionID string) chan models.Record {
+// Subscribe adds a listener for a channel and returns a channel for receiving records
+func (h *InboundHandler) Subscribe(streamKey string) chan models.Record {
 	ch := make(chan models.Record, 100)
 
 	h.mu.Lock()
-	h.listeners[connectionID] = append(h.listeners[connectionID], ch)
-	count := len(h.listeners[connectionID])
+	h.listeners[streamKey] = append(h.listeners[streamKey], ch)
+	count := len(h.listeners[streamKey])
 	h.mu.Unlock()
 
-	log.Printf("[InboundHandler] Subscriber added for %s (total: %d)", connectionID, count)
+	log.Printf("[InboundHandler] Subscriber added for %s (total: %d)", streamKey, count)
 	return ch
 }
 
 // Unsubscribe removes a listener
-func (h *InboundHandler) Unsubscribe(connectionID string, ch chan models.Record) {
+func (h *InboundHandler) Unsubscribe(streamKey string, ch chan models.Record) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	listeners := h.listeners[connectionID]
+	listeners := h.listeners[streamKey]
 	for i, listener := range listeners {
 		if listener == ch {
 			// Remove from slice
-			h.listeners[connectionID] = append(listeners[:i], listeners[i+1:]...)
+			h.listeners[streamKey] = append(listeners[:i], listeners[i+1:]...)
 			close(ch)
-			log.Printf("[InboundHandler] Subscriber removed for %s (total: %d)", connectionID, len(h.listeners[connectionID]))
+			log.Printf("[InboundHandler] Subscriber removed for %s (total: %d)", streamKey, len(h.listeners[streamKey]))
 			return
 		}
 	}
 }
 
-// GetInboundURL returns the WebSocket URL that ts-store should connect to
-// The dashboardHost is the external address of the dashboard server
-func GetInboundURL(dashboardHost string, connectionID string) string {
-	return "ws://" + dashboardHost + "/api/streams/inbound/" + connectionID
+// GetInboundURL returns the WebSocket URL that ts-store should connect to.
+// The dashboardHost is the external address of the dashboard server.
+// streamKey is the channel identity and becomes the URL path verbatim — one
+// segment for a pinned channel (the bare connection id, unchanged pre-#248
+// shape), two segments ("<connID>/<hash>") for a per-component store
+// channel. The key is a pure config hash, so this URL is stable across
+// restarts — ts-store persists it, and stale-connection cleanup matches on
+// it.
+func GetInboundURL(dashboardHost string, streamKey string) string {
+	return "ws://" + dashboardHost + "/api/streams/inbound/" + streamKey
 }

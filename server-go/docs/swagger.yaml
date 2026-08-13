@@ -184,6 +184,8 @@ definitions:
         type: string
       key:
         type: string
+      store:
+        type: string
       topics:
         type: string
     type: object

@@ -267,7 +267,8 @@ dashboard rather than the usual pull/subscribe direction.
 
 | Method | Endpoint                                    | Description                             |
 | ------ | ------------------------------------------- | --------------------------------------- |
-| GET    | `/api/streams/inbound/:datasourceId`        | Inbound WebSocket (auth not required)   |
+| GET    | `/api/streams/inbound/:datasourceId`        | Inbound WebSocket (auth not required) — a pinned tsstore connection's push channel |
+| GET    | `/api/streams/inbound/:datasourceId/:channel` | Inbound WebSocket for a per-component store channel on an endpoint-scoped tsstore connection (`:channel` = config hash, #248) |
 
 ## Extensions
 

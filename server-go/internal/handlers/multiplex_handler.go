@@ -69,8 +69,12 @@ type muxFrame struct {
 // aggregated subs, aggConfigKey is set and unsubscribe goes through the
 // AggregatorRegistry instead of the raw manager.
 type muxSubscription struct {
-	key          string
-	connID       string
+	key    string
+	connID string
+	// managerKey is the upstream stream key returned by the manager —
+	// the bare connection id, or "<connID>/<hash>" for a per-component
+	// store channel (#248 PR 2). Unsubscribe must use it, not connID.
+	managerKey   string
 	topics       []string
 	ch           chan models.Record
 	cancel       context.CancelFunc
@@ -190,13 +194,16 @@ type MultiplexSubsRequest struct {
 // MultiplexAddSub describes one subscription to open. Key is the
 // client-chosen streamKey the tagged frames will carry back (the client
 // keys its fan-out on it); ConnectionID identifies the upstream. Topics
-// is a comma-separated MQTT filter list (raw subs only, optional). When
-// Agg is set, this is an aggregated (time-bucketed) subscription and
-// Topics is ignored.
+// is a comma-separated MQTT filter list (raw subs only, optional). Store
+// selects the per-component store channel on an endpoint-scoped tsstore
+// connection (#248 PR 2) — empty for every other subscription, and ignored
+// (the pin wins) on a pinned connection. When Agg is set, this is an
+// aggregated (time-bucketed) subscription and Topics is ignored.
 type MultiplexAddSub struct {
 	Key          string              `json:"key"`
 	ConnectionID string              `json:"connection_id"`
 	Topics       string              `json:"topics"`
+	Store        string              `json:"store,omitempty"`
 	Agg          *MultiplexAggConfig `json:"agg,omitempty"`
 }
 
@@ -309,10 +316,12 @@ func (h *MultiplexHandler) addRawSub(sess *muxSession, add MultiplexAddSub) erro
 
 	var recordCh chan models.Record
 	var subErr error
+	managerKey := add.ConnectionID
 	if len(topics) > 0 {
+		// MQTT topic-aware path — store is not an MQTT concept.
 		recordCh, subErr = h.manager.SubscribeWithTopics(sess.ctx, add.ConnectionID, topics)
 	} else {
-		recordCh, subErr = h.manager.SubscribeAndGetChannel(sess.ctx, add.ConnectionID)
+		recordCh, managerKey, subErr = h.manager.SubscribeAndGetChannelStore(sess.ctx, add.ConnectionID, add.Store)
 	}
 	if subErr != nil || recordCh == nil {
 		if subErr == nil {
@@ -323,18 +332,19 @@ func (h *MultiplexHandler) addRawSub(sess *muxSession, add MultiplexAddSub) erro
 
 	pumpCtx, cancel := context.WithCancel(sess.ctx)
 	sub := &muxSubscription{
-		key:    add.Key,
-		connID: add.ConnectionID,
-		topics: topics,
-		ch:     recordCh,
-		cancel: cancel,
+		key:        add.Key,
+		connID:     add.ConnectionID,
+		managerKey: managerKey,
+		topics:     topics,
+		ch:         recordCh,
+		cancel:     cancel,
 	}
 
 	sess.mu.Lock()
 	if sess.done {
 		sess.mu.Unlock()
 		cancel()
-		h.manager.Unsubscribe(add.ConnectionID, recordCh)
+		h.manager.Unsubscribe(managerKey, recordCh)
 		return fmt.Errorf("session closed")
 	}
 	sess.subs[add.Key] = sub
@@ -344,7 +354,7 @@ func (h *MultiplexHandler) addRawSub(sess *muxSession, add MultiplexAddSub) erro
 	// onConnect. Then replay the buffered records (initial state) as
 	// tagged frames, exactly like the single-stream handler does inline.
 	sess.emit(muxFrame{event: "subscribed", data: fmt.Sprintf("{\"key\":%q}", add.Key)})
-	for _, record := range h.manager.GetBufferFiltered(add.ConnectionID, topics) {
+	for _, record := range h.manager.GetBufferFiltered(managerKey, topics) {
 		if data, err := marshalTaggedRecord(add.Key, record); err == nil {
 			sess.emit(muxFrame{event: "record", data: data})
 		}
@@ -372,18 +382,23 @@ func (h *MultiplexHandler) addAggSub(sess *muxSession, add MultiplexAddSub) erro
 
 	// Ensure the raw stream is active (subscribe to start it if needed),
 	// then release the raw channel — the aggregator feeds off the same
-	// upstream. Same pattern as StreamAggregatedConnection.
-	rawCh, subErr := h.manager.SubscribeAndGetChannel(sess.ctx, add.ConnectionID)
+	// upstream. Same pattern as StreamAggregatedConnection. The returned
+	// manager key is the channel's FEED identity: streams feed the
+	// aggregator registry under their stream key, so the BucketConfig must
+	// carry the same key or records from a per-component store channel
+	// would never reach this aggregator (#248 PR 2). For every non-store
+	// subscription the key IS the connection id — unchanged behavior.
+	rawCh, managerKey, subErr := h.manager.SubscribeAndGetChannelStore(sess.ctx, add.ConnectionID, add.Store)
 	if subErr != nil || rawCh == nil {
 		if subErr == nil {
 			subErr = fmt.Errorf("subscribe returned no channel")
 		}
 		return subErr
 	}
-	h.manager.Unsubscribe(add.ConnectionID, rawCh)
+	h.manager.Unsubscribe(managerKey, rawCh)
 
 	bucketConfig := streaming.BucketConfig{
-		ConnectionID: add.ConnectionID,
+		ConnectionID: managerKey,
 		Interval:     agg.Interval,
 		Function:     agg.Function,
 		ValueCols:    agg.ValueCols,
@@ -397,6 +412,7 @@ func (h *MultiplexHandler) addAggSub(sess *muxSession, add MultiplexAddSub) erro
 	sub := &muxSubscription{
 		key:          add.Key,
 		connID:       add.ConnectionID,
+		managerKey:   managerKey,
 		ch:           aggCh,
 		cancel:       cancel,
 		aggConfigKey: configKey,
@@ -462,7 +478,11 @@ func (h *MultiplexHandler) unsubUpstream(sub *muxSubscription) {
 		streaming.GetRegistry().Unsubscribe(sub.aggConfigKey, sub.ch)
 		return
 	}
-	h.manager.Unsubscribe(sub.connID, sub.ch)
+	key := sub.managerKey
+	if key == "" {
+		key = sub.connID
+	}
+	h.manager.Unsubscribe(key, sub.ch)
 }
 
 // teardownSession removes the session and unsubscribes all of its
