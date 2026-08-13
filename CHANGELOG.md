@@ -6,6 +6,43 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.53.0] — 2026-08-13
+
+### Added
+
+- **Endpoint-scoped ts-store connections — the store moves to the component**
+  (#248 core, PRs #251/#252). A ts-store connection's store field is now an
+  optional **pin**: set it and the connection stays bound to that one store
+  exactly as before; leave it empty and the connection is *endpoint-scoped*
+  (server + API key only), with each component choosing its own store from a
+  dropdown in the component editor — like one SQL connection serving many
+  tables. The dropdown lists the stores the connection's key can read
+  (ts-store ≥ v0.20.0-rc.2 scoped keys), each store's data type (json /
+  schema / text) is resolved per store automatically, and the no-store
+  connection test validates connectivity + key grants in one call
+  ("N stores accessible").
+- **Per-store streaming channels** (#252). On an endpoint-scoped streaming
+  connection, components on the same store share one live push channel (one
+  ts-store push registration per distinct connection+store), and components
+  on different stores get independent channels with stable, restart-safe
+  inbound URLs. Pinned connections keep their exact previous streaming
+  identity — no reconnect or re-registration on upgrade.
+- New API: `GET /api/connections/:id/stores` — store discovery for
+  endpoint-scoped connections; entries carry the key's per-store access
+  classes.
+
+### Changed
+
+- The pinned ts-store connection test's auth probe now checks a **read**
+  endpoint instead of the alerts list — under ts-store scoped keys the
+  alerts list requires the `manage` class, and a healthy read-only
+  dashboard key must pass the test.
+
+### Fixed
+
+- ts-store streaming teardown no longer blocks concurrent subscribers for
+  up to 10 seconds while deleting the push registration.
+
 ## [0.52.1] — 2026-08-11
 
 ### Fixed
