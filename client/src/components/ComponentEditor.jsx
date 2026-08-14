@@ -3759,6 +3759,47 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     </div>
                   </div>
 
+                  {/* #248: endpoint-scoped tsstore connection → the component
+                      chooses its store. Rendered ABOVE the transport branch
+                      chain so it appears for BOTH transports — the streaming
+                      branch below never reaches the tsstore query section,
+                      which is exactly how the picker went missing for
+                      streaming connections the first time. Pinned
+                      connections never show this (the pin wins server-side).
+                      ComboBox when the store list loaded; free-text fallback
+                      otherwise. */}
+                  {isTSStoreEndpointScoped && (
+                    <div className="tsstore-query-section">
+                      <div className="tsstore-query-row">
+                        <div className="tsstore-query-row__col">
+                          {Array.isArray(tsstoreStoreOptions) ? (
+                            <ComboBox
+                              id="tsstore-store-picker"
+                              titleText="Store"
+                              placeholder="Choose a store"
+                              items={tsstoreStoreOptions.map((s) => s.name)}
+                              selectedItem={tsstoreStore || null}
+                              allowCustomValue
+                              onChange={({ selectedItem, inputValue }) => {
+                                setTsstoreStore(selectedItem ?? inputValue ?? '');
+                              }}
+                              helperText={tsstoreStore ? undefined : 'Required — this connection is endpoint-scoped'}
+                            />
+                          ) : (
+                            <TextInput
+                              id="tsstore-store-picker"
+                              labelText="Store"
+                              placeholder="store name"
+                              value={tsstoreStore}
+                              onChange={(e) => setTsstoreStore(e.target.value)}
+                              helperText="Required — this connection is endpoint-scoped (store list unavailable, enter the name)"
+                            />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Socket/streaming datasource - show info message instead of unused filter field */}
                   {selectedDatasource.type === 'socket' || isTSStoreStreaming ? (
                     <div className="socket-capture-info">
@@ -3933,39 +3974,6 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                     </div>
                   ) : isTSStore ? (
                     <div className="tsstore-query-section">
-                      {/* #248: endpoint-scoped connection → the component
-                          chooses its store. Pinned connections never show
-                          this (the pin wins server-side). ComboBox when the
-                          store list loaded; free-text fallback otherwise. */}
-                      {isTSStoreEndpointScoped && (
-                        <div className="tsstore-query-row">
-                          <div className="tsstore-query-row__col">
-                            {Array.isArray(tsstoreStoreOptions) ? (
-                              <ComboBox
-                                id="tsstore-store-picker"
-                                titleText="Store"
-                                placeholder="Choose a store"
-                                items={tsstoreStoreOptions.map((s) => s.name)}
-                                selectedItem={tsstoreStore || null}
-                                allowCustomValue
-                                onChange={({ selectedItem, inputValue }) => {
-                                  setTsstoreStore(selectedItem ?? inputValue ?? '');
-                                }}
-                                helperText={tsstoreStore ? undefined : 'Required — this connection is endpoint-scoped'}
-                              />
-                            ) : (
-                              <TextInput
-                                id="tsstore-store-picker"
-                                labelText="Store"
-                                placeholder="store name"
-                                value={tsstoreStore}
-                                onChange={(e) => setTsstoreStore(e.target.value)}
-                                helperText="Required — this connection is endpoint-scoped (store list unavailable, enter the name)"
-                              />
-                            )}
-                          </div>
-                        </div>
-                      )}
                       {/* Flex row inside the half-width query card.
                           Each control takes half the row, fully
                           filling the card horizontally — Carbon's
