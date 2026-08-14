@@ -6,6 +6,25 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.53.1] — 2026-08-13
+
+### Fixed
+
+- **Store picker missing on streaming endpoint-scoped ts-store
+  connections.** The component editor's store dropdown (new in 0.53.0)
+  rendered only in the REST query section, which streaming-transport
+  connections never reach — an endpoint-scoped streaming component had no
+  way to choose its store. The picker now renders for both transports.
+  (#248, PR #253)
+
+### Internal
+
+- First client component-test harness (vitest + Testing Library) with a
+  regression test pinning the store picker's visibility across
+  transport × pinned/endpoint-scoped; runs in PR CI.
+- Go toolchain 1.26.6 (six stdlib CVE fixes; unblocks the govulncheck
+  gate).
+
 ## [0.53.0] — 2026-08-13
 
 ### Added
