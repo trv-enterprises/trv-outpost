@@ -751,6 +751,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // [{ op, value, color, target, wholeRow }]). First match wins. Absent =
   // no conditional styling for that column.
   const [columnRules, setColumnRules] = useState({});
+  // For dataview: initial timestamp ordering ('newest' | 'oldest' | 'none').
+  // 'newest' (latest row at the top) is the default for new AND unset
+  // records — the live-table reading order. Stored only when not 'newest'.
+  const [dataviewDefaultSort, setDataviewDefaultSort] = useState('newest');
   // For dataview: which columns to render as table columns. Stored as an
   // explicit whitelist — null/empty means "show all" (default, back-compat).
   // When non-null, the table filters data.columns through this list.
@@ -1299,6 +1303,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       setColumnWidths(chart.data_mapping?.column_widths || {});
       setColumnFormats(chart.data_mapping?.column_formats || {});
       setColumnRules(chart.data_mapping?.column_rules || {});
+      setDataviewDefaultSort(chart.data_mapping?.default_sort || 'newest');
       // Visible columns: null means "show all" (default). Only populated when
       // the admin has actively hidden some.
       const loadedVisible = chart.data_mapping?.visible_columns;
@@ -1630,6 +1635,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         columnWidths: chart.data_mapping?.column_widths || {},
         columnFormats: chart.data_mapping?.column_formats || {},
         columnRules: chart.data_mapping?.column_rules || {},
+        dataviewDefaultSort: chart.data_mapping?.default_sort || 'newest',
         visibleColumns: Array.isArray(loadedVisibleSnap) && loadedVisibleSnap.length > 0 ? loadedVisibleSnap : null,
         parserPreset: loadedParserPreset,
         parserDataPath: loadedParser?.data_path || '',
@@ -1711,6 +1717,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         columnWidths: {},
         columnFormats: {},
         columnRules: {},
+        dataviewDefaultSort: 'newest',
         visibleColumns: null,
         parserPreset: 'none',
         parserDataPath: '',
@@ -1799,6 +1806,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       columnWidths,
       columnFormats,
       columnRules,
+      dataviewDefaultSort,
       visibleColumns,
       parserPreset,
       parserDataPath,
@@ -1823,7 +1831,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol,
     latestByEnabled, latestByKeyCol, latestByTimestampCol,
     timeBucketEnabled, timeBucketInterval, timeBucketFunction, timeBucketValueCols, timeBucketTimestampCol,
-    sortBy, sortOrder, limitRows, columnAliases, columnWidths, columnFormats, columnRules, visibleColumns,
+    sortBy, sortOrder, limitRows, columnAliases, columnWidths, columnFormats, columnRules, dataviewDefaultSort, visibleColumns,
     parserPreset, parserDataPath, parserTimestampField, parserTimestampScale,
     bandColumns, bandedBarStyle, chartOptions,
     componentCode, showCustomCode, usesDashboardVariable, initialState, onDirtyChange,
@@ -2307,6 +2315,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setColumnWidths({});
     setColumnFormats({});
     setColumnRules({});
+    setDataviewDefaultSort('newest');
     setVisibleColumns(null);
     setSlidingWindowEnabled(false);
     setSlidingWindowDuration(300);
@@ -3055,6 +3064,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         column_widths: pruneColumnWidths(columnWidths),
         column_formats: Object.keys(columnFormats).length > 0 ? columnFormats : undefined,
         column_rules: pruneColumnRules(columnRules),
+        // Initial table sort. Absent means 'newest' (buildOption's default),
+        // so only a non-default choice is stored.
+        default_sort: dataviewDefaultSort !== 'newest' ? dataviewDefaultSort : undefined,
         visible_columns: Array.isArray(visibleColumns) && visibleColumns.length > 0 ? visibleColumns : undefined,
         parser: parserPreset !== 'none' && (parserDataPath || parserTimestampField) ? {
           data_path: parserDataPath || undefined,
@@ -4760,6 +4772,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       column_widths: columnWidths,
                       column_formats: columnFormats,
                       column_rules: columnRules,
+                      default_sort: dataviewDefaultSort,
                     }}
                     onFieldChange={(fieldId, value) => {
                       switch (fieldId) {
@@ -4990,6 +5003,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           break;
                         case 'column_rules':
                           setColumnRules(value);
+                          break;
+                        case 'default_sort':
+                          setDataviewDefaultSort(value);
                           break;
                         default: break;
                       }
@@ -5925,6 +5941,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           column_widths: pruneColumnWidths(columnWidths),
                           column_formats: Object.keys(columnFormats).length > 0 ? columnFormats : undefined,
                           column_rules: pruneColumnRules(columnRules),
+                          default_sort: dataviewDefaultSort !== 'newest' ? dataviewDefaultSort : undefined,
                         } : undefined,
                         // bandedBarStyle is a sibling state var (not inside
                         // chartOptions); merge it into options for the
@@ -5975,6 +5992,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         column_aliases: Object.keys(columnAliases).length > 0 ? columnAliases : null,
                         column_widths: pruneColumnWidths(columnWidths),
                         column_formats: Object.keys(columnFormats).length > 0 ? columnFormats : undefined,
+                        default_sort: dataviewDefaultSort !== 'newest' ? dataviewDefaultSort : undefined,
                         visible_columns: Array.isArray(visibleColumns) && visibleColumns.length > 0 ? visibleColumns : undefined,
                         parser: parserPreset !== 'none' && (parserDataPath || parserTimestampField) ? {
                           data_path: parserDataPath || undefined,

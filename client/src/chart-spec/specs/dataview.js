@@ -37,6 +37,13 @@ export function buildOption(values, _data, helpers = {}) {
   // which is why an unruled table costs nothing.
   const columnRules = dm.column_rules && typeof dm.column_rules === 'object' ? dm.column_rules : {};
   const xAxisFormat = dm.x_axis_format || helpers.xAxisFormat || 'short';
+  // Initial timestamp sort. ABSENT defaults to 'newest' — latest row at the
+  // top, the natural reading order for a live table (decided 2026-08-14:
+  // applies to every existing record without the value, not just new ones).
+  // 'none' preserves delivery order for authors who order rows themselves.
+  const defaultSort = ['newest', 'oldest', 'none'].includes(dm.default_sort)
+    ? dm.default_sort
+    : 'newest';
 
   return {
     render: 'dataview',
@@ -47,6 +54,7 @@ export function buildOption(values, _data, helpers = {}) {
       columnRules,
       visibleColumnsConfig,
       xAxisFormat,
+      defaultSort,
     },
   };
 }

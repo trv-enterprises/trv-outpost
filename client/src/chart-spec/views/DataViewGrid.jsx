@@ -12,12 +12,33 @@ import { useDataviewLayout } from '../../hooks/useDataviewLayout';
 import { formatCellValue } from '../../utils/dataTransforms';
 import { formatNumberValue } from '../specs/number-formats';
 
+import { resolveColumnRule, resolveRowRule, contrastPartnerFor } from '../option-helpers';
+
 // Column-format ids that treat the cell as a TIMESTAMP (the ColumnManager
 // date/time entries — same sub-choice vocabulary as the value tile's
 // numberDateFormat and the chart x-axis presets). Everything else in the
 // column-format vocabulary is numeric.
 const COLUMN_DATE_FORMATS = new Set(['date', 'time', 'time_seconds', 'datetime', 'datetime_seconds']);
-import { resolveColumnRule, resolveRowRule, contrastPartnerFor } from '../option-helpers';
+
+/**
+ * Pick the column the table's initial timestamp sort applies to.
+ * Preference order: the literal 'timestamp' (every ts-store record carries
+ * it), then 'ts', then the first time-NAMED column in display order —
+ * the same /time/i heuristic the column defs use for widths/formatting.
+ * Returns null when nothing looks like a timestamp (defaultSort then has
+ * nothing to act on and the table keeps delivery order).
+ *
+ * Exported for the unit test.
+ *
+ * @param {string[]} columns  visible columns in display order
+ * @returns {string|null}
+ */
+export function resolveInitialSortColumn(columns) {
+  if (!Array.isArray(columns) || columns.length === 0) return null;
+  if (columns.includes('timestamp')) return 'timestamp';
+  if (columns.includes('ts')) return 'ts';
+  return columns.find((c) => /time/i.test(c)) || null;
+}
 
 /**
  * DataViewGrid — the non-ECharts render for the `dataview` chart type.
@@ -149,6 +170,11 @@ export default function DataViewGrid({
   columnRules = {},
   visibleColumnsConfig = null,
   xAxisFormat = 'short',
+  // Initial timestamp ordering: 'newest' (default — latest row at the top,
+  // the live-table reading order) | 'oldest' | 'none'. Applied as AG Grid
+  // initialSort on the timestamp column, so live-appended rows sort into
+  // place and a viewer's header click still overrides it for the session.
+  defaultSort = 'newest',
   config,
   dataCtx,
   // Editor-only hooks (#214). In the component editor the grid IS the
@@ -396,6 +422,14 @@ export default function DataViewGrid({
   }, [latestRowObjs, gridReady]);
 
   const columnDefs = useMemo(() => {
+    // Initial-sort target: one column, resolved once over the display
+    // order. initialSort (not sort) so it applies when the column is first
+    // created and NEVER re-asserts on later def rebuilds — a viewer's
+    // header-click sort survives streaming column additions. Suppressed in
+    // editor mode for the same reason editor headers drop sorting entirely:
+    // the column-manager grid is a layout tool over sample data, and
+    // silently reordering that sample serves nothing.
+    const initialSortCol = defaultSort !== 'none' && !editable ? resolveInitialSortColumn(orderedColumns) : null;
     const defs = orderedColumns.map((col) => {
       const isTimeCol = /time/i.test(col) || col === 'ts';
       const sampleVal = latestRowObjs[0]?.[col];
@@ -431,6 +465,8 @@ export default function DataViewGrid({
       const defaultFloor = isNumCol ? 100 : (isTimeCol ? 170 : 120);
       const def = {
         colId: colKey,
+        // Initial timestamp sort (author default; viewer clicks override).
+        initialSort: col === initialSortCol ? (defaultSort === 'newest' ? 'desc' : 'asc') : undefined,
         headerName: columnAliases[col] || col,
         valueGetter: (params) => params.data?.[colKey],
         sortable: true,
@@ -554,7 +590,7 @@ export default function DataViewGrid({
     }
     return defs;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columnsKey, userLayout, columnWidthsKey, columnFormatsKey, columnAliasesKey, columnRulesKey, editable, hiddenSet]);
+  }, [columnsKey, userLayout, columnWidthsKey, columnFormatsKey, columnAliasesKey, columnRulesKey, editable, hiddenSet, defaultSort]);
 
   // Columns WITHOUT an explicit width — the only ones fitCellContents should
   // auto-size. A column with an author/user width must keep its def.width, but

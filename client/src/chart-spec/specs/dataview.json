@@ -45,6 +45,26 @@
               "label": "Columns"
             }
           ]
+        },
+        {
+          "id": "table_behavior",
+          "label": "Table behavior",
+          "layout": "single-column",
+          "fields": [
+            {
+              "id": "default_sort",
+              "binds": "data_mapping.default_sort",
+              "type": "enum",
+              "label": "Initial sort",
+              "default": "newest",
+              "helperText": "Initial timestamp ordering for the table — live rows sort into place. A viewer clicking a column header overrides it. Set None if you order rows yourself (e.g. Client Side Processing → Sort).",
+              "options": [
+                { "value": "newest", "label": "Newest first (latest row at the top)" },
+                { "value": "oldest", "label": "Oldest first" },
+                { "value": "none", "label": "None (row order as delivered)" }
+              ]
+            }
+          ]
         }
       ]
     }
