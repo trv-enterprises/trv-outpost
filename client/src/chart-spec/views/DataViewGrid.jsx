@@ -11,6 +11,12 @@ import { FitToWidth, Settings, Close, Add } from '@carbon/icons-react';
 import { useDataviewLayout } from '../../hooks/useDataviewLayout';
 import { formatCellValue } from '../../utils/dataTransforms';
 import { formatNumberValue } from '../specs/number-formats';
+
+// Column-format ids that treat the cell as a TIMESTAMP (the ColumnManager
+// date/time entries — same sub-choice vocabulary as the value tile's
+// numberDateFormat and the chart x-axis presets). Everything else in the
+// column-format vocabulary is numeric.
+const COLUMN_DATE_FORMATS = new Set(['date', 'time', 'time_seconds', 'datetime', 'datetime_seconds']);
 import { resolveColumnRule, resolveRowRule, contrastPartnerFor } from '../option-helpers';
 
 /**
@@ -434,13 +440,18 @@ export default function DataViewGrid({
         valueFormatter: (params) => {
           const v = params.value;
           if (v == null) return '';
-          // Author-set per-column format (compact SI / duration / plain)
-          // wins over the default cell formatter. Same vocabulary as the
-          // number tile — formatNumberValue handles the non-numeric
-          // fallback itself.
+          // Author-set per-column format (compact SI / duration / plain /
+          // date-time presets) wins over the default cell formatter. Same
+          // vocabulary as the number tile — formatNumberValue handles the
+          // non-numeric fallback itself. The date/time ids route through
+          // its datetime path (value treated as a timestamp, rendered with
+          // the same chart_* presets the x-axis formats use); everything
+          // else is numeric.
           const colFmt = columnFormats[col];
           if (colFmt && colFmt !== 'auto') {
-            const f = formatNumberValue(v, col, { numberFormat: colFmt, numberDecimals: 'auto' }, formatCellValue);
+            const f = COLUMN_DATE_FORMATS.has(colFmt)
+              ? formatNumberValue(v, col, { numberFormat: 'datetime', numberDateFormat: colFmt }, formatCellValue)
+              : formatNumberValue(v, col, { numberFormat: colFmt, numberDecimals: 'auto' }, formatCellValue);
             return f == null ? '' : String(f);
           }
           const f = formatCellValue(v, col, { timestampFormat: xAxisFormat, strictTimestampNames: true });

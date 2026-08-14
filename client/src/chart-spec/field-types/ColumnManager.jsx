@@ -9,14 +9,23 @@ import { useSpecRenderContext } from '../SpecContext';
 import DataViewGrid from '../views/DataViewGrid';
 import ColumnOptionsModal from './ColumnOptionsModal';
 
-// Per-column value formats — the number tile's vocabulary (number-formats.js),
-// minus its date/time preset (timestamp columns already auto-format).
+// Per-column value formats — the number tile's vocabulary (number-formats.js)
+// plus its date/time presets (the same variations the chart x-axis offers).
+// The date/time entries treat the value as a TIMESTAMP; the duration entries
+// treat it as elapsed SECONDS — duration_clock's label spells that out
+// because "HH:MM:SS" alone read as time-of-day and rendered an epoch
+// timestamp as ~211221 hours.
 const COLUMN_FORMATS = [
   { value: 'auto', label: 'Auto' },
   { value: 'compact', label: 'Compact (SI — 127G)' },
-  { value: 'duration', label: 'Duration (2d 3h)' },
-  { value: 'duration_clock', label: 'Duration (HH:MM:SS)' },
   { value: 'plain', label: 'Plain number' },
+  { value: 'duration', label: 'Duration in seconds (2d 3h)' },
+  { value: 'duration_clock', label: 'Duration in seconds (total HH:MM:SS)' },
+  { value: 'time', label: 'Time (10:30 AM)' },
+  { value: 'time_seconds', label: 'Time + seconds (10:30:05 AM)' },
+  { value: 'date', label: 'Date (Jan 15)' },
+  { value: 'datetime', label: 'Date + time (Jan 15, 10:30 AM)' },
+  { value: 'datetime_seconds', label: 'Date + time + seconds (Jan 15, 10:30:05 AM)' },
 ];
 
 /**
