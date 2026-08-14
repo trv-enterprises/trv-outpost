@@ -6,6 +6,31 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.54.0] — 2026-08-14
+
+### Added
+
+- **Time-of-day column formats for data tables** (#254). The dataview
+  per-column format dropdown gains the chart x-axis vocabulary — Time,
+  Time + seconds, Date, Date + time, Date + time + seconds — so a
+  timestamp column can finally render as a clock time. Previously the only
+  "HH:MM:SS" option was the elapsed-seconds duration formatter, which
+  rendered an epoch timestamp as ~211221 hours; the duration entries
+  remain for genuine elapsed-seconds columns, relabeled "Duration in
+  seconds (…)".
+- **Data tables default to newest-first** (#255). A new **Initial sort**
+  option (Newest first / Oldest first / None) on data tables, applied to
+  the timestamp column. Newest first is the default — including for
+  existing tables that never chose — so live tables read top-down like a
+  log viewer, with new rows sorting into place at the top. A viewer
+  clicking a column header still overrides it; tables without a visible
+  time column keep delivery order.
+
+### Internal
+
+- First DOM-level component render tests (AG Grid mounted in jsdom) join
+  the client test suite.
+
 ## [0.53.1] — 2026-08-13
 
 ### Fixed
