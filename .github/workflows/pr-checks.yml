@@ -54,6 +54,14 @@ jobs:
         working-directory: client
         run: npm run verify:chart-spec
 
+      # Component render tests (vitest + testing-library, introduced with
+      # the #248 store-picker regression test). Render-path bugs — a control
+      # unreachable in one branch of a transport/type chain — are invisible
+      # to lint and the pure-node chart-spec checks.
+      - name: Component tests
+        working-directory: client
+        run: npm test
+
       - name: Vite build
         working-directory: client
         run: npx vite build
