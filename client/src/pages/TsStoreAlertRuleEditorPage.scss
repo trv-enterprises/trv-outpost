@@ -3,6 +3,7 @@
 // See LICENSE file for details.
 
 @use '@carbon/styles/scss/spacing' as spacing;
+@use './design-editor-form' as editor-form;
 
 // Layout mirrors ConnectionDetailPage / ComponentDetailPage:
 // sticky page-header-bar at the top (Back + Cancel/Save), the
@@ -62,18 +63,29 @@
     overflow-y: auto;
     padding: spacing.$spacing-05;
 
+    // The Design-editor form language (filled #262626 field tiles, label/
+    // helper hierarchy, uppercase section legends) — shared with
+    // ConnectionDetailPage via the design-editor-form partial, per the
+    // alert-UI consistency ask (2026-08-15).
+    @include editor-form.design-editor-fields;
+    @include editor-form.design-editor-sections;
+
+    // Match the connection editor's form width (was 1200 — the wider
+    // body was part of why the pages read as different products).
     > .cds--form,
     > .cds--form > .cds--form-item,
     > .cds--form > .cds--fieldset {
-      max-width: 1200px;
+      max-width: 800px;
     }
 
     .cds--form-item + .cds--form-item {
       margin-top: spacing.$spacing-05;
     }
 
+    .cds--fieldset + .cds--fieldset,
+    .cds--form-item + .cds--fieldset,
     .cds--fieldset {
-      margin-bottom: spacing.$spacing-07;
+      margin-top: spacing.$spacing-06;
     }
 
     .connection-row {
