@@ -14,7 +14,6 @@ import {
   SelectItem,
   RadioButtonGroup,
   RadioButton,
-  FilterableMultiSelect,
   ComboBox,
   InlineNotification,
   Loading,
@@ -54,7 +53,10 @@ function TsStoreAlertRuleEditorPage() {
   const [connectionsLoading, setConnectionsLoading] = useState(true);
   // Namespace filter — empty array means "show all" (the default).
   // Populating it narrows the connection list to those namespaces.
-  const [namespaceFilter, setNamespaceFilter] = useState([]);
+  // Single-select namespace scope for the connection picker ('' = all).
+  // Deliberately NOT a multiselect: choosing the namespace to work in is a
+  // one-of choice here, and the count-pill UX read as broken.
+  const [namespaceFilter, setNamespaceFilter] = useState('');
   const [connectionId, setConnectionId] = useState('');
   // #248: target store for an ENDPOINT-SCOPED connection (no pinned
   // store_name) — required there; a pinned connection's rule always
@@ -160,7 +162,7 @@ function TsStoreAlertRuleEditorPage() {
         if (!location.state?.cloneFrom && activeNamespace) {
           const namespaces = new Set((ts?.connections || []).map((c) => c.namespace || 'default'));
           if (namespaces.has(activeNamespace)) {
-            setNamespaceFilter([activeNamespace]);
+            setNamespaceFilter(activeNamespace);
           }
         }
       } catch (err) {
@@ -347,9 +349,8 @@ function TsStoreAlertRuleEditorPage() {
   };
 
   const visibleConnections = useMemo(() => {
-    if (!namespaceFilter || namespaceFilter.length === 0) return connections;
-    const set = new Set(namespaceFilter);
-    return connections.filter((c) => set.has(c.namespace || 'default'));
+    if (!namespaceFilter) return connections;
+    return connections.filter((c) => (c.namespace || 'default') === namespaceFilter);
   }, [connections, namespaceFilter]);
 
   // Distinct namespace values across loaded tsstore connections.
@@ -554,14 +555,14 @@ function TsStoreAlertRuleEditorPage() {
               <>
                 <div className="connection-row">
                   <div className="namespace-filter-cell">
-                    <FilterableMultiSelect
+                    <Dropdown
                       id="rule-namespace-filter"
                       titleText="Namespace"
-                      items={namespaceOptions}
-                      itemToString={(s) => s || ''}
-                      selectedItems={namespaceFilter}
-                      onChange={({ selectedItems }) => setNamespaceFilter(selectedItems || [])}
-                      placeholder="All"
+                      label="All"
+                      items={['', ...namespaceOptions]}
+                      itemToString={(ns) => (ns === '' ? 'All' : ns)}
+                      selectedItem={namespaceFilter}
+                      onChange={({ selectedItem }) => setNamespaceFilter(selectedItem || '')}
                       size="md"
                     />
                   </div>
@@ -967,7 +968,7 @@ function TsStoreAlertRuleEditorPage() {
         onClose={() => setPickerOpen(false)}
         currentId={dashboardId || null}
         defaultConnectionId={connectionId || ''}
-        defaultNamespaces={namespaceFilter}
+        defaultNamespaces={namespaceFilter ? [namespaceFilter] : []}
         onSelect={(d) => {
           setDashboardRecord(d);
           setDashboardId(d.id);
