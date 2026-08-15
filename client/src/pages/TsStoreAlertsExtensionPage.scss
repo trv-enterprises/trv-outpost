@@ -5,10 +5,10 @@
 @use '@carbon/react/scss/spacing' as spacing;
 
 .tsstore-alerts-extension-page {
-  // Same scroll model as the other Design list pages (connections-page):
-  // the page owns its height, the header stays fixed, and .page-body is
-  // the scroll container. Without this the page relied on a parent that
-  // never scrolls, so a long rule list was simply clipped.
+  // Same scroll model as the connections list: the page owns its height,
+  // the header + toolbar stay fixed, and the TABLE BODY is the scroll
+  // container (.cds--data-table-content). Without this the page relied on
+  // a parent that never scrolls, so a long rule list was simply clipped.
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -20,9 +20,27 @@
     color: var(--cds-text-helper);
   }
 
-  .page-body {
-    flex: 1 1 auto;
+  > .cds--inline-notification {
+    flex-shrink: 0;
+  }
+
+  // DataTable container with scrolling — mirrors ConnectionsPage.
+  .cds--data-table-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
     min-height: 0;
+    background-color: var(--cds-layer-01);
+    overflow: hidden;
+  }
+
+  .cds--table-toolbar {
+    flex-shrink: 0;
+    background-color: var(--cds-layer-01);
+  }
+
+  .cds--data-table-content {
+    flex: 1;
     overflow-y: auto;
   }
 

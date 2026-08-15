@@ -172,7 +172,6 @@ function TsStoreAlertsExtensionPage() {
         </p>
       </div>
 
-      <div className="page-body">
       {fetchError && (
         <InlineNotification
           kind="error"
@@ -390,7 +389,6 @@ function TsStoreAlertsExtensionPage() {
           </div>
         )}
       </Modal>
-      </div>
     </div>
   );
 }

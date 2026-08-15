@@ -607,7 +607,6 @@ function TsStoreAlertRuleEditorPage() {
                             items={storeOptions.map((st) => st.name)}
                             selectedItem={storeName || null}
                             onChange={({ selectedItem }) => setStoreName(selectedItem || '')}
-                            helperText={storeName ? undefined : 'Required — this connection is endpoint-scoped'}
                           />
                         )
                       ) : (
@@ -617,7 +616,7 @@ function TsStoreAlertRuleEditorPage() {
                           placeholder="store name"
                           value={storeName}
                           onChange={(e) => setStoreName(e.target.value)}
-                          helperText="Required — store list unavailable, enter the name"
+                          placeholder="store name (list unavailable)"
                         />
                       )}
                     </div>

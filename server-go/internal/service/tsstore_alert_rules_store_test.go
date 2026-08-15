@@ -179,3 +179,30 @@ func TestStoresWithAccessVisibility(t *testing.T) {
 		t.Fatal("env-b must be read-visible without manage")
 	}
 }
+
+// TestDedupeAggregatedRules: the same alert reached through
+// differently-spelled base URLs (IP vs hostname to one server) must
+// collapse to one row — with connection refs unioned and a manage-capable
+// duplicate promoting the primary — while genuinely distinct alerts (their
+// ids are minted per server) never merge.
+func TestDedupeAggregatedRules(t *testing.T) {
+	rows := []TSStoreAggregatedRule{
+		{ConnectionID: "c-ip", ConnectionName: "via-ip", StoreName: "system-stats", AlertID: "al-1", RuleName: "hot",
+			Connections: []TSStoreConnectionRef{{ConnectionID: "c-ip", ConnectionName: "via-ip"}}, ConnectionCount: 1, CanManage: false},
+		{ConnectionID: "c-host", ConnectionName: "via-host", StoreName: "system-stats", AlertID: "al-1", RuleName: "hot",
+			Connections: []TSStoreConnectionRef{{ConnectionID: "c-host", ConnectionName: "via-host"}}, ConnectionCount: 1, CanManage: true},
+		{ConnectionID: "c-other", StoreName: "system-stats", AlertID: "al-2", RuleName: "hot",
+			Connections: []TSStoreConnectionRef{{ConnectionID: "c-other"}}, ConnectionCount: 1, CanManage: true},
+	}
+	out := dedupeAggregatedRules(rows)
+	if len(out) != 2 {
+		t.Fatalf("rows = %d, want 2 (aliased duplicate merged; distinct alert kept)", len(out))
+	}
+	merged := out[0]
+	if merged.ConnectionCount != 2 || len(merged.Connections) != 2 {
+		t.Fatalf("merged refs = %d, want the union of both connections", len(merged.Connections))
+	}
+	if !merged.CanManage || merged.ConnectionID != "c-host" {
+		t.Fatalf("primary = %q canManage=%v — the manage-capable duplicate must promote its primary", merged.ConnectionID, merged.CanManage)
+	}
+}
