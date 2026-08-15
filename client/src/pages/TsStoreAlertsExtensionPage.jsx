@@ -299,9 +299,16 @@ function TsStoreAlertsExtensionPage() {
                             >
                               <View />
                             </IconButton>
+                            {/* can_manage=false → the key can SEE this rule
+                                (alert reads are read-classed since ts-store
+                                v0.20.3) but not administer it — disable
+                                rather than offer a delete that would 403. */}
                             <IconButton
                               kind="ghost"
-                              label="Delete alert"
+                              label={r.can_manage === false
+                                ? 'View only — the connection key lacks manage on this store'
+                                : 'Delete alert'}
+                              disabled={r.can_manage === false}
                               onClick={() => setConfirmDelete(r)}
                             >
                               <TrashCan />

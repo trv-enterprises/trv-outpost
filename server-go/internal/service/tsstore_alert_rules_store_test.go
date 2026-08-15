@@ -146,3 +146,36 @@ func TestManageableStoreSetCache(t *testing.T) {
 		t.Fatalf("upstream store listings = %d, want 1 (second call served from cache)", n)
 	}
 }
+
+// TestStoresWithAccessVisibility: since ts-store v0.20.3 alert reads are
+// read-classed — visibility comes from `read`, administration from `manage`.
+// storesWithAccess must surface every granted store WITH its access classes
+// so ListAll can show read-only rules as view-only rather than hiding them.
+func TestStoresWithAccessVisibility(t *testing.T) {
+	conn, _, _ := alertsTestServer(t)
+	stores, err := storesWithAccess(context.Background(), conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stores) != 3 {
+		t.Fatalf("stores = %d, want all 3 granted stores (read-only included)", len(stores))
+	}
+	byName := map[string]bool{}
+	for _, st := range stores {
+		byName[st.Name] = hasAccess(st, "manage")
+	}
+	if !byName["env-a"] || byName["env-b"] || !byName["env-c"] {
+		t.Fatalf("manage flags = %v, want env-a/env-c manageable, env-b read-only", byName)
+	}
+	// env-b is read-visible: it must reach the alerts listing (view-only),
+	// which is exactly what the old manage-only enumeration hid.
+	found := false
+	for _, st := range stores {
+		if st.Name == "env-b" && hasAccess(st, "read") && !hasAccess(st, "manage") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("env-b must be read-visible without manage")
+	}
+}
