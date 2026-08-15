@@ -23,6 +23,7 @@ import {
 import { ArrowLeft, Close, Save } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import useExtensions from '../hooks/useExtensions';
+import { useNamespaces } from '../context/NamespaceContext';
 import DashboardPickerModal from '../components/DashboardPickerModal';
 import { Dropdown } from '@carbon/react';
 import { candidateLabel } from '../utils/tagValueByPrefix';
@@ -46,6 +47,7 @@ function TsStoreAlertRuleEditorPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { isEnabled, loading: extLoading } = useExtensions();
+  const { activeNamespace } = useNamespaces();
 
   // Form state.
   const [connections, setConnections] = useState([]);
@@ -150,6 +152,17 @@ function TsStoreAlertRuleEditorPage() {
         if (cancelled) return;
         setConnections(ts?.connections || []);
         setMqttConnections(mq?.connections || []);
+        // Default the namespace filter to the user's ACTIVE namespace (the
+        // header picker) — but only when it actually contains a tsstore
+        // connection (an empty pre-filtered dropdown reads as broken), and
+        // never when cloning (the source rule's connection may live in
+        // another namespace and must stay selectable).
+        if (!location.state?.cloneFrom && activeNamespace) {
+          const namespaces = new Set((ts?.connections || []).map((c) => c.namespace || 'default'));
+          if (namespaces.has(activeNamespace)) {
+            setNamespaceFilter([activeNamespace]);
+          }
+        }
       } catch (err) {
         if (cancelled) return;
         setError(`Failed to load connections: ${err.message || err}`);
@@ -158,6 +171,10 @@ function TsStoreAlertRuleEditorPage() {
       }
     })();
     return () => { cancelled = true; };
+    // Mount-once by design: activeNamespace/cloneFrom only seed the INITIAL
+    // filter — re-running on namespace switch mid-form would clobber the
+    // user's own filter choice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // "From Existing" prefill (#152): seed the form from a source rule passed via
