@@ -33,9 +33,9 @@ import (
 // middleware resolves that to a system user; we don't do any
 // additional auth here.
 type WebhookHandler struct {
-	connections   *service.ConnectionService
-	hub           *service.EventHub
-	alerts        *service.AlertService
+	connections    *service.ConnectionService
+	hub            *service.EventHub
+	alerts         *service.AlertService
 	webhookSecrets *repository.WebhookSecretRepository
 }
 
@@ -221,22 +221,42 @@ func (h *WebhookHandler) acceptTSStoreAlert(c *gin.Context, connectionID string)
 		return
 	}
 
-	// Routing validation: the ts-store store_name in the payload
-	// must match the dashboard connection's configured store_name.
-	// Mismatch usually means the rule was configured against the
-	// wrong connection_id — refuse rather than surface an alert
-	// against the wrong connection in the UI.
+	// Routing validation (#248). PINNED connection: the payload's
+	// store_name must equal the pin — a mismatch usually means the rule
+	// was configured against the wrong connection_id; refuse rather than
+	// surface an alert against the wrong connection in the UI.
+	// ENDPOINT-SCOPED connection (no pin): validate MEMBERSHIP in the
+	// key's cached manage-granted store set instead — a rule can only have
+	// been created on a manage store, so a reject either catches a
+	// misrouted payload or surfaces a zombie rule whose grant was revoked
+	// (deliberate: the rejection is the signal to delete the rule).
+	// Cache-unavailable FAILS OPEN with a log line — the URL secret
+	// already authenticates the sender, and defense-in-depth must not
+	// cost alert deliveries.
 	configuredStore := ""
 	if conn.Config.TSStore != nil {
 		configuredStore = conn.Config.TSStore.StoreName
 	}
-	if payload.StoreName != "" && configuredStore != "" && payload.StoreName != configuredStore {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":            "store_name mismatch",
-			"payload_store":    payload.StoreName,
-			"connection_store": configuredStore,
-		})
-		return
+	if configuredStore != "" {
+		if payload.StoreName != "" && payload.StoreName != configuredStore {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":            "store_name mismatch",
+				"payload_store":    payload.StoreName,
+				"connection_store": configuredStore,
+			})
+			return
+		}
+	} else if payload.StoreName != "" {
+		if set, err := service.ManageableStoreSet(c.Request.Context(), conn); err != nil {
+			log.Printf("webhook: manage-set unavailable for connection %s (%v) — accepting store %q unvalidated", conn.ID, err, payload.StoreName)
+		} else if !set[payload.StoreName] {
+			log.Printf("webhook: rejected alert for store %q on connection %s — not in the key's manage-granted set (misrouted payload, or a zombie rule whose grant was revoked)", payload.StoreName, conn.ID)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":         "store not managed by this connection's key",
+				"payload_store": payload.StoreName,
+			})
+			return
+		}
 	}
 
 	// Build the user-facing notification. Title = "<rule> on <conn.name>";
@@ -267,15 +287,15 @@ func (h *WebhookHandler) acceptTSStoreAlert(c *gin.Context, connectionID string)
 	// the failure prominently — a persistence outage means the
 	// bell-on-load story is silently broken.
 	recorded, err := h.alerts.Record(c.Request.Context(), &models.Alert{
-		FiredAt:      firedAt,
-		Severity:     "warning",
-		Title:        title,
-		Subtitle:     payload.Condition,
-		Source:       payload.StoreName,
-		RuleName:     payload.RuleName,
-		Namespace:    conn.Namespace,
-		ConnectionID: connectionID,
-		Payload:      payload.Data,
+		FiredAt:       firedAt,
+		Severity:      "warning",
+		Title:         title,
+		Subtitle:      payload.Condition,
+		Source:        payload.StoreName,
+		RuleName:      payload.RuleName,
+		Namespace:     conn.Namespace,
+		ConnectionID:  connectionID,
+		Payload:       payload.Data,
 		ExternalRef:   payload.ExternalRef,
 		DashboardID:   dashboardID,
 		DashboardVars: dashboardVars,
@@ -294,12 +314,12 @@ func (h *WebhookHandler) acceptTSStoreAlert(c *gin.Context, connectionID string)
 		Kind:      "alert",
 		Namespace: conn.Namespace,
 		Payload: service.AlertPayload{
-			ID:          alertID,
-			Severity:    "warning",
-			Title:       title,
-			Subtitle:    payload.Condition,
-			Source:      payload.StoreName,
-			RuleName:    payload.RuleName,
+			ID:            alertID,
+			Severity:      "warning",
+			Title:         title,
+			Subtitle:      payload.Condition,
+			Source:        payload.StoreName,
+			RuleName:      payload.RuleName,
 			FiredAt:       firedAt,
 			DashboardID:   dashboardID,
 			DashboardVars: dashboardVars,

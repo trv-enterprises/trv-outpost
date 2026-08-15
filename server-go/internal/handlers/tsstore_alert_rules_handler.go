@@ -36,6 +36,7 @@ func NewTSStoreAlertRulesHandler(rules *service.TSStoreAlertRulesService) *TSSto
 // @Tags TSStoreAlerts
 // @Produce json
 // @Param connection_id query string true "Connection ID"
+// @Param store query string false "Target store (required for endpoint-scoped connections; ignored when the connection pins a store)"
 // @Success 200 {object} service.ProbeConnectionResult
 // @Failure 400 {object} map[string]string
 // @Failure 403 {object} map[string]string "Extension disabled"
@@ -46,7 +47,7 @@ func (h *TSStoreAlertRulesHandler) ProbeAuth(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "connection_id query param is required"})
 		return
 	}
-	c.JSON(http.StatusOK, h.rules.ProbeConnectionAuth(c.Request.Context(), connectionID))
+	c.JSON(http.StatusOK, h.rules.ProbeConnectionAuth(c.Request.Context(), connectionID, c.Query("store")))
 }
 
 // Create accepts a rule-wizard payload (type=webhook|mqtt) and
@@ -112,6 +113,7 @@ func (h *TSStoreAlertRulesHandler) ListAll(c *gin.Context) {
 // @Tags TSStoreAlerts
 // @Produce json
 // @Param connection_id query string true "TSStore connection ID"
+// @Param store query string false "Target store (required for endpoint-scoped connections; ignored when the connection pins a store)"
 // @Param alert_id path string true "Alert ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]string
@@ -124,7 +126,7 @@ func (h *TSStoreAlertRulesHandler) GetAlertDetail(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "connection_id query param is required"})
 		return
 	}
-	body, err := h.rules.GetAlertDetail(c.Request.Context(), connectionID, c.Param("alert_id"))
+	body, err := h.rules.GetAlertDetail(c.Request.Context(), connectionID, c.Param("alert_id"), c.Query("store"))
 	if err != nil {
 		respondError(c, err)
 		return
@@ -141,6 +143,7 @@ func (h *TSStoreAlertRulesHandler) GetAlertDetail(c *gin.Context) {
 // @Description Optional extension endpoint — only mounted when the admin setting `extensions.tsstore_alerts.enabled` is true. Returns 403 when the extension is disabled.
 // @Tags TSStoreAlerts
 // @Param connection_id query string true "TSStore connection ID"
+// @Param store query string false "Target store (required for endpoint-scoped connections; ignored when the connection pins a store)"
 // @Param alert_id path string true "Alert ID"
 // @Success 204 "No Content"
 // @Failure 400 {object} map[string]string
@@ -153,7 +156,7 @@ func (h *TSStoreAlertRulesHandler) DeleteAlert(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "connection_id query param is required"})
 		return
 	}
-	if err := h.rules.DeleteAlert(c.Request.Context(), connectionID, c.Param("alert_id")); err != nil {
+	if err := h.rules.DeleteAlert(c.Request.Context(), connectionID, c.Param("alert_id"), c.Query("store")); err != nil {
 		respondError(c, err)
 		return
 	}

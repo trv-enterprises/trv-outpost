@@ -111,7 +111,7 @@ function TsStoreAlertsExtensionPage() {
     if (!confirmDelete) return;
     setDeleting(true);
     try {
-      await apiClient.deleteTSStoreAlert(confirmDelete.connection_id, confirmDelete.alert_id);
+      await apiClient.deleteTSStoreAlert(confirmDelete.connection_id, confirmDelete.alert_id, confirmDelete.store_name);
       setConfirmDelete(null);
       await refresh();
     } catch (err) {
@@ -157,7 +157,7 @@ function TsStoreAlertsExtensionPage() {
   ];
 
   const rows = filtered.map((r) => ({
-    id: `${r.connection_id}|${r.alert_id}|${r.rule_name}`,
+    id: `${r.connection_id}|${r.store_name}|${r.alert_id}|${r.rule_name}`,
     raw: r,
   }));
 
@@ -295,7 +295,7 @@ function TsStoreAlertsExtensionPage() {
                             <IconButton
                               kind="ghost"
                               label="View rule details"
-                              onClick={() => navigate(`/design/extensions/tsstore-alerts/${r.connection_id}/${r.alert_id}`)}
+                              onClick={() => navigate(`/design/extensions/tsstore-alerts/${r.connection_id}/${r.alert_id}?store=${encodeURIComponent(r.store_name || '')}`)}
                             >
                               <View />
                             </IconButton>
@@ -366,7 +366,7 @@ function TsStoreAlertsExtensionPage() {
           <div className="rule-clone-list">
             {rules.map((r) => (
               <button
-                key={`${r.connection_id}|${r.alert_id}|${r.rule_name}`}
+                key={`${r.connection_id}|${r.store_name}|${r.alert_id}|${r.rule_name}`}
                 type="button"
                 className="rule-clone-item"
                 onClick={() => {

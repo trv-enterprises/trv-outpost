@@ -3,7 +3,7 @@
 // See LICENSE file for details.
 
 import { useEffect, useState } from 'react';
-import { Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Button,
   Form,
@@ -42,6 +42,11 @@ import './TsStoreAlertRuleEditorPage.scss';
 function TsStoreAlertRuleViewPage() {
   const navigate = useNavigate();
   const { connectionId, alertId } = useParams();
+  // #248: the rule's store rides as ?store= (required for rules on
+  // endpoint-scoped connections; absent links to pinned-connection rules
+  // keep working — the server resolves the pin).
+  const [searchParams] = useSearchParams();
+  const storeParam = searchParams.get('store') || '';
   const { isEnabled, loading: extLoading } = useExtensions();
 
   const [detail, setDetail] = useState(null);
@@ -57,7 +62,7 @@ function TsStoreAlertRuleViewPage() {
     let cancelled = false;
     setLoading(true);
     apiClient
-      .getTSStoreAlertDetail(connectionId, alertId)
+      .getTSStoreAlertDetail(connectionId, alertId, storeParam || undefined)
       .then(async (d) => {
         if (cancelled) return;
         setDetail(d);
@@ -87,7 +92,7 @@ function TsStoreAlertRuleViewPage() {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [connectionId, alertId]);
+  }, [connectionId, alertId, storeParam]);
 
   if (extLoading) {
     return <div className="tsstore-alert-rule-editor tsstore-alert-rule-editor--loading">Loading…</div>;
@@ -183,7 +188,12 @@ function TsStoreAlertRuleViewPage() {
                 labelText="ts-store connection"
                 value={connection ? `${connection.name} (${connection.namespace || 'default'})` : connectionId}
                 readOnly
-                helperText={connection?.config?.tsstore?.store_name ? `store: ${connection.config.tsstore.store_name}` : undefined}
+                helperText={(() => {
+                  // The rule's actual store: the ?store= it was opened with
+                  // (endpoint-scoped rules), else the connection's pin.
+                  const st = storeParam || connection?.config?.tsstore?.store_name;
+                  return st ? `store: ${st}` : undefined;
+                })()}
               />
             </FormGroup>
 

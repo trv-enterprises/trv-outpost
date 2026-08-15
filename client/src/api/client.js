@@ -1036,8 +1036,11 @@ class APIClient {
     });
   }
 
-  async getConnectionSchema(id) {
-    return this.request(`/api/connections/${id}/schema`, { connectionId: id });
+  // store targets a specific store's schema on an endpoint-scoped
+  // tsstore connection (#248); ignored for every other type.
+  async getConnectionSchema(id, store) {
+    const suffix = store ? `?${new URLSearchParams({ store }).toString()}` : '';
+    return this.request(`/api/connections/${id}/schema${suffix}`, { connectionId: id });
   }
 
   // Store discovery for endpoint-scoped multi-store connections (tsstore,
@@ -1850,8 +1853,12 @@ class APIClient {
     return this.request('/api/tsstore-alerts/rules');
   }
 
-  async deleteTSStoreAlert(connectionId, alertId) {
-    const q = new URLSearchParams({ connection_id: connectionId }).toString();
+  // store targets the rule's store on an endpoint-scoped connection
+  // (#248); ignored when the connection pins a store.
+  async deleteTSStoreAlert(connectionId, alertId, store) {
+    const params = { connection_id: connectionId };
+    if (store) params.store = store;
+    const q = new URLSearchParams(params).toString();
     return this.request(`/api/tsstore-alerts/rules/${alertId}?${q}`, { method: 'DELETE' });
   }
 
@@ -1860,8 +1867,10 @@ class APIClient {
   // replay, etc. Used by the read-only rule-details page. ts-store
   // already redacts secret-bearing headers and the MQTT password
   // before returning.
-  async getTSStoreAlertDetail(connectionId, alertId) {
-    const q = new URLSearchParams({ connection_id: connectionId }).toString();
+  async getTSStoreAlertDetail(connectionId, alertId, store) {
+    const params = { connection_id: connectionId };
+    if (store) params.store = store;
+    const q = new URLSearchParams(params).toString();
     return this.request(`/api/tsstore-alerts/rules/${alertId}?${q}`);
   }
 
@@ -1880,8 +1889,10 @@ class APIClient {
   // the rule-create wizard to gate the submit button when the
   // connection's API key won't pass ts-store auth. Returns
   // { ok: bool, http_status?: int, error?: string }.
-  async probeTSStoreConnection(connectionId) {
-    const q = new URLSearchParams({ connection_id: connectionId }).toString();
+  async probeTSStoreConnection(connectionId, store) {
+    const params = { connection_id: connectionId };
+    if (store) params.store = store;
+    const q = new URLSearchParams(params).toString();
     return this.request(`/api/tsstore-alerts/probe?${q}`);
   }
 

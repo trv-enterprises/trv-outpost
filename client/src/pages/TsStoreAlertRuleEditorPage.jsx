@@ -15,6 +15,7 @@ import {
   RadioButtonGroup,
   RadioButton,
   FilterableMultiSelect,
+  ComboBox,
   InlineNotification,
   Loading,
   Tag,
@@ -53,6 +54,13 @@ function TsStoreAlertRuleEditorPage() {
   // Populating it narrows the connection list to those namespaces.
   const [namespaceFilter, setNamespaceFilter] = useState([]);
   const [connectionId, setConnectionId] = useState('');
+  // #248: target store for an ENDPOINT-SCOPED connection (no pinned
+  // store_name) — required there; a pinned connection's rule always
+  // registers on its pin and shows no picker. storeOptions is the
+  // MANAGE-granted store list (alert CRUD is manage-classed under
+  // ts-store scoped keys); null = list unavailable → free-text fallback.
+  const [storeName, setStoreName] = useState('');
+  const [storeOptions, setStoreOptions] = useState(null);
   const [ruleName, setRuleName] = useState('');
   // Alert delivery type. WebSocket sink is intentionally omitted —
   // WS has no topic mechanism, so ts-store WS alerts would mix with
@@ -118,6 +126,14 @@ function TsStoreAlertRuleEditorPage() {
   const [fields, setFields] = useState(null);
   const conditionRef = useRef(null);
 
+  // #248: is the chosen connection endpoint-scoped (no pinned store)?
+  const selectedConn = connections.find((c) => c.id === connectionId);
+  const isEndpointScoped = !!selectedConn && !selectedConn?.config?.tsstore?.store_name;
+  // The store the alert operations target: only meaningful (and only
+  // sent) for endpoint-scoped connections.
+  const effectiveStore = isEndpointScoped ? storeName : '';
+
+
   // Load tsstore + mqtt connections once on mount. tsstore connections
   // are required (rule owner picker); mqtt connections are only needed
   // when alertType === 'mqtt' but we fetch eagerly so the picker is
@@ -155,6 +171,11 @@ function TsStoreAlertRuleEditorPage() {
     clonedRef.current = true;
     setAlertType(src.alert_type || 'webhook');
     setConnectionId(src.connection_id || '');
+    // Store rides along for endpoint-scoped connections. The store-list
+    // effect resets storeName on connection change, so defer one tick.
+    if (src.store_name) {
+      setTimeout(() => setStoreName(src.store_name), 0);
+    }
     setRuleName(src.rule_name ? `${src.rule_name} copy` : '');
     setCondition(src.condition || '');
     if (src.cooldown) setCooldown(src.cooldown);
@@ -173,7 +194,7 @@ function TsStoreAlertRuleEditorPage() {
         })
         .catch(() => { /* link stays set; the variable section just won't render */ });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [location.state]);
 
   // Prefill the MQTT topic from the rule name (slugified) until the
@@ -190,35 +211,57 @@ function TsStoreAlertRuleEditorPage() {
     setMqttTopic(slug ? `trve/alerts/${slug}` : '');
   }, [ruleName, mqttTopicDirty]);
 
+  // #248: load the manage-granted store list for an endpoint-scoped
+  // connection so the store picker offers real names. Alert CRUD is a
+  // per-store MANAGE grant, so only manage stores are offered; an empty
+  // list means the key can't administer alerts anywhere.
+  useEffect(() => {
+    setStoreName('');
+    if (!connectionId || !isEndpointScoped) {
+      setStoreOptions(null);
+      return undefined;
+    }
+    let cancelled = false;
+    apiClient.getConnectionStores(connectionId)
+      .then((resp) => {
+        if (cancelled) return;
+        const stores = Array.isArray(resp?.stores) ? resp.stores : [];
+        setStoreOptions(stores.filter((st) => Array.isArray(st.access) && st.access.includes('manage')));
+      })
+      .catch(() => { if (!cancelled) setStoreOptions(null); });
+    return () => { cancelled = true; };
+     
+  }, [connectionId, isEndpointScoped]);
+
   // Probe the chosen connection's auth posture against ts-store so
   // we can fail fast if the connection's API key won't be accepted.
   // Same endpoint the rule-create POST will exercise, just GET-list
   // instead of POST-create.
   useEffect(() => {
-    if (!connectionId) {
+    if (!connectionId || (isEndpointScoped && !effectiveStore)) {
       setProbe(null);
-      return;
+      return undefined;
     }
     let cancelled = false;
     setProbe('pending');
-    apiClient.probeTSStoreConnection(connectionId)
+    apiClient.probeTSStoreConnection(connectionId, effectiveStore || undefined)
       .then((r) => { if (!cancelled) setProbe(r); })
       .catch((err) => { if (!cancelled) setProbe({ ok: false, error: err.message || String(err) }); });
     return () => { cancelled = true; };
-  }, [connectionId]);
+  }, [connectionId, isEndpointScoped, effectiveStore]);
 
   // Discover field names for the chosen connection. The schema endpoint
   // samples recent records on the ts-store backend; for json stores
   // there's no formal schema, so we get whatever keys appear in the
   // 10 newest records.
   useEffect(() => {
-    if (!connectionId) {
+    if (!connectionId || (isEndpointScoped && !effectiveStore)) {
       setFields(null);
-      return;
+      return undefined;
     }
     let cancelled = false;
     setFields('pending');
-    apiClient.getConnectionSchema(connectionId)
+    apiClient.getConnectionSchema(connectionId, effectiveStore || undefined)
       .then((resp) => {
         if (cancelled) return;
         if (!resp?.success) {
@@ -233,7 +276,7 @@ function TsStoreAlertRuleEditorPage() {
         setFields({ error: err.message || String(err) });
       });
     return () => { cancelled = true; };
-  }, [connectionId]);
+  }, [connectionId, isEndpointScoped, effectiveStore]);
 
   // Insert a field name into the Condition textarea at the current
   // selection. If the textarea isn't focused (drop from elsewhere), we
@@ -310,6 +353,7 @@ function TsStoreAlertRuleEditorPage() {
 
   const canSubmit =
     connectionId &&
+    (!isEndpointScoped || storeName) &&
     ruleName.trim() &&
     condition.trim() &&
     mqttReady &&
@@ -370,6 +414,7 @@ function TsStoreAlertRuleEditorPage() {
       await apiClient.createTSStoreAlertRule({
         type: alertType,
         connection_id: connectionId,
+        store_name: isEndpointScoped ? storeName : undefined,
         rule_name: ruleName.trim(),
         condition: condition.trim(),
         cooldown: cooldown.trim() || undefined,
@@ -520,7 +565,49 @@ function TsStoreAlertRuleEditorPage() {
                       ))}
                     </Select>
                   </div>
+                  {/* #248: endpoint-scoped connection → the rule's store is
+                      chosen here, from the key's MANAGE-granted stores
+                      (alert CRUD is a per-store manage grant). Pinned
+                      connections register on their pin and show nothing. */}
+                  {isEndpointScoped && (
+                    <div className="connection-cell">
+                      {Array.isArray(storeOptions) ? (
+                        storeOptions.length === 0 ? (
+                          <TextInput
+                            id="rule-store"
+                            labelText="Store"
+                            value=""
+                            readOnly
+                            invalid
+                            invalidText="This connection's key has no manage grants — alerts need a key with manage on the target store."
+                          />
+                        ) : (
+                          <ComboBox
+                            id="rule-store"
+                            titleText="Store"
+                            placeholder="Choose a store"
+                            items={storeOptions.map((st) => st.name)}
+                            selectedItem={storeName || null}
+                            onChange={({ selectedItem }) => setStoreName(selectedItem || '')}
+                            helperText={storeName ? undefined : 'Required — this connection is endpoint-scoped'}
+                          />
+                        )
+                      ) : (
+                        <TextInput
+                          id="rule-store"
+                          labelText="Store"
+                          placeholder="store name"
+                          value={storeName}
+                          onChange={(e) => setStoreName(e.target.value)}
+                          helperText="Required — store list unavailable, enter the name"
+                        />
+                      )}
+                    </div>
+                  )}
                 </div>
+                {isEndpointScoped && !storeName && (
+                  <div className="probe-line probe-line--pending">Choose a store to check auth and discover fields.</div>
+                )}
 
                 {/* Probe status — feedback on whether the chosen
                     connection's API key will actually be accepted by
