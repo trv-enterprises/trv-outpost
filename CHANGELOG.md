@@ -6,6 +6,32 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.55.0] — 2026-08-14
+
+### Added
+
+- **ts-store alerts on endpoint-scoped connections** (#248 PR 3, completing
+  the #248 core arc). The alerts extension drops its one-store-per-connection
+  assumption: rule identity is now (connection, store, alert). The central
+  alerts page lists rules from every store an endpoint-scoped connection's
+  key can *manage* (alert administration is a per-store `manage` grant under
+  ts-store's scoped keys), with per-store error attribution so one bad store
+  doesn't read as a dead connection. The rule wizard gains a store picker on
+  endpoint-scoped connections — manage-granted stores only, with a clear
+  explanation when the key has none — and the auth probe and condition-field
+  discovery follow the chosen store. Connections pinned to one store behave
+  exactly as before.
+- The connection schema endpoint accepts `?store=` for per-store field
+  discovery on endpoint-scoped connections.
+
+### Changed
+
+- The inbound alert webhook receiver validates an endpoint-scoped
+  connection's payloads against the key's manage-granted store set (cached;
+  fails open if the set can't be refreshed, so deliveries are never dropped
+  by the check itself). Pinned connections keep the exact store-match
+  validation.
+
 ## [0.54.0] — 2026-08-14
 
 ### Added
