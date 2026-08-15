@@ -6,6 +6,43 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.56.0] — 2026-08-15
+
+### Added
+
+- **Every readable alert rule is now visible** (#257). Building on
+  ts-store v0.20.3's reclassification of alert reads to the `read` class:
+  the alerts page lists rules from every store an endpoint-scoped
+  connection's key can *read* — not just the stores it can manage — with
+  rules created by the CLI, collectors, or scripts appearing alongside
+  dashboard-created ones. Rows the key cannot administer render view-only
+  (Delete disabled with an explanation) instead of being hidden; a rule's
+  actions always route through a manage-capable connection when one
+  exists.
+- One endpoint-scoped connection with a `read:*` key is now a complete
+  "see everything on this server" alerts setup — grant changes on the
+  ts-store side appear on the next page load with no dashboard
+  reconfiguration.
+
+### Changed
+
+- **Alert pages restyled to the Design-editor language** (#258): filled
+  field tiles, uppercase section headers, and the connection editor's
+  form structure on both the rule wizard and the read-only rule details
+  page (previously bare, run-together text). The styling now lives in a
+  shared partial consumed by the connection editor too.
+- The rule wizard opens pre-scoped to your active namespace (when it has
+  ts-store connections), with the namespace filter as a single-select
+  dropdown showing the namespace name.
+- The alerts list scrolls inside the table (fixed header + toolbar),
+  matching the connections list.
+
+### Fixed
+
+- The same alert no longer appears twice when one ts-store server is
+  reachable through differently-addressed connections (IP vs hostname) —
+  rows deduplicate on rule identity, merging the connection lists.
+
 ## [0.55.0] — 2026-08-14
 
 ### Added
