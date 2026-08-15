@@ -140,6 +140,16 @@ type TSStoreAggregatedRule struct {
 	// by ts-store; left empty until it lands.
 	State       string `json:"state,omitempty"`
 	AlertsFired int64  `json:"alerts_fired,omitempty"`
+
+	// CanManage reports whether this row's rule can be administered
+	// (deleted, later edited) through at least one of the listed
+	// connections. Since ts-store v0.20.3 alert READS are read-classed, a
+	// read-only key can see rules it cannot touch — the UI renders those
+	// rows view-only instead of offering a delete that would 403 (#248
+	// follow-on). Pinned connections report true (status quo: their grant
+	// posture isn't enumerated; a genuinely under-granted key surfaces as
+	// a per-operation error exactly as before).
+	CanManage bool `json:"can_manage"`
 }
 
 // TSStoreFetchError records a per-connection failure so the UI can surface
@@ -198,35 +208,49 @@ func (s *TSStoreAlertRulesService) ListAll(ctx context.Context) (*TSStoreAggrega
 		BaseURL   string
 		StoreName string
 	}
-	groups := map[backendKey][]*models.Connection{}
+	type memberAccess struct {
+		conn      *models.Connection
+		canManage bool
+	}
+	groups := map[backendKey][]memberAccess{}
 	groupOrder := []backendKey{}
 	var groupMu sync.Mutex
-	addToGroup := func(k backendKey, conn *models.Connection) {
+	addToGroup := func(k backendKey, m memberAccess) {
 		groupMu.Lock()
 		defer groupMu.Unlock()
 		if _, seen := groups[k]; !seen {
 			groupOrder = append(groupOrder, k)
 		}
-		groups[k] = append(groups[k], conn)
+		groups[k] = append(groups[k], m)
 	}
 
 	// Store enumeration for endpoint-scoped connections is a network call
 	// per connection, so it runs in the same parallel style as the rule
 	// fetches below. Enumeration failure surfaces as a connection-level
 	// error (StoreName empty) rather than silently dropping the connection.
+	//
+	// Visibility = READ (ts-store v0.20.3 reclassified alert list/detail to
+	// the read class): a read-only key sees every rule it can list, with
+	// per-store manage capability carried alongside so the UI can render
+	// rows it cannot administer as view-only. A manage-only store (no read
+	// grant) is skipped — the read-classed list endpoint would 403 it; the
+	// wizard can still create there.
 	var enumWG sync.WaitGroup
 	for _, conn := range conns {
 		if conn.Config.TSStore == nil {
 			continue
 		}
 		if conn.Config.TSStore.StoreName != "" {
-			addToGroup(backendKey{BaseURL: conn.Config.TSStore.BaseURL(), StoreName: conn.Config.TSStore.StoreName}, conn)
+			// Pinned: grant posture isn't enumerated — status quo behavior,
+			// affordances stay enabled and an under-granted key surfaces as
+			// a per-operation error exactly as before.
+			addToGroup(backendKey{BaseURL: conn.Config.TSStore.BaseURL(), StoreName: conn.Config.TSStore.StoreName}, memberAccess{conn: conn, canManage: true})
 			continue
 		}
 		enumWG.Add(1)
 		go func(conn *models.Connection) {
 			defer enumWG.Done()
-			stores, err := manageableStores(ctx, conn)
+			stores, err := storesWithAccess(ctx, conn)
 			if err != nil {
 				mu.Lock()
 				resp.Errors = append(resp.Errors, TSStoreFetchError{
@@ -238,7 +262,10 @@ func (s *TSStoreAlertRulesService) ListAll(ctx context.Context) (*TSStoreAggrega
 				return
 			}
 			for _, st := range stores {
-				addToGroup(backendKey{BaseURL: conn.Config.TSStore.BaseURL(), StoreName: st}, conn)
+				if !hasAccess(st, "read") {
+					continue
+				}
+				addToGroup(backendKey{BaseURL: conn.Config.TSStore.BaseURL(), StoreName: st.Name}, memberAccess{conn: conn, canManage: hasAccess(st, "manage")})
 			}
 		}(conn)
 	}
@@ -251,13 +278,24 @@ func (s *TSStoreAlertRulesService) ListAll(ctx context.Context) (*TSStoreAggrega
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			primary := members[0]
+			// Primary carries the row identity and routes delete — prefer a
+			// manage-capable member so the row's affordances actually work;
+			// a group with no manage member is view-only (CanManage false).
+			primary := members[0].conn
+			groupCanManage := false
+			for _, m := range members {
+				if m.canManage {
+					primary = m.conn
+					groupCanManage = true
+					break
+				}
+			}
 			refs := make([]TSStoreConnectionRef, 0, len(members))
 			for _, m := range members {
 				refs = append(refs, TSStoreConnectionRef{
-					ConnectionID:   m.ID,
-					ConnectionName: m.Name,
-					Namespace:      m.Namespace,
+					ConnectionID:   m.conn.ID,
+					ConnectionName: m.conn.Name,
+					Namespace:      m.conn.Namespace,
 				})
 			}
 
@@ -271,8 +309,10 @@ func (s *TSStoreAlertRulesService) ListAll(ctx context.Context) (*TSStoreAggrega
 				errMsg := ferr.Error()
 				if len(members) > 1 {
 					siblings := make([]string, 0, len(members)-1)
-					for _, m := range members[1:] {
-						siblings = append(siblings, m.Name)
+					for _, m := range members {
+						if m.conn.ID != primary.ID {
+							siblings = append(siblings, m.conn.Name)
+						}
 					}
 					errMsg = fmt.Sprintf("%s (also affects: %s)", errMsg, strings.Join(siblings, ", "))
 				}
@@ -285,8 +325,12 @@ func (s *TSStoreAlertRulesService) ListAll(ctx context.Context) (*TSStoreAggrega
 				return
 			}
 			for i := range rules {
+				rules[i].ConnectionID = primary.ID
+				rules[i].ConnectionName = primary.Name
+				rules[i].Namespace = primary.Namespace
 				rules[i].Connections = refs
 				rules[i].ConnectionCount = len(refs)
+				rules[i].CanManage = groupCanManage
 			}
 			resp.Rules = append(resp.Rules, rules...)
 		}()
@@ -347,12 +391,11 @@ func ManageableStoreSet(ctx context.Context, conn *models.Connection) (map[strin
 	return set, nil
 }
 
-// manageableStores lists the stores an endpoint-scoped connection's key
-// holds MANAGE on — under ts-store's scoped keys (v0.20+), alert CRUD is a
-// per-store manage grant, so this is exactly the set whose alerts the
-// connection can list and edit. Uses the adapter's StoreLister (the same
-// keyed GET /api/stores that backs the editor's store picker).
-func manageableStores(ctx context.Context, conn *models.Connection) ([]string, error) {
+// storesWithAccess lists every store an endpoint-scoped connection's key
+// holds any grant on, with the key's access classes per store. Uses the
+// adapter's StoreLister (the same keyed GET /api/stores that backs the
+// editor's store picker).
+func storesWithAccess(ctx context.Context, conn *models.Connection) ([]registry.StoreInfo, error) {
 	factory := connection.NewConnectionFactory()
 	ds, err := factory.CreateFromConfig(conn)
 	if err != nil {
@@ -363,17 +406,31 @@ func manageableStores(ctx context.Context, conn *models.Connection) ([]string, e
 	if !ok {
 		return nil, fmt.Errorf("connection does not support store discovery")
 	}
-	stores, err := lister.ListStores(ctx)
+	return lister.ListStores(ctx)
+}
+
+func hasAccess(st registry.StoreInfo, class string) bool {
+	for _, a := range st.Access {
+		if a == class {
+			return true
+		}
+	}
+	return false
+}
+
+// manageableStores lists the stores an endpoint-scoped connection's key
+// holds MANAGE on — the set whose alerts the connection can administer
+// (create/delete; and the webhook membership check's universe, since a
+// rule can only have been created on a manage store).
+func manageableStores(ctx context.Context, conn *models.Connection) ([]string, error) {
+	stores, err := storesWithAccess(ctx, conn)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]string, 0, len(stores))
 	for _, st := range stores {
-		for _, a := range st.Access {
-			if a == "manage" {
-				out = append(out, st.Name)
-				break
-			}
+		if hasAccess(st, "manage") {
+			out = append(out, st.Name)
 		}
 	}
 	return out, nil
