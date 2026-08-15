@@ -337,7 +337,53 @@ func (s *TSStoreAlertRulesService) ListAll(ctx context.Context) (*TSStoreAggrega
 	}
 	wg.Wait()
 
+	resp.Rules = dedupeAggregatedRules(resp.Rules)
+
 	return resp, nil
+}
+
+// dedupeAggregatedRules collapses rows that are the SAME alert reached
+// through differently-spelled base URLs (an IP-addressed pinned connection
+// and a hostname-addressed endpoint-scoped connection to one server defeat
+// the (BaseURL, store) grouping — read visibility made that overlap the
+// common case). Identity is (store, alert_id, rule_name): alert ids are
+// minted per server, so genuinely different servers — even with same-named
+// stores and rules — keep distinct ids and never merge. Merging unions the
+// connection refs, ORs CanManage, and promotes a manage-capable primary so
+// the surviving row's delete routes through a key that can do it.
+func dedupeAggregatedRules(rules []TSStoreAggregatedRule) []TSStoreAggregatedRule {
+	index := map[string]int{}
+	out := make([]TSStoreAggregatedRule, 0, len(rules))
+	for _, r := range rules {
+		key := r.StoreName + "|" + r.AlertID + "|" + r.RuleName
+		i, seen := index[key]
+		if !seen {
+			index[key] = len(out)
+			out = append(out, r)
+			continue
+		}
+		existing := &out[i]
+		// Union connection refs by connection id.
+		have := map[string]bool{}
+		for _, ref := range existing.Connections {
+			have[ref.ConnectionID] = true
+		}
+		for _, ref := range r.Connections {
+			if !have[ref.ConnectionID] {
+				existing.Connections = append(existing.Connections, ref)
+				have[ref.ConnectionID] = true
+			}
+		}
+		existing.ConnectionCount = len(existing.Connections)
+		// A manage-capable duplicate promotes its primary so row actions work.
+		if r.CanManage && !existing.CanManage {
+			existing.ConnectionID = r.ConnectionID
+			existing.ConnectionName = r.ConnectionName
+			existing.Namespace = r.Namespace
+			existing.CanManage = true
+		}
+	}
+	return out
 }
 
 // manageSetTTL bounds how long an endpoint-scoped connection's manage-granted

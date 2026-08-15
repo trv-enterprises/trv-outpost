@@ -14,7 +14,6 @@ import {
   SelectItem,
   RadioButtonGroup,
   RadioButton,
-  FilterableMultiSelect,
   ComboBox,
   InlineNotification,
   Loading,
@@ -23,6 +22,7 @@ import {
 import { ArrowLeft, Close, Save } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import useExtensions from '../hooks/useExtensions';
+import { useNamespaces } from '../context/NamespaceContext';
 import DashboardPickerModal from '../components/DashboardPickerModal';
 import { Dropdown } from '@carbon/react';
 import { candidateLabel } from '../utils/tagValueByPrefix';
@@ -46,13 +46,17 @@ function TsStoreAlertRuleEditorPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { isEnabled, loading: extLoading } = useExtensions();
+  const { activeNamespace } = useNamespaces();
 
   // Form state.
   const [connections, setConnections] = useState([]);
   const [connectionsLoading, setConnectionsLoading] = useState(true);
   // Namespace filter — empty array means "show all" (the default).
   // Populating it narrows the connection list to those namespaces.
-  const [namespaceFilter, setNamespaceFilter] = useState([]);
+  // Single-select namespace scope for the connection picker ('' = all).
+  // Deliberately NOT a multiselect: choosing the namespace to work in is a
+  // one-of choice here, and the count-pill UX read as broken.
+  const [namespaceFilter, setNamespaceFilter] = useState('');
   const [connectionId, setConnectionId] = useState('');
   // #248: target store for an ENDPOINT-SCOPED connection (no pinned
   // store_name) — required there; a pinned connection's rule always
@@ -150,6 +154,17 @@ function TsStoreAlertRuleEditorPage() {
         if (cancelled) return;
         setConnections(ts?.connections || []);
         setMqttConnections(mq?.connections || []);
+        // Default the namespace filter to the user's ACTIVE namespace (the
+        // header picker) — but only when it actually contains a tsstore
+        // connection (an empty pre-filtered dropdown reads as broken), and
+        // never when cloning (the source rule's connection may live in
+        // another namespace and must stay selectable).
+        if (!location.state?.cloneFrom && activeNamespace) {
+          const namespaces = new Set((ts?.connections || []).map((c) => c.namespace || 'default'));
+          if (namespaces.has(activeNamespace)) {
+            setNamespaceFilter(activeNamespace);
+          }
+        }
       } catch (err) {
         if (cancelled) return;
         setError(`Failed to load connections: ${err.message || err}`);
@@ -158,6 +173,10 @@ function TsStoreAlertRuleEditorPage() {
       }
     })();
     return () => { cancelled = true; };
+    // Mount-once by design: activeNamespace/cloneFrom only seed the INITIAL
+    // filter — re-running on namespace switch mid-form would clobber the
+    // user's own filter choice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // "From Existing" prefill (#152): seed the form from a source rule passed via
@@ -330,9 +349,8 @@ function TsStoreAlertRuleEditorPage() {
   };
 
   const visibleConnections = useMemo(() => {
-    if (!namespaceFilter || namespaceFilter.length === 0) return connections;
-    const set = new Set(namespaceFilter);
-    return connections.filter((c) => set.has(c.namespace || 'default'));
+    if (!namespaceFilter) return connections;
+    return connections.filter((c) => (c.namespace || 'default') === namespaceFilter);
   }, [connections, namespaceFilter]);
 
   // Distinct namespace values across loaded tsstore connections.
@@ -537,14 +555,14 @@ function TsStoreAlertRuleEditorPage() {
               <>
                 <div className="connection-row">
                   <div className="namespace-filter-cell">
-                    <FilterableMultiSelect
+                    <Dropdown
                       id="rule-namespace-filter"
                       titleText="Namespace"
-                      items={namespaceOptions}
-                      itemToString={(s) => s || ''}
-                      selectedItems={namespaceFilter}
-                      onChange={({ selectedItems }) => setNamespaceFilter(selectedItems || [])}
-                      placeholder="All"
+                      label="All"
+                      items={['', ...namespaceOptions]}
+                      itemToString={(ns) => (ns === '' ? 'All' : ns)}
+                      selectedItem={namespaceFilter}
+                      onChange={({ selectedItem }) => setNamespaceFilter(selectedItem || '')}
                       size="md"
                     />
                   </div>
@@ -589,7 +607,6 @@ function TsStoreAlertRuleEditorPage() {
                             items={storeOptions.map((st) => st.name)}
                             selectedItem={storeName || null}
                             onChange={({ selectedItem }) => setStoreName(selectedItem || '')}
-                            helperText={storeName ? undefined : 'Required — this connection is endpoint-scoped'}
                           />
                         )
                       ) : (
@@ -599,7 +616,7 @@ function TsStoreAlertRuleEditorPage() {
                           placeholder="store name"
                           value={storeName}
                           onChange={(e) => setStoreName(e.target.value)}
-                          helperText="Required — store list unavailable, enter the name"
+                          placeholder="store name (list unavailable)"
                         />
                       )}
                     </div>
@@ -950,7 +967,7 @@ function TsStoreAlertRuleEditorPage() {
         onClose={() => setPickerOpen(false)}
         currentId={dashboardId || null}
         defaultConnectionId={connectionId || ''}
-        defaultNamespaces={namespaceFilter}
+        defaultNamespaces={namespaceFilter ? [namespaceFilter] : []}
         onSelect={(d) => {
           setDashboardRecord(d);
           setDashboardId(d.id);

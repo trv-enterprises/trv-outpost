@@ -3,6 +3,7 @@
 // See LICENSE file for details.
 
 @use '@carbon/react/scss/spacing' as spacing;
+@use './design-editor-form' as editor-form;
 
 .connection-detail-page {
   background-color: var(--cds-background);
@@ -87,99 +88,12 @@
       }
     }
 
-    // Unified form field styling - applies to all fields in form
-    .cds--label {
-      color: #c6c6c6 !important;
-      margin-bottom: spacing.$spacing-02;
-      font-weight: 400;
-      font-size: 0.875rem;
-    }
-
-    .cds--text-input {
-      background-color: #262626 !important;
-      color: #f4f4f4 !important;
-      border: none !important;
-      border-bottom: 1px solid #525252 !important;
-
-      &:focus {
-        outline: 2px solid var(--cds-focus);
-        outline-offset: -2px;
-      }
-    }
-
-    .cds--text-area {
-      background-color: #262626 !important;
-      color: #f4f4f4 !important;
-      border: 1px solid #525252 !important;
-
-      &:focus {
-        outline: 2px solid var(--cds-focus);
-        outline-offset: -2px;
-      }
-    }
-
-    .cds--select-input {
-      background-color: #262626 !important;
-      color: #f4f4f4 !important;
-      border: none !important;
-      border-bottom: 1px solid #525252 !important;
-      padding-right: 2.5rem !important; // Make room for the dropdown arrow
-
-      &:focus {
-        outline: 2px solid var(--cds-focus);
-        outline-offset: -2px;
-      }
-    }
-
-    // Position the select dropdown arrow properly
-    .cds--select__arrow {
-      right: 1rem;
-      fill: #c6c6c6;
-    }
+    // Unified form field styling — shared with the other Design editors
+    // (alert pages) via the design-editor-form partial.
+    @include editor-form.design-editor-fields;
 
     .cds--select {
       max-width: 400px;
-    }
-
-    // Number input styling
-    .cds--number-input,
-    .cds--number {
-      input[type="number"] {
-        background-color: #262626 !important;
-        color: #f4f4f4 !important;
-        border: none !important;
-        border-bottom: 1px solid #525252 !important;
-
-        &:focus {
-          outline: 2px solid var(--cds-focus);
-          outline-offset: -2px;
-        }
-      }
-    }
-
-    .cds--number__controls,
-    .cds--number-input__controls {
-      button {
-        background-color: #393939 !important;
-        border-left: 1px solid #525252 !important;
-        color: #f4f4f4 !important;
-
-        &:hover {
-          background-color: #525252 !important;
-        }
-
-        svg {
-          fill: #f4f4f4 !important;
-        }
-      }
-    }
-
-    .cds--checkbox-label {
-      color: #c6c6c6;
-    }
-
-    .cds--form__helper-text {
-      color: #8d8d8d;
     }
   }
 

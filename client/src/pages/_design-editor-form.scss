@@ -1,0 +1,144 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+// Shared form styling for the Design editors (connection editor, alert
+// pages, …) — the single source of the "filled field on g100" look:
+// #262626 input tiles with a bottom border, muted labels, helper-text
+// hierarchy, and uppercase section headers. Extracted from
+// ConnectionDetailPage.scss (the reference design, per the 2026-08-15
+// alert-UI consistency ask) so new editor-style pages inherit the same
+// language instead of re-deriving it.
+
+@use '@carbon/react/scss/spacing' as spacing;
+
+// Field styling for every Carbon input inside an editor form body.
+// Apply inside the page's scrolling form container.
+@mixin design-editor-fields {
+  .cds--label {
+    color: #c6c6c6 !important;
+    margin-bottom: spacing.$spacing-02;
+    font-weight: 400;
+    font-size: 0.875rem;
+  }
+
+  .cds--text-input {
+    background-color: #262626 !important;
+    color: #f4f4f4 !important;
+    border: none !important;
+    border-bottom: 1px solid #525252 !important;
+
+    &:focus {
+      outline: 2px solid var(--cds-focus);
+      outline-offset: -2px;
+    }
+  }
+
+  .cds--text-area {
+    background-color: #262626 !important;
+    color: #f4f4f4 !important;
+    border: 1px solid #525252 !important;
+
+    &:focus {
+      outline: 2px solid var(--cds-focus);
+      outline-offset: -2px;
+    }
+  }
+
+  .cds--select-input {
+    background-color: #262626 !important;
+    color: #f4f4f4 !important;
+    border: none !important;
+    border-bottom: 1px solid #525252 !important;
+    padding-right: 2.5rem !important; // Make room for the dropdown arrow
+
+    &:focus {
+      outline: 2px solid var(--cds-focus);
+      outline-offset: -2px;
+    }
+  }
+
+  .cds--select__arrow {
+    right: 1rem;
+    fill: #c6c6c6;
+  }
+
+  // ComboBox / Dropdown (Downshift-based) — same filled-tile treatment.
+  .cds--list-box,
+  .cds--combo-box {
+    background-color: #262626 !important;
+    border-bottom: 1px solid #525252 !important;
+
+    input {
+      background-color: transparent !important;
+      color: #f4f4f4 !important;
+    }
+  }
+
+  .cds--number-input,
+  .cds--number {
+    input[type='number'] {
+      background-color: #262626 !important;
+      color: #f4f4f4 !important;
+      border: none !important;
+      border-bottom: 1px solid #525252 !important;
+
+      &:focus {
+        outline: 2px solid var(--cds-focus);
+        outline-offset: -2px;
+      }
+    }
+  }
+
+  .cds--number__controls,
+  .cds--number-input__controls {
+    button {
+      background-color: #393939 !important;
+      border-left: 1px solid #525252 !important;
+      color: #f4f4f4 !important;
+
+      &:hover {
+        background-color: #525252 !important;
+      }
+
+      svg {
+        fill: #f4f4f4 !important;
+      }
+    }
+  }
+
+  .cds--checkbox-label {
+    color: #c6c6c6;
+  }
+
+  .cds--form__helper-text {
+    color: #8d8d8d;
+  }
+}
+
+// Uppercase mini-header treatment for form sections — the CONFIGURATION
+// header style. Applied to FormGroup legends so fieldset-based editor
+// pages get the section hierarchy without restructuring their JSX.
+@mixin design-editor-sections {
+  .cds--fieldset {
+    margin-bottom: 0;
+    padding-top: spacing.$spacing-05;
+    border-top: 1px solid #393939;
+
+    // First section flows straight from the page intro — no separator.
+    &:first-of-type {
+      border-top: none;
+      padding-top: 0;
+    }
+
+    > legend.cds--label,
+    > .cds--label:first-child {
+      color: #f4f4f4 !important;
+      font-size: 0.875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: spacing.$spacing-05;
+    }
+  }
+}
