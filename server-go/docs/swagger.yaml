@@ -4376,6 +4376,17 @@ definitions:
         type: string
       alerts_fired:
         type: integer
+      can_manage:
+        description: |-
+          CanManage reports whether this row's rule can be administered
+          (deleted, later edited) through at least one of the listed
+          connections. Since ts-store v0.20.3 alert READS are read-classed, a
+          read-only key can see rules it cannot touch — the UI renders those
+          rows view-only instead of offering a delete that would 403 (#248
+          follow-on). Pinned connections report true (status quo: their grant
+          posture isn't enumerated; a genuinely under-granted key surfaces as
+          a per-operation error exactly as before).
+        type: boolean
       condition:
         type: string
       connection_count:
