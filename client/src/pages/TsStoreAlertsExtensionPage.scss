@@ -5,6 +5,14 @@
 @use '@carbon/react/scss/spacing' as spacing;
 
 .tsstore-alerts-extension-page {
+  // Same scroll model as the other Design list pages (connections-page):
+  // the page owns its height, the header stays fixed, and .page-body is
+  // the scroll container. Without this the page relied on a parent that
+  // never scrolls, so a long rule list was simply clipped.
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
   padding: spacing.$spacing-07;
   color: var(--cds-text-primary);
 
@@ -12,7 +20,14 @@
     color: var(--cds-text-helper);
   }
 
+  .page-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
   .page-header {
+    flex-shrink: 0;
     margin-bottom: spacing.$spacing-06;
 
     h1 {
