@@ -50,9 +50,18 @@ The new-rule wizard walks through:
    carries this through its `external_ref` field; the dashboard
    resolves the ID to a name in the table.
 
+**Endpoint-scoped connections** (a ts-store connection with no
+pinned store — see [Connection types](connection-types.md#ts-store))
+add a **Store** picker next to the connection: the rule registers on
+the store you choose, and the picker lists only the stores the
+connection's key can *manage* — alert administration is a per-store
+`manage` grant under ts-store's scoped keys, so a read-only dashboard
+key shows an empty picker with an explanation. A connection pinned to
+one store registers rules on that store, as always, with no picker.
+
 Before submitting, the wizard runs a quick auth probe against the
-chosen ts-store connection. If the connection's stored API key
-doesn't pass ts-store's auth middleware, the submit button is
+chosen ts-store connection (and store). If the connection's stored
+API key doesn't pass ts-store's auth middleware, the submit button is
 disabled with an explanation — saves you from a 401 surprise after
 filling out the whole form.
 

@@ -384,6 +384,12 @@ editor's Push section. Proposal: **stage it.**
 
 ## 6. tsstore-alerts extension
 
+> Implemented in PR 3 as specified, with one narrowing: the schema store
+> param landed as `GET /api/connections/:id/schema?store=` via a new
+> `GetSchemaForStore` (existing AI/MCP callers keep the store-less
+> signature and get the adapter's clear error on endpoint-scoped
+> connections until they adopt the param).
+
 Rule identity becomes `(connection_id, store, alert_id)` **[decided in
 issue]**. Mechanics **[proposed]**:
 

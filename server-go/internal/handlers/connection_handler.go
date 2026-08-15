@@ -426,6 +426,7 @@ func (h *ConnectionHandler) QueryConnection(c *gin.Context) {
 // @Tags connections
 // @Produce json
 // @Param id path string true "Connection ID"
+// @Param store query string false "Target store for endpoint-scoped tsstore connections (#248); ignored otherwise"
 // @Success 200 {object} models.SchemaResponse
 // @Failure 400 {object} map[string]interface{}
 // @Failure 403 {object} map[string]interface{} "namespace not granted"
@@ -434,7 +435,7 @@ func (h *ConnectionHandler) QueryConnection(c *gin.Context) {
 func (h *ConnectionHandler) GetConnectionSchema(c *gin.Context) {
 	id := c.Param("id")
 
-	response, err := h.service.GetSchema(c.Request.Context(), id)
+	response, err := h.service.GetSchemaForStore(c.Request.Context(), id, c.Query("store"))
 	if err != nil {
 		// #4: a namespace-grant miss is a 403, not a bad request.
 		if respondIfNamespaceForbidden(c, err) {

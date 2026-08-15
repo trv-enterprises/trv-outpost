@@ -446,7 +446,7 @@ dashboard/
 | GET | `/api/registry/catalog.md` | Same catalog rendered as markdown for LLM prompts |
 | **Extensions** — optional, admin-gated. Each route group sits behind `RequireExtensionEnabled` middleware that 403s when the matching `extensions.<name>.enabled` setting is off. |||
 | GET | `/api/tsstore-alerts/rules` | Aggregated alert-rule list across every tsstore connection |
-| GET | `/api/tsstore-alerts/rules/:alert_id` | Single alert detail (requires `connection_id` query param) |
+| GET | `/api/tsstore-alerts/rules/:alert_id` | Single alert detail (requires `connection_id` query param; `store` required for endpoint-scoped connections — #248) |
 | POST | `/api/tsstore-alerts/rules` | Create a new alert rule (webhook or MQTT transport) |
 | DELETE | `/api/tsstore-alerts/rules/:alert_id` | Delete an alert (and ALL its rules — ts-store has no per-rule delete) |
 | GET | `/api/tsstore-alerts/probe` | Auth probe used by the rule-create wizard |

@@ -2839,6 +2839,12 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Target store for endpoint-scoped tsstore connections (#248); ignored otherwise",
+                        "name": "store",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -6750,6 +6756,12 @@ const docTemplate = `{
                         "name": "connection_id",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Target store (required for endpoint-scoped connections; ignored when the connection pins a store)",
+                        "name": "store",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -6897,6 +6909,12 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
+                        "description": "Target store (required for endpoint-scoped connections; ignored when the connection pins a store)",
+                        "name": "store",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
                         "description": "Alert ID",
                         "name": "alert_id",
                         "in": "path",
@@ -6953,6 +6971,12 @@ const docTemplate = `{
                         "name": "connection_id",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Target store (required for endpoint-scoped connections; ignored when the connection pins a store)",
+                        "name": "store",
+                        "in": "query"
                     },
                     {
                         "type": "string",
@@ -13055,6 +13079,10 @@ const docTemplate = `{
                     "description": "MQTT-sink fields (type=mqtt):\nSinkConnectionID is an MQTT-type connection record from which\nbroker_url + username + password are harvested. Topic + QoS\ncome from the rule directly (ts-store models topic as a\nper-rule field; an MQTT connection record is just the broker).",
                     "type": "string"
                 },
+                "store_name": {
+                    "description": "StoreName targets the rule's store on an ENDPOINT-SCOPED connection\n(required there; ignored when the connection pins a store — the pin\nwins, same as every other alerts operation). (#248)",
+                    "type": "string"
+                },
                 "timeout": {
                     "description": "Webhook-sink fields (type=webhook):\nTimeout applies only to the webhook block. Optional override is\nfor callers who want to deliver to an external URL instead of\nthe dashboard's bell receiver (no secret minted in that case).",
                     "type": "string"
@@ -13211,6 +13239,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "error": {
+                    "type": "string"
+                },
+                "store_name": {
+                    "description": "StoreName scopes the failure when it is per-store (an endpoint-scoped\nconnection fans out to several stores; one failing must not read as\nthe whole connection being down). Empty for connection-level failures\n(store enumeration itself, pinned-connection fetches).",
                     "type": "string"
                 }
             }

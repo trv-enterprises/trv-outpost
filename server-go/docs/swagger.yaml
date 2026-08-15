@@ -4319,6 +4319,12 @@ definitions:
           come from the rule directly (ts-store models topic as a
           per-rule field; an MQTT connection record is just the broker).
         type: string
+      store_name:
+        description: |-
+          StoreName targets the rule's store on an ENDPOINT-SCOPED connection
+          (required there; ignored when the connection pins a store — the pin
+          wins, same as every other alerts operation). (#248)
+        type: string
       timeout:
         description: |-
           Webhook-sink fields (type=webhook):
@@ -4454,6 +4460,13 @@ definitions:
       connection_name:
         type: string
       error:
+        type: string
+      store_name:
+        description: |-
+          StoreName scopes the failure when it is per-store (an endpoint-scoped
+          connection fans out to several stores; one failing must not read as
+          the whole connection being down). Empty for connection-level failures
+          (store enumeration itself, pinned-connection fetches).
         type: string
     type: object
   streaming.StreamStatus:
@@ -6403,6 +6416,11 @@ paths:
         in: path
         name: id
         required: true
+        type: string
+      - description: Target store for endpoint-scoped tsstore connections (#248);
+          ignored otherwise
+        in: query
+        name: store
         type: string
       produces:
       - application/json
@@ -9182,6 +9200,11 @@ paths:
         name: connection_id
         required: true
         type: string
+      - description: Target store (required for endpoint-scoped connections; ignored
+          when the connection pins a store)
+        in: query
+        name: store
+        type: string
       produces:
       - application/json
       responses:
@@ -9283,6 +9306,11 @@ paths:
         name: connection_id
         required: true
         type: string
+      - description: Target store (required for endpoint-scoped connections; ignored
+          when the connection pins a store)
+        in: query
+        name: store
+        type: string
       - description: Alert ID
         in: path
         name: alert_id
@@ -9321,6 +9349,11 @@ paths:
         in: query
         name: connection_id
         required: true
+        type: string
+      - description: Target store (required for endpoint-scoped connections; ignored
+          when the connection pins a store)
+        in: query
+        name: store
         type: string
       - description: Alert ID
         in: path

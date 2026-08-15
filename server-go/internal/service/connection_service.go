@@ -1787,6 +1787,15 @@ func (s *ConnectionService) ListConnectionStores(ctx context.Context, id string)
 // GetSchema retrieves schema information for a connection that supports it
 // Only SQL connections implement SchemaProvider; others return an error
 func (s *ConnectionService) GetSchema(ctx context.Context, id string) (*models.SchemaResponse, error) {
+	return s.GetSchemaForStore(ctx, id, "")
+}
+
+// GetSchemaForStore is GetSchema with an explicit target store for
+// endpoint-scoped tsstore connections (#248): the alerts wizard's field
+// discovery and the component editor need per-store columns. store is
+// ignored for every other connection type and for pinned tsstore
+// connections (the pin wins).
+func (s *ConnectionService) GetSchemaForStore(ctx context.Context, id, store string) (*models.SchemaResponse, error) {
 	// Get connection configuration
 	ds, err := s.findAuthorized(ctx, id)
 	if err != nil {
@@ -1806,7 +1815,7 @@ func (s *ConnectionService) GetSchema(ctx context.Context, id string) (*models.S
 	// for both WS-transport and REST-transport tsstore connections since
 	// the schema fetch hits the same REST endpoint either way.
 	if ds.Type == models.ConnectionTypeTSStore {
-		return s.getTSStoreSchema(ctx, ds)
+		return s.getTSStoreSchema(ctx, ds, store)
 	}
 
 	// Synology: DSM has no schema endpoint, so sample a small fixed set of
@@ -2124,7 +2133,7 @@ func (s *ConnectionService) getPrometheusSchema(ctx context.Context, ds *models.
 // Works identically for streaming-transport and REST-transport tsstore
 // connections because both point at the same ts-store backend (host+port+
 // store_name) and reach the same REST endpoint for the sample fetch.
-func (s *ConnectionService) getTSStoreSchema(ctx context.Context, ds *models.Connection) (*models.SchemaResponse, error) {
+func (s *ConnectionService) getTSStoreSchema(ctx context.Context, ds *models.Connection, store string) (*models.SchemaResponse, error) {
 	startTime := time.Now()
 
 	if ds.Config.TSStore == nil {
@@ -2135,17 +2144,28 @@ func (s *ConnectionService) getTSStoreSchema(ctx context.Context, ds *models.Con
 		}, nil
 	}
 
+	// Effective store for labels: the pin wins; else the caller's store
+	// (endpoint-scoped, #248). The sample query below enforces the same
+	// rule adapter-side — an endpoint-scoped call without a store gets the
+	// adapter's clear "no store selected" error.
+	effStore := ds.Config.TSStore.StoreName
+	if effStore == "" {
+		effStore = strings.TrimSpace(store)
+	}
+
 	dataType := string(ds.Config.TSStore.DataType)
 
 	// "text" stores have no field structure. Friendlier than returning an
-	// empty-string-equals-json fallthrough.
-	if dataType == "text" {
+	// empty-string-equals-json fallthrough. (Pinned connections only — an
+	// endpoint-scoped connection resolves data type per store at query
+	// time and takes the sample path.)
+	if dataType == "text" && ds.Config.TSStore.StoreName != "" {
 		return &models.SchemaResponse{
 			Success: true,
 			Schema: &models.SchemaInfo{
-				Database: ds.Config.TSStore.StoreName,
+				Database: effStore,
 				Tables: []models.TableInfo{{
-					Name:    ds.Config.TSStore.StoreName,
+					Name:    effStore,
 					Columns: []models.ColumnInfo{},
 				}},
 			},
@@ -2167,9 +2187,13 @@ func (s *ConnectionService) getTSStoreSchema(ctx context.Context, ds *models.Con
 	}
 	defer tsDS.Close()
 
+	sampleParams := map[string]interface{}{"limit": 10}
+	if store != "" {
+		sampleParams["store"] = store // ignored when the connection pins a store
+	}
 	rs, err := tsDS.Query(ctx, models.Query{
 		Raw:    "newest",
-		Params: map[string]interface{}{"limit": 10},
+		Params: sampleParams,
 	})
 	if err != nil {
 		return &models.SchemaResponse{
@@ -2188,9 +2212,9 @@ func (s *ConnectionService) getTSStoreSchema(ctx context.Context, ds *models.Con
 	return &models.SchemaResponse{
 		Success: true,
 		Schema: &models.SchemaInfo{
-			Database: ds.Config.TSStore.StoreName,
+			Database: effStore,
 			Tables: []models.TableInfo{{
-				Name:    ds.Config.TSStore.StoreName,
+				Name:    effStore,
 				Columns: columns,
 			}},
 		},

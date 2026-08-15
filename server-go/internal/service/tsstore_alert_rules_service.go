@@ -20,9 +20,25 @@ import (
 	"github.com/google/uuid"
 	"github.com/trv-enterprises/trve-dashboard/internal/connection"
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
+	"github.com/trv-enterprises/trve-dashboard/internal/registry"
 	"github.com/trv-enterprises/trve-dashboard/internal/repository"
 	"github.com/trv-enterprises/trve-dashboard/internal/streaming"
 )
+
+// resolveAlertStore returns the store an alerts operation targets: the
+// connection's pin when set (a caller-supplied store is ignored — the same
+// pin-wins rule as the query adapters, so a stale client param can't
+// reroute an operation), else the caller-supplied store. Endpoint-scoped
+// operations without a store are refused with an actionable error (#248).
+func resolveAlertStore(cfg *models.TSStoreConfig, store string) (string, error) {
+	if cfg.StoreName != "" {
+		return cfg.StoreName, nil
+	}
+	if s := strings.TrimSpace(store); s != "" {
+		return s, nil
+	}
+	return "", fmt.Errorf("endpoint-scoped tsstore connection: a store is required for alert operations (pass store, or pin one on the connection)")
+}
 
 // fanoutTimeoutSeconds caps each individual fan-out request so one
 // slow tsstore can't blank the whole list. Lower than the per-conn
@@ -132,7 +148,12 @@ type TSStoreAggregatedRule struct {
 type TSStoreFetchError struct {
 	ConnectionID   string `json:"connection_id"`
 	ConnectionName string `json:"connection_name"`
-	Error          string `json:"error"`
+	// StoreName scopes the failure when it is per-store (an endpoint-scoped
+	// connection fans out to several stores; one failing must not read as
+	// the whole connection being down). Empty for connection-level failures
+	// (store enumeration itself, pinned-connection fetches).
+	StoreName string `json:"store_name,omitempty"`
+	Error     string `json:"error"`
 }
 
 // TSStoreAggregatedRulesResponse is the wire shape for the list endpoint.
@@ -157,44 +178,76 @@ func (s *TSStoreAlertRulesService) ListAll(ctx context.Context) (*TSStoreAggrega
 		return nil, fmt.Errorf("list tsstore connections: %w", err)
 	}
 
-	// Group connections by ts-store backend identity. Two dashboard
-	// connections that resolve to the same (base URL, store name) share
-	// the same alert resources — they're different views of the same
-	// data, and listing each separately produces phantom duplicates.
-	type backendKey struct {
-		BaseURL   string
-		StoreName string
-	}
-	groups := map[backendKey][]*models.Connection{}
-	groupOrder := []backendKey{}
-	for _, conn := range conns {
-		if conn.Config.TSStore == nil {
-			continue
-		}
-		// #248 PR 1: endpoint-scoped connections (no pinned store) are
-		// skipped — alert rules are store-scoped, and the per-store fan-out
-		// for endpoint-scoped connections lands with the alerts rework
-		// (PR 3). Pinned connections behave exactly as before.
-		if conn.Config.TSStore.StoreName == "" {
-			continue
-		}
-		k := backendKey{BaseURL: conn.Config.TSStore.BaseURL(), StoreName: conn.Config.TSStore.StoreName}
-		if _, seen := groups[k]; !seen {
-			groupOrder = append(groupOrder, k)
-		}
-		groups[k] = append(groups[k], conn)
-	}
-
 	resp := &TSStoreAggregatedRulesResponse{
 		Rules:  []TSStoreAggregatedRule{},
 		Errors: []TSStoreFetchError{},
 	}
 
 	var mu sync.Mutex
-	var wg sync.WaitGroup
 
+	// Group connections by ts-store backend identity — one group per
+	// (base URL, STORE), not per connection (#248): a pinned connection
+	// contributes its one pinned store exactly as before; an
+	// endpoint-scoped connection fans out to every store its key holds
+	// MANAGE on (alert list/CRUD are manage-classed in ts-store, so a
+	// manage-granted store is precisely one whose alerts this connection
+	// can see and edit). Two dashboard connections resolving to the same
+	// (base URL, store) still collapse into one row set — different views
+	// of the same alert resources.
+	type backendKey struct {
+		BaseURL   string
+		StoreName string
+	}
+	groups := map[backendKey][]*models.Connection{}
+	groupOrder := []backendKey{}
+	var groupMu sync.Mutex
+	addToGroup := func(k backendKey, conn *models.Connection) {
+		groupMu.Lock()
+		defer groupMu.Unlock()
+		if _, seen := groups[k]; !seen {
+			groupOrder = append(groupOrder, k)
+		}
+		groups[k] = append(groups[k], conn)
+	}
+
+	// Store enumeration for endpoint-scoped connections is a network call
+	// per connection, so it runs in the same parallel style as the rule
+	// fetches below. Enumeration failure surfaces as a connection-level
+	// error (StoreName empty) rather than silently dropping the connection.
+	var enumWG sync.WaitGroup
+	for _, conn := range conns {
+		if conn.Config.TSStore == nil {
+			continue
+		}
+		if conn.Config.TSStore.StoreName != "" {
+			addToGroup(backendKey{BaseURL: conn.Config.TSStore.BaseURL(), StoreName: conn.Config.TSStore.StoreName}, conn)
+			continue
+		}
+		enumWG.Add(1)
+		go func(conn *models.Connection) {
+			defer enumWG.Done()
+			stores, err := manageableStores(ctx, conn)
+			if err != nil {
+				mu.Lock()
+				resp.Errors = append(resp.Errors, TSStoreFetchError{
+					ConnectionID:   conn.ID,
+					ConnectionName: conn.Name,
+					Error:          fmt.Sprintf("store enumeration: %v", err),
+				})
+				mu.Unlock()
+				return
+			}
+			for _, st := range stores {
+				addToGroup(backendKey{BaseURL: conn.Config.TSStore.BaseURL(), StoreName: st}, conn)
+			}
+		}(conn)
+	}
+	enumWG.Wait()
+
+	var wg sync.WaitGroup
 	for _, k := range groupOrder {
 		members := groups[k]
+		store := k.StoreName
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -208,7 +261,7 @@ func (s *TSStoreAlertRulesService) ListAll(ctx context.Context) (*TSStoreAggrega
 				})
 			}
 
-			rules, ferr := s.fetchRulesForConnection(ctx, primary)
+			rules, ferr := s.fetchRulesForConnection(ctx, primary, store)
 			mu.Lock()
 			defer mu.Unlock()
 			if ferr != nil {
@@ -226,6 +279,7 @@ func (s *TSStoreAlertRulesService) ListAll(ctx context.Context) (*TSStoreAggrega
 				resp.Errors = append(resp.Errors, TSStoreFetchError{
 					ConnectionID:   primary.ID,
 					ConnectionName: primary.Name,
+					StoreName:      store,
 					Error:          errMsg,
 				})
 				return
@@ -240,6 +294,89 @@ func (s *TSStoreAlertRulesService) ListAll(ctx context.Context) (*TSStoreAggrega
 	wg.Wait()
 
 	return resp, nil
+}
+
+// manageSetTTL bounds how long an endpoint-scoped connection's manage-granted
+// store set is trusted for webhook routing validation. Grant changes on the
+// ts-store side are rare; 5 minutes keeps the check near-free per webhook
+// while bounding staleness.
+const manageSetTTL = 5 * time.Minute
+
+var manageSetCache = struct {
+	sync.Mutex
+	entries map[string]manageSetEntry
+}{entries: map[string]manageSetEntry{}}
+
+type manageSetEntry struct {
+	stores  map[string]bool
+	fetched time.Time
+}
+
+// ManageableStoreSet returns the (cached) set of stores an endpoint-scoped
+// tsstore connection's key holds MANAGE on, for webhook routing validation
+// (#248): an alert rule can only have been created on a manage-granted
+// store, so a payload naming any other store is misrouted — or a zombie
+// rule whose grant was since revoked. Returns an error only when there is
+// no cached value AND the refresh fails; the caller decides fail-open.
+func ManageableStoreSet(ctx context.Context, conn *models.Connection) (map[string]bool, error) {
+	manageSetCache.Lock()
+	if e, ok := manageSetCache.entries[conn.ID]; ok && time.Since(e.fetched) < manageSetTTL {
+		manageSetCache.Unlock()
+		return e.stores, nil
+	}
+	manageSetCache.Unlock()
+
+	stores, err := manageableStores(ctx, conn)
+	if err != nil {
+		// Serve a stale entry over failing when we have one — routing
+		// validation is defense-in-depth, not authz.
+		manageSetCache.Lock()
+		defer manageSetCache.Unlock()
+		if e, ok := manageSetCache.entries[conn.ID]; ok {
+			return e.stores, nil
+		}
+		return nil, err
+	}
+	set := make(map[string]bool, len(stores))
+	for _, st := range stores {
+		set[st] = true
+	}
+	manageSetCache.Lock()
+	manageSetCache.entries[conn.ID] = manageSetEntry{stores: set, fetched: time.Now()}
+	manageSetCache.Unlock()
+	return set, nil
+}
+
+// manageableStores lists the stores an endpoint-scoped connection's key
+// holds MANAGE on — under ts-store's scoped keys (v0.20+), alert CRUD is a
+// per-store manage grant, so this is exactly the set whose alerts the
+// connection can list and edit. Uses the adapter's StoreLister (the same
+// keyed GET /api/stores that backs the editor's store picker).
+func manageableStores(ctx context.Context, conn *models.Connection) ([]string, error) {
+	factory := connection.NewConnectionFactory()
+	ds, err := factory.CreateFromConfig(conn)
+	if err != nil {
+		return nil, err
+	}
+	defer ds.Close()
+	lister, ok := ds.(registry.StoreLister)
+	if !ok {
+		return nil, fmt.Errorf("connection does not support store discovery")
+	}
+	stores, err := lister.ListStores(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(stores))
+	for _, st := range stores {
+		for _, a := range st.Access {
+			if a == "manage" {
+				out = append(out, st.Name)
+				break
+			}
+		}
+	}
+	return out, nil
 }
 
 // tsStoreAlertStatus mirrors ts-store's GET /api/stores/:store/alerts
@@ -276,10 +413,10 @@ type tsStoreRuleConfig struct {
 // then loads each alert's detail to extract its rules. Two round-
 // trips per connection (list + N details). Acceptable for a Design-
 // mode page; can be cached if it becomes a hot path.
-func (s *TSStoreAlertRulesService) fetchRulesForConnection(ctx context.Context, conn *models.Connection) ([]TSStoreAggregatedRule, error) {
+func (s *TSStoreAlertRulesService) fetchRulesForConnection(ctx context.Context, conn *models.Connection, store string) ([]TSStoreAggregatedRule, error) {
 	cfg := conn.Config.TSStore
 	client := clientFor(cfg)
-	listURL := fmt.Sprintf("%s/api/stores/%s/alerts", cfg.BaseURL(), cfg.StoreName)
+	listURL := fmt.Sprintf("%s/api/stores/%s/alerts", cfg.BaseURL(), store)
 
 	var listResp struct {
 		Alerts []tsStoreAlertStatus `json:"alerts"`
@@ -290,7 +427,7 @@ func (s *TSStoreAlertRulesService) fetchRulesForConnection(ctx context.Context, 
 
 	out := []TSStoreAggregatedRule{}
 	for _, st := range listResp.Alerts {
-		detailURL := fmt.Sprintf("%s/api/stores/%s/alerts/%s", cfg.BaseURL(), cfg.StoreName, st.ID)
+		detailURL := fmt.Sprintf("%s/api/stores/%s/alerts/%s", cfg.BaseURL(), store, st.ID)
 		var detail tsStoreAlertDetail
 		if err := getJSON(ctx, client, detailURL, cfg.APIKey, &detail); err != nil {
 			// Skip just this alert; the rest of the connection's
@@ -323,7 +460,7 @@ func (s *TSStoreAlertRulesService) fetchRulesForConnection(ctx context.Context, 
 			ConnectionID:   conn.ID,
 			ConnectionName: conn.Name,
 			Namespace:      conn.Namespace,
-			StoreName:      cfg.StoreName,
+			StoreName:      store,
 			AlertID:        st.ID,
 			AlertType:      st.Type,
 			AlertTarget:    st.Target,
@@ -346,7 +483,7 @@ func (s *TSStoreAlertRulesService) fetchRulesForConnection(ctx context.Context, 
 // secret-bearing headers and the MQTT password — so the dashboard
 // doesn't have to mirror the full schema. Used by the read-only
 // rule-details page.
-func (s *TSStoreAlertRulesService) GetAlertDetail(ctx context.Context, connectionID, alertID string) (json.RawMessage, error) {
+func (s *TSStoreAlertRulesService) GetAlertDetail(ctx context.Context, connectionID, alertID, store string) (json.RawMessage, error) {
 	conn, err := s.connections.GetConnection(ctx, connectionID)
 	if err != nil {
 		return nil, fmt.Errorf("get connection: %w", err)
@@ -355,8 +492,12 @@ func (s *TSStoreAlertRulesService) GetAlertDetail(ctx context.Context, connectio
 		return nil, fmt.Errorf("connection %s is not a tsstore connection", connectionID)
 	}
 	cfg := conn.Config.TSStore
+	effStore, err := resolveAlertStore(cfg, store)
+	if err != nil {
+		return nil, err
+	}
 	client := clientFor(cfg)
-	url := fmt.Sprintf("%s/api/stores/%s/alerts/%s", cfg.BaseURL(), cfg.StoreName, alertID)
+	url := fmt.Sprintf("%s/api/stores/%s/alerts/%s", cfg.BaseURL(), effStore, alertID)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -385,7 +526,7 @@ func (s *TSStoreAlertRulesService) GetAlertDetail(ctx context.Context, connectio
 // list on a single alert), so the smallest unit the dashboard can
 // remove is one whole alert. The UI should call this out when the
 // user picks "delete a rule" on a multi-rule alert.
-func (s *TSStoreAlertRulesService) DeleteAlert(ctx context.Context, connectionID, alertID string) error {
+func (s *TSStoreAlertRulesService) DeleteAlert(ctx context.Context, connectionID, alertID, store string) error {
 	conn, err := s.connections.GetConnection(ctx, connectionID)
 	if err != nil {
 		return fmt.Errorf("get connection: %w", err)
@@ -394,8 +535,12 @@ func (s *TSStoreAlertRulesService) DeleteAlert(ctx context.Context, connectionID
 		return fmt.Errorf("connection %s is not a tsstore connection", connectionID)
 	}
 	cfg := conn.Config.TSStore
+	effStore, err := resolveAlertStore(cfg, store)
+	if err != nil {
+		return err
+	}
 	client := clientFor(cfg)
-	url := fmt.Sprintf("%s/api/stores/%s/alerts/%s", cfg.BaseURL(), cfg.StoreName, alertID)
+	url := fmt.Sprintf("%s/api/stores/%s/alerts/%s", cfg.BaseURL(), effStore, alertID)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
 	if err != nil {
@@ -475,7 +620,7 @@ type ProbeConnectionResult struct {
 // Never returns an error itself — every failure surfaces as
 // ProbeConnectionResult fields so the handler can return 200 with
 // a structured result.
-func (s *TSStoreAlertRulesService) ProbeConnectionAuth(ctx context.Context, connectionID string) ProbeConnectionResult {
+func (s *TSStoreAlertRulesService) ProbeConnectionAuth(ctx context.Context, connectionID, store string) ProbeConnectionResult {
 	conn, err := s.connections.GetConnection(ctx, connectionID)
 	if err != nil {
 		return ProbeConnectionResult{OK: false, Error: fmt.Sprintf("connection lookup: %v", err)}
@@ -484,7 +629,11 @@ func (s *TSStoreAlertRulesService) ProbeConnectionAuth(ctx context.Context, conn
 		return ProbeConnectionResult{OK: false, Error: "connection is not a tsstore connection"}
 	}
 	cfg := conn.Config.TSStore
-	url := fmt.Sprintf("%s/api/stores/%s/alerts", cfg.BaseURL(), cfg.StoreName)
+	effStore, err := resolveAlertStore(cfg, store)
+	if err != nil {
+		return ProbeConnectionResult{OK: false, Error: err.Error()}
+	}
+	url := fmt.Sprintf("%s/api/stores/%s/alerts", cfg.BaseURL(), effStore)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -522,10 +671,14 @@ func (s *TSStoreAlertRulesService) ProbeConnectionAuth(ctx context.Context, conn
 type CreateAlertRequest struct {
 	Type         string `json:"type" binding:"required"`          // "webhook" | "mqtt"
 	ConnectionID string `json:"connection_id" binding:"required"` // TSStore connection (rule owner)
-	RuleName     string `json:"rule_name" binding:"required"`
-	Condition    string `json:"condition" binding:"required"`
-	Cooldown     string `json:"cooldown,omitempty"`     // "5m" etc., ts-store duration
-	DashboardID  string `json:"dashboard_id,omitempty"` // optional bell deep-link target
+	// StoreName targets the rule's store on an ENDPOINT-SCOPED connection
+	// (required there; ignored when the connection pins a store — the pin
+	// wins, same as every other alerts operation). (#248)
+	StoreName   string `json:"store_name,omitempty"`
+	RuleName    string `json:"rule_name" binding:"required"`
+	Condition   string `json:"condition" binding:"required"`
+	Cooldown    string `json:"cooldown,omitempty"`     // "5m" etc., ts-store duration
+	DashboardID string `json:"dashboard_id,omitempty"` // optional bell deep-link target
 	// DashboardVars pre-scopes the deep-linked dashboard: variable name →
 	// value, appended to the bell link as ?var_<name>=<value> so the dashboard
 	// opens already scoped to the alert's context (e.g. the connection that
@@ -576,6 +729,13 @@ func (s *TSStoreAlertRulesService) CreateAlert(ctx context.Context, req *CreateA
 	}
 	if conn.Type != models.ConnectionTypeTSStore || conn.Config.TSStore == nil {
 		return nil, fmt.Errorf("connection %s is not a tsstore connection", req.ConnectionID)
+	}
+	// Resolve the target store up front — before any side effect (the
+	// webhook branch mints + persists a secret), so an endpoint-scoped
+	// request without a store fails clean.
+	effStore, err := resolveAlertStore(conn.Config.TSStore, req.StoreName)
+	if err != nil {
+		return nil, err
 	}
 
 	// Common top-level fields shared across every sink type.
@@ -679,7 +839,7 @@ func (s *TSStoreAlertRulesService) CreateAlert(ctx context.Context, req *CreateA
 	}
 
 	cfg := conn.Config.TSStore
-	createURL := fmt.Sprintf("%s/api/stores/%s/alerts", cfg.BaseURL(), cfg.StoreName)
+	createURL := fmt.Sprintf("%s/api/stores/%s/alerts", cfg.BaseURL(), effStore)
 	bodyBytes, err := json.Marshal(tsBody)
 	if err != nil {
 		return nil, fmt.Errorf("marshal ts-store body: %w", err)
