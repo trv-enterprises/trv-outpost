@@ -6,6 +6,38 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Alert rules can be edited in place.** The pencil on an alert row
+  opens the rule wizard prefilled from ts-store, and saving updates the
+  rule via ts-store's new `PUT /api/stores/:store/alerts/:id`
+  (ts-store#166, v0.20.3+). Unlike the delete-and-recreate this
+  replaces, an edit preserves the alert's id, `created_at`, its on-disk
+  poll cursor (so it resumes rather than replaying) and its fired
+  counter. Condition, cooldown, poll interval, restart policy, MQTT
+  topic/QoS and the dashboard deep-link are all editable.
+- Edit is offered only on rules the connection's key can **manage** —
+  view-only rows get a disabled pencil with an explanation, matching how
+  Delete already behaved (#257).
+
+### Changed
+
+- Everything that addresses a rule — connection, store, delivery type
+  and destination URL — is fixed once it exists and renders read-only
+  in edit mode. The update is sent to whichever ts-store the connection
+  points at; ts-store persists alerts per store (so a rule can't move
+  between them) and keeps the two transports in separate lists; and the
+  URL is held back because ts-store masks query-string credentials on
+  read and has no un-redact on write, so round-tripping a masked URL
+  would silently destroy a working credential. Changing any of them
+  means deleting the rule and creating a new one. What stays editable is
+  the rule's behavior: name, condition, cooldown, restart policy, MQTT
+  topic/QoS and the dashboard deep-link.
+- The destination URL displays with its credential masked (`********`),
+  matching the connection editor's treatment of secrets.
+
 ## [0.56.0] — 2026-08-15
 
 ### Added

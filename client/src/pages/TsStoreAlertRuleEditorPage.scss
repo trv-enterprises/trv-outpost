@@ -90,17 +90,33 @@
 
     .connection-row {
       display: flex;
-      align-items: flex-end;
+      // Top-aligned, NOT flex-end: the cells carry different amounts of
+      // helper text (and some carry none), so bottom-aligning staggers
+      // the labels and inputs down the row. Aligning at the top keeps
+      // every label and field on one line regardless of helper length.
+      align-items: flex-start;
       gap: spacing.$spacing-04;
 
-      .namespace-filter-cell {
-        flex: 0 0 220px;
-      }
-
+      // Connection takes two thirds, store the remaining third:
+      // connection names run long ("trv-srv-001-end-point-connection
+      // (trv-homelab)") while store names are short ("kitchen-env").
+      // min-width:0 on both so a long name truncates instead of
+      // forcing the row wider.
       .connection-cell {
-        flex: 1 1 auto;
+        flex: 2 1 0;
         min-width: 0;
       }
+
+      .store-cell {
+        flex: 1 1 0;
+        min-width: 0;
+      }
+    }
+
+    // Namespace sits in its own section above Store — it scopes which
+    // connections the picker offers rather than being part of the rule.
+    .namespace-section {
+      max-width: 320px;
     }
 
     .picker-help {

@@ -818,6 +818,7 @@ func main() {
 			tsstoreAlerts.GET("/rules", tsstoreAlertRulesHandler.ListAll)
 			tsstoreAlerts.GET("/rules/:alert_id", tsstoreAlertRulesHandler.GetAlertDetail)
 			tsstoreAlerts.POST("/rules", tsstoreAlertRulesHandler.Create)
+			tsstoreAlerts.PUT("/rules/:alert_id", tsstoreAlertRulesHandler.UpdateAlert)
 			tsstoreAlerts.DELETE("/rules/:alert_id", tsstoreAlertRulesHandler.DeleteAlert)
 			// Pre-submit probe used by the rule wizard.
 			tsstoreAlerts.GET("/probe", tsstoreAlertRulesHandler.ProbeAuth)

@@ -9400,6 +9400,50 @@ paths:
       summary: Get the full detail of a single ts-store alert on a tsstore connection
       tags:
       - TSStoreAlerts
+    put:
+      consumes:
+      - application/json
+      description: Optional extension endpoint — only mounted when the admin setting
+        `extensions.tsstore_alerts.enabled` is true. Returns 403 when the extension
+        is disabled.
+      parameters:
+      - description: Alert ID
+        in: path
+        name: alert_id
+        required: true
+        type: string
+      - description: Rule
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/service.CreateAlertRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Extension disabled
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update a ts-store alert rule in place
+      tags:
+      - TSStoreAlerts
   /users:
     get:
       description: Returns a paginated, optionally filtered + sorted list of users

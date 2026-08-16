@@ -3,7 +3,7 @@
 // See LICENSE file for details.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { Navigate, useNavigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import {
   Button,
   Form,
@@ -21,6 +21,7 @@ import {
 } from '@carbon/react';
 import { ArrowLeft, Close, Save } from '@carbon/icons-react';
 import apiClient from '../api/client';
+import { SECRET_MASKED_VALUE } from '../components/shared/SecretTextInput';
 import useExtensions from '../hooks/useExtensions';
 import { useNamespaces } from '../context/NamespaceContext';
 import DashboardPickerModal from '../components/DashboardPickerModal';
@@ -29,12 +30,15 @@ import { candidateLabel } from '../utils/tagValueByPrefix';
 import './TsStoreAlertRuleEditorPage.scss';
 
 /**
- * Create a webhook alert rule on a tsstore connection.
+ * Create OR edit a ts-store alert rule.
  *
- * v1 scope: webhook transport only (the path the dashboard's own
- * receiver consumes). WS / MQTT transports + multi-rule + edit-
- * existing all deferred — the wizard always creates one fresh
- * alert with exactly one rule.
+ * One form, two modes, chosen by the route: `/new` creates, while
+ * `/:connectionId/:alertId/edit` prefills from the live rule and PUTs
+ * (ts-store#166). Editing preserves the alert's id, created_at, poll
+ * cursor and fired counter, which delete-and-recreate destroys.
+ *
+ * Webhook + MQTT transports; WS is deliberately not offered (see the
+ * alertType state below).
  *
  * Auth model: the page POSTs to /api/tsstore-alerts/rules, which is
  * gated on Design capability. Backend mints a per-connection URL
@@ -47,6 +51,43 @@ function TsStoreAlertRuleEditorPage() {
   const location = useLocation();
   const { isEnabled, loading: extLoading } = useExtensions();
   const { activeNamespace } = useNamespaces();
+
+  // Edit mode (ts-store#166). The same form serves create and edit;
+  // the route decides which. Four things are fixed while editing —
+  // everything that addresses or routes the rule:
+  //   - CONNECTION: the PUT goes to the selected connection's own base
+  //     URL, so a connection on a different ts-store host would send
+  //     the edit where this alert id doesn't exist.
+  //   - STORE: ts-store persists alerts per store (webhook_alerts.json
+  //     in the store's own directory, one manager each), so the same
+  //     alert id against another store 404s. Moving = create + delete.
+  //   - TYPE: ts-store keeps webhook/mqtt in separate lists and rejects
+  //     a swap on PUT.
+  //   - SINK URL: ts-store redacts query-string credentials on read and
+  //     has no un-redact on write, so the server carries the stored URL
+  //     over rather than risk persisting a masked copy.
+  // What remains editable is the rule's BEHAVIOR: name, condition,
+  // cooldown, restart policy, MQTT topic/QoS, dashboard deep-link.
+  const { connectionId: routeConnectionId, alertId: routeAlertId } = useParams();
+  const [searchParams] = useSearchParams();
+  const isEditing = Boolean(routeAlertId);
+  // Mirror of isEditing for effects that must not re-run when it
+  // changes (it can't — the route is fixed for the page's lifetime).
+  const isEditingRef = useRef(isEditing);
+  // The rule's store. Carried in the QUERY STRING (like the view page's
+  // ?store=), not just router state, so a bookmarked or shared edit URL
+  // still resolves — an endpoint-scoped rule cannot be addressed without
+  // it, and the alert-detail response can't supply it (you need the
+  // store to make the request in the first place). Router state is
+  // accepted as a fallback for in-app navigations.
+  const editStore = searchParams.get('store') || location.state?.store || '';
+  const [editLoading, setEditLoading] = useState(Boolean(routeAlertId));
+  // Broker URL read off an MQTT alert during edit prefill, held until
+  // the MQTT connection list arrives so it can be mapped back to a
+  // connection id (ts-store stores the URL, not our id).
+  const [pendingSinkBroker, setPendingSinkBroker] = useState('');
+  // The alert's stored webhook URL, for display while editing.
+  const [webhookURL, setWebhookURL] = useState('');
 
   // Form state.
   const [connections, setConnections] = useState([]);
@@ -180,9 +221,12 @@ function TsStoreAlertRuleEditorPage() {
   }, []);
 
   // "From Existing" prefill (#152): seed the form from a source rule passed via
-  // router state. ts-store has no per-rule edit — this is create-with-prefill,
-  // so it also gives the copy a fresh default name (source + " copy") to avoid
-  // a same-name collision. Runs once on mount.
+  // router state. This is create-with-prefill — it deliberately makes a NEW
+  // rule, giving the copy a fresh default name (source + " copy") to avoid a
+  // same-name collision. Distinct from the edit path below, which preserves
+  // identity and PUTs. (Predates ts-store#166, which added in-place edit; both
+  // paths are useful — clone to fan one condition out to a second sink, edit to
+  // change an existing rule.) Runs once on mount.
   const clonedRef = useRef(false);
   useEffect(() => {
     const src = location.state?.cloneFrom;
@@ -216,6 +260,107 @@ function TsStoreAlertRuleEditorPage() {
      
   }, [location.state]);
 
+  // Edit-mode prefill (ts-store#166): seed every editable field from
+  // the alert as ts-store currently holds it. Distinct from the clone
+  // path above — that one deliberately renames and drops identity so
+  // the POST creates a NEW alert; this one preserves identity so the
+  // PUT edits the existing one in place.
+  // NOTE: deliberately NOT guarded by a "already ran" ref. Under
+  // StrictMode the effect runs twice in dev; a ref set before the
+  // fetch would be true on the second pass while the first pass had
+  // already been cancelled by its own teardown — so the fetch would
+  // never complete and the form would spin forever. The per-run
+  // `cancelled` flag is the correct guard here: the second pass
+  // re-fetches and its result is the one that lands.
+  useEffect(() => {
+    if (!isEditing) return undefined;
+    if (!routeConnectionId || !routeAlertId) return undefined;
+    let cancelled = false;
+    setEditLoading(true);
+    apiClient
+      .getTSStoreAlertDetail(routeConnectionId, routeAlertId, editStore || undefined)
+      .then(async (d) => {
+        if (cancelled) return;
+        const sink = d?.webhook || d?.mqtt || d?.ws || null;
+        setAlertType(d?.type || 'webhook');
+        setConnectionId(routeConnectionId);
+        // Safe to set directly: the store-list effect skips its reset
+        // in edit mode, so nothing races this.
+        if (editStore) setStoreName(editStore);
+        setRuleName(d?.rule_name || sink?.name || '');
+        setCondition(sink?.condition || '');
+        setCooldown(sink?.cooldown || '');
+        setRestartPolicy(sink?.restart_policy || 'now');
+        if (sink?.max_replay) setMaxReplay(sink.max_replay);
+        if (d?.webhook?.url) setWebhookURL(d.webhook.url);
+        if (d?.mqtt) {
+          // Topic is stored on the rule. Mark it dirty so the
+          // name-slug effect doesn't overwrite what's already stored.
+          setMqttTopic(d.mqtt.topic || '');
+          setMqttTopicDirty(true);
+          if (d.mqtt.qos != null) setMqttQos(String(d.mqtt.qos));
+          // ts-store records the broker URL, not our connection id, so
+          // map back by host. Compare host+port only: ts-store strips
+          // userinfo on read (redactURL), so a stored
+          // "mqtt://user:pass@host:1883" comes back as
+          // "mqtt://host:1883" and a raw string compare would miss.
+          // No match leaves the picker empty and the user re-picks —
+          // the submit guard already requires a sink connection.
+          setPendingSinkBroker(d.mqtt.broker_url || '');
+        }
+        // Dashboard deep link + variable pre-scoping, carried in
+        // external_ref exactly as the view page decodes it.
+        let ref = null;
+        try { ref = sink?.external_ref ? JSON.parse(sink.external_ref) : null; } catch { ref = null; }
+        if (ref?.dashboard_id) {
+          setDashboardId(ref.dashboard_id);
+          if (ref.dashboard_vars && typeof ref.dashboard_vars === 'object') {
+            setDashVarValues({ ...ref.dashboard_vars });
+          }
+          try {
+            const dash = await apiClient.getDashboard(ref.dashboard_id);
+            if (dash && !cancelled) {
+              setDashboardRecord(dash);
+              handleDashboardChosen(dash, ref.dashboard_vars);
+            }
+          } catch {
+            // Unknown dashboard — the link stays set, variables just
+            // won't render. Same soft-fail as the clone path.
+          }
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setError(`Could not load the rule: ${err?.message || err}`);
+      })
+      .finally(() => {
+        if (!cancelled) setEditLoading(false);
+      });
+    return () => { cancelled = true; };
+
+  }, [isEditing, routeConnectionId, routeAlertId, editStore]);
+
+  // Resolve an edit-prefilled broker URL to one of our MQTT connection
+  // records. Runs when either the pending URL or the connection list
+  // changes, since the prefill fetch and the connection fetch race.
+  // Match on host+port only — ts-store's read path strips userinfo from
+  // the stored URL, so the string we get back is not byte-identical to
+  // the connection's own broker_url.
+  useEffect(() => {
+    if (!pendingSinkBroker || mqttConnections.length === 0) return;
+    const hostOf = (u) => {
+      try {
+        const parsed = new URL(String(u).replace(/^mqtts?:\/\//, 'http://').replace(/^(tcp|ssl|tls|ws|wss):\/\//, 'http://'));
+        return `${parsed.hostname}:${parsed.port}`;
+      } catch {
+        return String(u || '');
+      }
+    };
+    const target = hostOf(pendingSinkBroker);
+    const hit = mqttConnections.find((c) => hostOf(c?.config?.mqtt?.broker_url) === target);
+    if (hit) setSinkConnectionId(hit.id);
+    setPendingSinkBroker('');
+  }, [pendingSinkBroker, mqttConnections]);
+
   // Prefill the MQTT topic from the rule name (slugified) until the
   // user manually edits the topic field. Keeps the topic in sync as
   // they type the name; once they touch the topic, we leave it alone.
@@ -235,7 +380,10 @@ function TsStoreAlertRuleEditorPage() {
   // per-store MANAGE grant, so only manage stores are offered; an empty
   // list means the key can't administer alerts anywhere.
   useEffect(() => {
-    setStoreName('');
+    // In edit mode the store is fixed and comes from the route, so
+    // don't clear it — the connection never changes here, and clearing
+    // would race the prefill.
+    if (!isEditingRef.current) setStoreName('');
     if (!connectionId || !isEndpointScoped) {
       setStoreOptions(null);
       return undefined;
@@ -348,10 +496,40 @@ function TsStoreAlertRuleEditorPage() {
     insertField(name, el ? { start: el.selectionStart, end: el.selectionEnd } : undefined);
   };
 
+  // Webhook destination, shown read-only while editing. Two different
+  // secrets can hide in this URL and both get the connection editor's
+  // mask notation rather than being displayed:
+  //   - ts-store redacts a QUERY-STRING credential on read, handing us
+  //     the literal "[redacted]".
+  //   - a dashboard-minted receiver URL carries its secret in the last
+  //     PATH segment, which ts-store does NOT redact — so we mask it
+  //     ourselves rather than print a live credential on screen.
+  const webhookURLRedacted = webhookURL.includes('[redacted]');
+  const displayWebhookURL = useMemo(() => {
+    if (!webhookURL) return '';
+    if (webhookURLRedacted) {
+      return webhookURL.replace(/\[redacted\]/g, SECRET_MASKED_VALUE);
+    }
+    return webhookURL.replace(
+      /(\/api\/webhooks\/tsstore\/[^/]+\/)[^/?#]+/,
+      `$1${SECRET_MASKED_VALUE}`,
+    );
+  }, [webhookURL, webhookURLRedacted]);
+
   const visibleConnections = useMemo(() => {
-    if (!namespaceFilter) return connections;
-    return connections.filter((c) => (c.namespace || 'default') === namespaceFilter);
-  }, [connections, namespaceFilter]);
+    // The namespace filter narrows this list for browsing, but it must
+    // never hide the selected connection: a <select> whose value matches
+    // no option renders BLANK. That's what made an edited rule look like
+    // its connection failed to load when the rule lived outside the
+    // active namespace. The current connection is always included,
+    // whatever namespace it belongs to.
+    const inFilter = namespaceFilter
+      ? connections.filter((c) => (c.namespace || 'default') === namespaceFilter)
+      : connections;
+    if (!connectionId || inFilter.some((c) => c.id === connectionId)) return inFilter;
+    const current = connections.find((c) => c.id === connectionId);
+    return current ? [current, ...inFilter] : inFilter;
+  }, [connections, namespaceFilter, connectionId]);
 
   // Distinct namespace values across loaded tsstore connections.
   // Treat empty / missing as the "default" namespace so the option
@@ -376,6 +554,10 @@ function TsStoreAlertRuleEditorPage() {
     condition.trim() &&
     mqttReady &&
     !submitting &&
+    // An edit whose prefill never completed would submit whatever
+    // partial state the form happens to hold — and a PUT is a full
+    // replace upstream, so that would clear real fields.
+    !editLoading &&
     probe && probe !== 'pending' && probe.ok === true;
 
   // When a target dashboard is chosen, load its supported variables
@@ -429,7 +611,7 @@ function TsStoreAlertRuleEditorPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await apiClient.createTSStoreAlertRule({
+      const payload = {
         type: alertType,
         connection_id: connectionId,
         store_name: isEndpointScoped ? storeName : undefined,
@@ -451,10 +633,18 @@ function TsStoreAlertRuleEditorPage() {
         sink_connection_id: alertType === 'mqtt' ? sinkConnectionId : undefined,
         mqtt_topic: alertType === 'mqtt' ? mqttTopic.trim() : undefined,
         mqtt_qos: alertType === 'mqtt' ? Number(mqttQos) : undefined,
-      });
+      };
+      if (isEditing) {
+        // PUT keeps the alert id, created_at, poll cursor and fired
+        // counter. The server carries the stored sink URL over — it is
+        // not part of this payload and cannot be edited here.
+        await apiClient.updateTSStoreAlertRule(routeAlertId, payload);
+      } else {
+        await apiClient.createTSStoreAlertRule(payload);
+      }
       navigate('/design/extensions/tsstore-alerts');
     } catch (err) {
-      setError(`Create failed: ${err.message || err}`);
+      setError(`${isEditing ? 'Update' : 'Create'} failed: ${err.message || err}`);
     } finally {
       setSubmitting(false);
     }
@@ -465,6 +655,14 @@ function TsStoreAlertRuleEditorPage() {
   }
   if (!isEnabled('tsstore_alerts')) {
     return <Navigate to="/design" replace />;
+  }
+  // Hold the form until the existing rule has been read, so an edit
+  // never renders half-populated fields the user might submit. The
+  // error case must fall THROUGH to the form below — otherwise a
+  // deleted rule or an unreachable host leaves the page spinning
+  // forever with nothing explaining why.
+  if (editLoading && !error) {
+    return <div className="tsstore-alert-rule-editor tsstore-alert-rule-editor--loading">Loading rule…</div>;
   }
 
   return (
@@ -483,7 +681,7 @@ function TsStoreAlertRuleEditorPage() {
           >
             Back
           </Button>
-          <h1>New ts-store alert rule</h1>
+          <h1>{isEditing ? 'Edit ts-store alert rule' : 'New ts-store alert rule'}</h1>
         </div>
         <div className="page-actions">
           <Button
@@ -502,7 +700,7 @@ function TsStoreAlertRuleEditorPage() {
             onClick={handleCreate}
             disabled={!canSubmit}
           >
-            {submitting ? 'Creating…' : 'Save'}
+            {submitting ? (isEditing ? 'Saving…' : 'Creating…') : 'Save'}
           </Button>
         </div>
       </div>
@@ -510,7 +708,7 @@ function TsStoreAlertRuleEditorPage() {
       {error && (
         <InlineNotification
           kind="error"
-          title="Could not create rule"
+          title={isEditing ? 'Could not update rule' : 'Could not create rule'}
           subtitle={error}
           onCloseButtonClick={() => setError(null)}
           lowContrast
@@ -533,6 +731,9 @@ function TsStoreAlertRuleEditorPage() {
           {/* 2. Type — drives what the sink picker below renders.
               WebSocket sink is intentionally not exposed; see comment
               on alertType state above. */}
+          {/* In edit mode the transport is fixed: ts-store rejects a
+              type change on PUT (its persisted lists are per-type), so
+              switching delivery means deleting and recreating. */}
           <FormGroup legendText="Type">
             <RadioButtonGroup
               name="rule-alert-type"
@@ -540,56 +741,120 @@ function TsStoreAlertRuleEditorPage() {
               orientation="horizontal"
               valueSelected={alertType}
               onChange={(value) => setAlertType(value)}
+              disabled={isEditing}
             >
-              <RadioButton id="type-webhook" value="webhook" labelText="Webhook (dashboard bell)" />
-              <RadioButton id="type-mqtt" value="mqtt" labelText="MQTT (publish to broker)" />
+              {/* disabled goes on each RadioButton, not the group —
+                  RadioButtonGroup doesn't forward it to its children. */}
+              <RadioButton id="type-webhook" value="webhook" labelText="Webhook (dashboard bell)" disabled={isEditing} />
+              <RadioButton id="type-mqtt" value="mqtt" labelText="MQTT (publish to broker)" disabled={isEditing} />
             </RadioButtonGroup>
+            {isEditing && (
+              <p className="dashboard-var-note">
+                Delivery type can’t be changed on an existing rule — delete it and create a new one instead.
+              </p>
+            )}
           </FormGroup>
 
-          {/* 3. Store — always a TSStore connection. Defines where
-              the rule is registered (api endpoint + store name). */}
+          {/* 3. Namespace — its own section, above Store. It scopes
+              which connections the picker offers; it is not part of
+              the rule, which is why it doesn't sit inside Store.
+              Hidden while editing: the connection is fixed there, so
+              there is nothing left to narrow and showing the control
+              would imply the rule could be moved. */}
+          {!isEditing && !connectionsLoading && (
+            <FormGroup legendText="Namespace">
+              <div className="namespace-section">
+                <Dropdown
+                  id="rule-namespace-filter"
+                  /* No titleText — the section legend above already
+                     says "Namespace"; repeating it stutters. */
+                  titleText=""
+                  label="All"
+                  items={['', ...namespaceOptions]}
+                  itemToString={(ns) => (ns === '' ? 'All' : ns)}
+                  selectedItem={namespaceFilter}
+                  onChange={({ selectedItem }) => setNamespaceFilter(selectedItem || '')}
+                  size="md"
+                  helperText="Narrows the connection list below."
+                />
+              </div>
+            </FormGroup>
+          )}
+
+          {/* 4. Store — the connection + store the rule lives on.
+              Connection takes 2/3 of the row: connection names run
+              long, store names are short. */}
           <FormGroup legendText="Store">
             {connectionsLoading ? (
               <Loading description="Loading connections" withOverlay={false} small />
             ) : (
               <>
                 <div className="connection-row">
-                  <div className="namespace-filter-cell">
-                    <Dropdown
-                      id="rule-namespace-filter"
-                      titleText="Namespace"
-                      label="All"
-                      items={['', ...namespaceOptions]}
-                      itemToString={(ns) => (ns === '' ? 'All' : ns)}
-                      selectedItem={namespaceFilter}
-                      onChange={({ selectedItem }) => setNamespaceFilter(selectedItem || '')}
-                      size="md"
-                    />
-                  </div>
                   <div className="connection-cell">
-                    <Select
-                      id="rule-connection"
-                      labelText="ts-store connection"
-                      value={connectionId}
-                      onChange={(e) => setConnectionId(e.target.value)}
-                    >
-                      <SelectItem value="" text="Select a connection…" />
-                      {visibleConnections.map((c) => (
-                        <SelectItem
-                          key={c.id}
-                          value={c.id}
-                          text={`${c.name} (${c.namespace || 'default'})`}
-                        />
-                      ))}
-                    </Select>
+                    {isEditing ? (
+                      /* Fixed while editing. The PUT is addressed at the
+                         SELECTED connection's base URL, so a connection
+                         on another ts-store host would send the edit to
+                         a server where this alert id doesn't exist —
+                         404, or worse a silent edit of an unrelated
+                         alert sharing the id.
+
+                         Rendered as a plain disabled TextInput, not a
+                         disabled Select: a Select keeps its dropdown
+                         chevron even when disabled, which reads as
+                         "openable". This matches the Store field beside
+                         it, so the two fixed fields look alike. */
+                      <TextInput
+                        id="rule-connection"
+                        labelText="ts-store connection"
+                        value={selectedConn
+                          ? `${selectedConn.name} (${selectedConn.namespace || 'default'})`
+                          : connectionId}
+                        disabled
+                        helperText="Fixed — the rule is administered through this connection."
+                      />
+                    ) : (
+                      <Select
+                        id="rule-connection"
+                        labelText="ts-store connection"
+                        value={connectionId}
+                        onChange={(e) => setConnectionId(e.target.value)}
+                        helperText="Which connection registers the rule."
+                      >
+                        <SelectItem value="" text="Select a connection…" />
+                        {visibleConnections.map((c) => (
+                          <SelectItem
+                            key={c.id}
+                            value={c.id}
+                            text={`${c.name} (${c.namespace || 'default'})`}
+                          />
+                        ))}
+                      </Select>
+                    )}
                   </div>
                   {/* #248: endpoint-scoped connection → the rule's store is
                       chosen here, from the key's MANAGE-granted stores
                       (alert CRUD is a per-store manage grant). Pinned
                       connections register on their pin and show nothing. */}
                   {isEndpointScoped && (
-                    <div className="connection-cell">
-                      {Array.isArray(storeOptions) ? (
+                    <div className="store-cell">
+                      {isEditing ? (
+                        /* Fixed in edit mode. ts-store persists alerts
+                           per store — webhook_alerts.json lives in the
+                           store's own directory with its own manager —
+                           so the same alert id addressed against another
+                           store 404s. Moving a rule means creating it on
+                           the target store and deleting the original,
+                           which is not an edit. Disabled (not merely
+                           readOnly) so it isn't focusable or selectable. */
+                        <TextInput
+                          id="rule-store"
+                          labelText="Store"
+                          value={storeName || editStore || ''}
+                          disabled
+                          helperText="Fixed — ts-store keeps each store's alerts separately, so a rule can't move between stores."
+                        />
+                      ) : Array.isArray(storeOptions) ? (
                         storeOptions.length === 0 ? (
                           <TextInput
                             id="rule-store"
@@ -668,9 +933,23 @@ function TsStoreAlertRuleEditorPage() {
               connection + topic + QoS. */}
           {alertType === 'webhook' && (
             <FormGroup legendText="Send alerts to">
-              <p className="sink-help sink-help--webhook">
-                Fires to the dashboard&apos;s bell panel. A per-connection webhook secret is minted automatically; no API-key ceremony required.
-              </p>
+              {isEditing ? (
+                <TextInput
+                  id="rule-webhook-target"
+                  labelText="Destination URL"
+                  value={displayWebhookURL}
+                  disabled
+                  helperText={
+                    webhookURLRedacted
+                      ? 'This URL carries a credential ts-store hides on read, so it can’t be changed here — delete the rule and create a new one to point it elsewhere.'
+                      : 'Fixed — delete the rule and create a new one to deliver somewhere else.'
+                  }
+                />
+              ) : (
+                <p className="sink-help sink-help--webhook">
+                  Fires to the dashboard&apos;s bell panel. A per-connection webhook secret is minted automatically; no API-key ceremony required.
+                </p>
+              )}
             </FormGroup>
           )}
           {alertType === 'mqtt' && (

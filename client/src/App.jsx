@@ -1040,6 +1040,7 @@ function AppContent({ onDisconnect }) {
           <Route path="/design/extensions/tsstore-alerts" element={<TsStoreAlertsExtensionPage />} />
           <Route path="/design/extensions/tsstore-alerts/new" element={<TsStoreAlertRuleEditorPage />} />
           <Route path="/design/extensions/tsstore-alerts/:connectionId/:alertId" element={<TsStoreAlertRuleViewPage />} />
+          <Route path="/design/extensions/tsstore-alerts/:connectionId/:alertId/edit" element={<TsStoreAlertRuleEditorPage />} />
           <Route path="/design/extensions/edgelake-terminal" element={<EdgeLakeTerminalPage />} />
 
           {/* View Mode Routes */}
