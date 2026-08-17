@@ -5,6 +5,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -132,6 +133,46 @@ func (h *TSStoreAlertRulesHandler) GetAlertDetail(c *gin.Context) {
 		return
 	}
 	c.Data(http.StatusOK, "application/json", body)
+}
+
+// UpdateAlert edits an existing rule in place on the owning tsstore
+// (ts-store#166). Unlike delete+recreate this preserves the alert id,
+// created_at, the poll cursor, and the fired counter. The sink URL is
+// deliberately NOT editable — see service.UpdateAlert.
+// @Summary Update a ts-store alert rule in place
+// @Description Optional extension endpoint — only mounted when the admin setting `extensions.tsstore_alerts.enabled` is true. Returns 403 when the extension is disabled.
+// @Tags TSStoreAlerts
+// @Accept json
+// @Produce json
+// @Param alert_id path string true "Alert ID"
+// @Param body body service.CreateAlertRequest true "Rule"
+// @Success 204 "No Content"
+// @Failure 400 {object} map[string]string
+// @Failure 403 {object} map[string]string "Extension disabled"
+// @Failure 500 {object} map[string]string
+// @Router /tsstore-alerts/rules/{alert_id} [put]
+func (h *TSStoreAlertRulesHandler) UpdateAlert(c *gin.Context) {
+	var req service.CreateAlertRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.rules.UpdateAlert(c.Request.Context(), c.Param("alert_id"), &req); err != nil {
+		// A refusal the caller can act on (type change, missing sink,
+		// uneditable URL) is a 400 — reporting it as a 500 would read
+		// like a server fault and hide the actionable message.
+		if errors.Is(err, service.ErrAlertValidation) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if errors.Is(err, service.ErrAlertNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		respondError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 // DeleteAlert removes an entire alert resource on the tsstore that

@@ -23,11 +23,13 @@ import {
   Tag,
   Link,
   Modal,
+  Dropdown,
 } from '@carbon/react';
-import { TrashCan, Renew, View } from '@carbon/icons-react';
+import { TrashCan, Renew, View, Edit } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import useExtensions from '../hooks/useExtensions';
 import CreateMenu from '../components/CreateMenu';
+import ResetFiltersButton from '../components/shared/ResetFiltersButton';
 import './TsStoreAlertsExtensionPage.scss';
 
 /**
@@ -49,6 +51,11 @@ function TsStoreAlertsExtensionPage() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
   const [search, setSearch] = useState('');
+  // Column filters, mirroring the connection/component list pages:
+  // free-text search stays broad (any field), while these narrow to a
+  // specific connection or rule. '' = no filter.
+  const [connectionFilter, setConnectionFilter] = useState('');
+  const [ruleNameFilter, setRuleNameFilter] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [rulePickerOpen, setRulePickerOpen] = useState(false); // "From Existing" clone-source picker
@@ -95,17 +102,40 @@ function TsStoreAlertsExtensionPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extLoading]);
 
+  // Distinct connections + rule names across the loaded rules, for the
+  // filter dropdowns. Built from what's actually listed rather than the
+  // full connection catalog, so the options can never select nothing.
+  // A rule reachable through several connections contributes each one.
+  const connectionOptions = useMemo(() => {
+    const set = new Set();
+    rules.forEach((r) => {
+      const conns = r.connections?.length ? r.connections : (r.connection_name ? [{ connection_name: r.connection_name }] : []);
+      conns.forEach((c) => { if (c.connection_name) set.add(c.connection_name); });
+    });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [rules]);
+
+  const ruleNameOptions = useMemo(() => {
+    const set = new Set();
+    rules.forEach((r) => { if (r.rule_name) set.add(r.rule_name); });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [rules]);
+
   const filtered = useMemo(() => {
-    if (!search) return rules;
-    const q = search.toLowerCase();
+    const q = search.trim().toLowerCase();
     return rules.filter((r) => {
+      const conns = r.connections?.length ? r.connections : (r.connection_name ? [{ connection_name: r.connection_name }] : []);
+      // Column filters are exact-match and AND together with search.
+      if (connectionFilter && !conns.some((c) => c.connection_name === connectionFilter)) return false;
+      if (ruleNameFilter && r.rule_name !== ruleNameFilter) return false;
+      if (!q) return true;
+      // Free-text search stays broad — any of the visible fields.
       if (r.rule_name?.toLowerCase().includes(q)) return true;
       if (r.condition?.toLowerCase().includes(q)) return true;
       if (r.store_name?.toLowerCase().includes(q)) return true;
-      const conns = r.connections?.length ? r.connections : (r.connection_name ? [{ connection_name: r.connection_name }] : []);
       return conns.some((c) => c.connection_name?.toLowerCase().includes(q));
     });
-  }, [rules, search]);
+  }, [rules, search, connectionFilter, ruleNameFilter]);
 
   const handleDelete = async () => {
     if (!confirmDelete) return;
@@ -193,14 +223,54 @@ function TsStoreAlertsExtensionPage() {
       )}
 
       <DataTable rows={rows} headers={headers} isSortable>
-        {({ rows: rowsView, headers: hdrs, getHeaderProps, getRowProps, getTableProps, getToolbarProps, onInputChange }) => (
+        {({ rows: rowsView, headers: hdrs, getHeaderProps, getRowProps, getTableProps, getToolbarProps }) => (
           <TableContainer>
             <TableToolbar {...getToolbarProps()}>
               <TableToolbarContent>
+                {/* Search is OURS, not Carbon's. `rows` carry only
+                    {id, raw} — the cells are rendered by hand below —
+                    so Carbon's onInputChange has no cell values to
+                    match and rejects every row, which made search
+                    report "no rules match" for any term. Filtering
+                    happens in `filtered` above; don't re-add
+                    onInputChange here. */}
                 <TableToolbarSearch
                   placeholder="Search rules, conditions, connections…"
-                  onChange={(e) => { setSearch(e.target.value); onInputChange(e); }}
+                  onChange={(e) => setSearch(e.target.value)}
                   persistent
+                  value={search}
+                />
+                {/* Column filters, matching the connection list page:
+                    exact-match narrowing that ANDs with the free-text
+                    search. Options come from the loaded rules, so a
+                    filter can never select an empty set. */}
+                <Dropdown
+                  id="alerts-connection-filter"
+                  titleText=""
+                  label="All connections"
+                  items={['', ...connectionOptions]}
+                  itemToString={(c) => (c === '' ? 'All connections' : c)}
+                  selectedItem={connectionFilter}
+                  onChange={({ selectedItem }) => setConnectionFilter(selectedItem || '')}
+                  size="md"
+                />
+                <Dropdown
+                  id="alerts-rule-filter"
+                  titleText=""
+                  label="All rules"
+                  items={['', ...ruleNameOptions]}
+                  itemToString={(n) => (n === '' ? 'All rules' : n)}
+                  selectedItem={ruleNameFilter}
+                  onChange={({ selectedItem }) => setRuleNameFilter(selectedItem || '')}
+                  size="md"
+                />
+                <ResetFiltersButton
+                  active={!!search || !!connectionFilter || !!ruleNameFilter}
+                  onReset={() => {
+                    setSearch('');
+                    setConnectionFilter('');
+                    setRuleNameFilter('');
+                  }}
                 />
                 <Button
                   kind="ghost"
@@ -295,14 +365,36 @@ function TsStoreAlertsExtensionPage() {
                             <IconButton
                               kind="ghost"
                               label="View rule details"
-                              onClick={() => navigate(`/design/extensions/tsstore-alerts/${r.connection_id}/${r.alert_id}?store=${encodeURIComponent(r.store_name || '')}`)}
+                              onClick={() => navigate(
+                                `/design/extensions/tsstore-alerts/${r.connection_id}/${r.alert_id}?store=${encodeURIComponent(r.store_name || '')}`,
+                                // Carry manage-ability through: the detail
+                                // read can't compute it, so the view page
+                                // relies on this to decide whether to
+                                // offer Edit.
+                                { state: { canManage: r.can_manage !== false } },
+                              )}
                             >
                               <View />
                             </IconButton>
                             {/* can_manage=false → the key can SEE this rule
                                 (alert reads are read-classed since ts-store
                                 v0.20.3) but not administer it — disable
-                                rather than offer a delete that would 403. */}
+                                rather than offer an edit/delete that would
+                                403. Store rides in router state; the edit
+                                form needs it to address the right alert. */}
+                            <IconButton
+                              kind="ghost"
+                              label={r.can_manage === false
+                                ? 'View only — the connection key lacks manage on this store'
+                                : 'Edit rule'}
+                              disabled={r.can_manage === false}
+                              onClick={() => navigate(
+                                `/design/extensions/tsstore-alerts/${r.connection_id}/${r.alert_id}/edit?store=${encodeURIComponent(r.store_name || '')}`,
+                                { state: { store: r.store_name || '' } },
+                              )}
+                            >
+                              <Edit />
+                            </IconButton>
                             <IconButton
                               kind="ghost"
                               label={r.can_manage === false

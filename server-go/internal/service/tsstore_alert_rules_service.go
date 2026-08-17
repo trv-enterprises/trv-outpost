@@ -10,6 +10,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -825,6 +826,36 @@ type CreateAlertResponse struct {
 // dashboard's own bell receiver (default) or to an override URL, mqtt
 // publishes to a broker derived from req.SinkConnectionID. WebSocket
 // sink is intentionally not exposed (see CreateAlertRequest godoc).
+// commonAlertBody assembles the transport-independent half of a
+// ts-store alert body — the fields CreateAlert and UpdateAlert must
+// agree on. ts-store's PUT is a FULL REPLACE (an omitted non-secret
+// field reverts to its default), so update sends exactly the same
+// shape as create; anything create sends conditionally must be sent
+// conditionally on update too, or an edit would silently clear it.
+func commonAlertBody(req *CreateAlertRequest) map[string]interface{} {
+	body := map[string]interface{}{
+		"type":      req.Type,
+		"name":      req.RuleName,
+		"condition": req.Condition,
+	}
+	if req.Cooldown != "" {
+		body["cooldown"] = req.Cooldown
+	}
+	if ref := encodeExternalRef(req.DashboardID, req.DashboardVars); ref != "" {
+		body["external_ref"] = ref
+	}
+	if req.PollInterval != "" {
+		body["poll_interval"] = req.PollInterval
+	}
+	if req.RestartPolicy != "" {
+		body["restart_policy"] = req.RestartPolicy
+	}
+	if req.MaxReplay != "" {
+		body["max_replay"] = req.MaxReplay
+	}
+	return body
+}
+
 func (s *TSStoreAlertRulesService) CreateAlert(ctx context.Context, req *CreateAlertRequest, callerGUID string) (*CreateAlertResponse, error) {
 	conn, err := s.connections.GetConnection(ctx, req.ConnectionID)
 	if err != nil {
@@ -841,27 +872,7 @@ func (s *TSStoreAlertRulesService) CreateAlert(ctx context.Context, req *CreateA
 		return nil, err
 	}
 
-	// Common top-level fields shared across every sink type.
-	tsBody := map[string]interface{}{
-		"type":      req.Type,
-		"name":      req.RuleName,
-		"condition": req.Condition,
-	}
-	if req.Cooldown != "" {
-		tsBody["cooldown"] = req.Cooldown
-	}
-	if ref := encodeExternalRef(req.DashboardID, req.DashboardVars); ref != "" {
-		tsBody["external_ref"] = ref
-	}
-	if req.PollInterval != "" {
-		tsBody["poll_interval"] = req.PollInterval
-	}
-	if req.RestartPolicy != "" {
-		tsBody["restart_policy"] = req.RestartPolicy
-	}
-	if req.MaxReplay != "" {
-		tsBody["max_replay"] = req.MaxReplay
-	}
+	tsBody := commonAlertBody(req)
 
 	// Sink-specific assembly. Each branch fills in the transport
 	// block and any dashboard-side artifacts (e.g. minted webhook
@@ -980,6 +991,186 @@ func (s *TSStoreAlertRulesService) CreateAlert(ctx context.Context, req *CreateA
 		WebhookURL: responseURL,
 		SecretID:   secretID,
 	}, nil
+}
+
+// redactedMarker is the placeholder ts-store substitutes for a secret
+// on read (auth-style header values, the MQTT password, and a sink
+// URL's query string). We never persist it back: see UpdateAlert.
+const redactedMarker = "[redacted]"
+
+// ErrAlertValidation marks a rejection that is the CALLER's fault (a
+// type change, a missing sink, an uneditable URL) rather than an
+// infrastructure failure. Handlers map it to 400; without it every
+// such refusal reports as a 500 and reads like a server bug.
+//
+// Wrapped as "%w: <message>", so the sentinel's own text is a prefix
+// on everything the user reads — keep it empty-ish rather than
+// something like "alert validation", which just adds noise to an
+// already-actionable message.
+var ErrAlertValidation = errors.New("invalid request")
+
+// ErrAlertNotFound marks "no such alert on the target store", so the
+// handler can answer 404 instead of a generic 500.
+var ErrAlertNotFound = errors.New("alert not found")
+
+// UpdateAlert edits an existing ts-store alert in place via
+// PUT /api/stores/:store/alerts/:id (ts-store#166, v0.20.3+). This
+// preserves the alert id, created_at, the on-disk poll cursor and
+// cooldown mark, and the worker's fired counter — all of which a
+// delete+recreate would destroy.
+//
+// Two rules make this safe, and both are deliberate:
+//
+//  1. NO SECRET MINTING. CreateAlert mints a WebhookSecret and builds
+//     a receiver URL from it. Doing that here would orphan the old
+//     secret record AND silently repoint delivery at a new URL when
+//     the user only meant to edit, say, the cooldown. Instead the
+//     stored webhook URL is carried over from the alert as it exists
+//     on ts-store.
+//
+//  2. THE SINK URL IS IMMUTABLE in this version. ts-store's PUT does
+//     not un-redact URLs (it does preserve redacted HEADER values and
+//     the MQTT password, but redactURL's query-string masking has no
+//     inverse on the write path). So a URL read back as
+//     "https://host/hook?[redacted]" would be persisted verbatim,
+//     destroying a query-string credential with no error. Changing a
+//     sink URL is therefore a delete+recreate. The guard below is
+//     belt-and-braces: even if a caller hands us a marker-bearing
+//     URL, we refuse rather than write it.
+//
+// The MQTT branch re-harvests broker credentials from the sink
+// connection record exactly as create does, so it always sends a real
+// password and never relies on ts-store's preserve-on-omit path.
+func (s *TSStoreAlertRulesService) UpdateAlert(ctx context.Context, alertID string, req *CreateAlertRequest) error {
+	conn, err := s.connections.GetConnection(ctx, req.ConnectionID)
+	if err != nil {
+		return fmt.Errorf("connection lookup: %w", err)
+	}
+	if conn.Type != models.ConnectionTypeTSStore || conn.Config.TSStore == nil {
+		return fmt.Errorf("%w: connection %s is not a tsstore connection", ErrAlertValidation, req.ConnectionID)
+	}
+	cfg := conn.Config.TSStore
+	effStore, err := resolveAlertStore(cfg, req.StoreName)
+	if err != nil {
+		return err
+	}
+
+	// Read the alert as ts-store currently holds it. This is the source
+	// of truth for the fields the edit form does not own — above all the
+	// sink URL, which must survive an edit untouched.
+	detailBody, err := s.GetAlertDetail(ctx, req.ConnectionID, alertID, req.StoreName)
+	if err != nil {
+		// A 404 from the read means the alert is gone (deleted
+		// elsewhere, stale bookmark) — that's a 404 for our caller too,
+		// not a server fault.
+		if strings.Contains(err.Error(), "returned 404") {
+			return fmt.Errorf("%w: %s on store %q", ErrAlertNotFound, alertID, effStore)
+		}
+		return fmt.Errorf("read existing alert: %w", err)
+	}
+	var stored struct {
+		Type    string `json:"type"`
+		Webhook *struct {
+			URL string `json:"url"`
+		} `json:"webhook"`
+		MQTT *struct {
+			BrokerURL string `json:"broker_url"`
+		} `json:"mqtt"`
+	}
+	if err := json.Unmarshal(detailBody, &stored); err != nil {
+		return fmt.Errorf("decode existing alert: %w", err)
+	}
+
+	// ts-store rejects a transport swap (the persisted lists are
+	// per-type). Fail here with a clearer message than the upstream 400.
+	if stored.Type != "" && req.Type != "" && stored.Type != req.Type {
+		return fmt.Errorf("%w: cannot change alert type from %q to %q — delete the alert and create a new one instead", ErrAlertValidation, stored.Type, req.Type)
+	}
+
+	tsBody := commonAlertBody(req)
+	// The path id is authoritative upstream, but ts-store validates the
+	// body's type, so keep it aligned with what is actually stored.
+	if stored.Type != "" {
+		tsBody["type"] = stored.Type
+	}
+
+	switch tsBody["type"] {
+	case "webhook":
+		if stored.Webhook == nil || stored.Webhook.URL == "" {
+			return fmt.Errorf("%w: existing alert has no webhook URL to preserve", ErrAlertValidation)
+		}
+		if strings.Contains(stored.Webhook.URL, redactedMarker) {
+			// A query-string credential we cannot see. Writing this back
+			// would persist the literal marker and break delivery.
+			return fmt.Errorf("%w: this alert's webhook URL contains a credential the API redacts, so it cannot be edited in place — delete the alert and create a new one", ErrAlertValidation)
+		}
+		block := map[string]interface{}{"url": stored.Webhook.URL}
+		if len(req.WebhookHeaders) > 0 {
+			block["headers"] = req.WebhookHeaders
+		}
+		if req.Timeout != "" {
+			block["timeout"] = req.Timeout
+		}
+		tsBody["webhook"] = block
+
+	case "mqtt":
+		if req.SinkConnectionID == "" {
+			return fmt.Errorf("%w: mqtt alert requires sink_connection_id (an MQTT connection)", ErrAlertValidation)
+		}
+		if strings.TrimSpace(req.MQTTTopic) == "" {
+			return fmt.Errorf("%w: mqtt alert requires mqtt_topic", ErrAlertValidation)
+		}
+		sinkConn, err := s.connections.GetConnection(ctx, req.SinkConnectionID)
+		if err != nil {
+			return fmt.Errorf("sink connection lookup: %w", err)
+		}
+		if sinkConn.Type != models.ConnectionTypeMQTT || sinkConn.Config.MQTT == nil {
+			return fmt.Errorf("%w: sink connection %s is not an mqtt connection", ErrAlertValidation, req.SinkConnectionID)
+		}
+		mqttCfg := sinkConn.Config.MQTT
+		block := map[string]interface{}{
+			"broker_url": mqttCfg.BrokerURL,
+			"topic":      strings.TrimSpace(req.MQTTTopic),
+		}
+		if mqttCfg.Username != "" {
+			block["username"] = mqttCfg.Username
+		}
+		if mqttCfg.Password != "" {
+			block["password"] = mqttCfg.Password
+		}
+		if req.MQTTQoS != nil {
+			block["qos"] = *req.MQTTQoS
+		}
+		tsBody["mqtt"] = block
+
+	default:
+		return fmt.Errorf("%w: unsupported alert type %q (allowed: webhook, mqtt)", ErrAlertValidation, tsBody["type"])
+	}
+
+	bodyBytes, err := json.Marshal(tsBody)
+	if err != nil {
+		return fmt.Errorf("marshal ts-store body: %w", err)
+	}
+	updateURL := fmt.Sprintf("%s/api/stores/%s/alerts/%s", cfg.BaseURL(), effStore, alertID)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPut, updateURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	if cfg.APIKey != "" {
+		httpReq.Header.Set("X-API-Key", cfg.APIKey)
+	}
+
+	resp, err := clientFor(cfg).Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("ts-store PUT: %w", err)
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("ts-store returned %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+	return nil
 }
 
 // encodeExternalRef returns a JSON-encoded {dashboard_id:..., dashboard_vars:...}

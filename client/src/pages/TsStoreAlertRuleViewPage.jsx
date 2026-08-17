@@ -3,7 +3,7 @@
 // See LICENSE file for details.
 
 import { useEffect, useState } from 'react';
-import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom';
 import {
   Button,
   Form,
@@ -16,7 +16,7 @@ import {
   Loading,
   Link,
 } from '@carbon/react';
-import { ArrowLeft, Close } from '@carbon/icons-react';
+import { ArrowLeft, Close, Edit } from '@carbon/icons-react';
 import apiClient from '../api/client';
 import useExtensions from '../hooks/useExtensions';
 import './TsStoreAlertRuleEditorPage.scss';
@@ -26,10 +26,10 @@ import './TsStoreAlertRuleEditorPage.scss';
  *
  * Mirrors the create-editor's layout (Name → Type → Store → Send-to
  * → Condition → Policy → Target dashboard) but every input is
- * disabled / readOnly so the page is purely informational. There
- * is no save action — the only way to mutate a rule is delete-and-
- * recreate, which lives on the list page. To keep the surface
- * tight, this page exposes only "Back to rules" as an action.
+ * disabled / readOnly so the page is purely informational. There is
+ * no save action here — editing happens on the editor page, reached
+ * via the Edit button when the caller arrived from a manageable row
+ * (see the header block below for why that flag has to be passed in).
  *
  * Data comes from a fresh GET against the dashboard's
  * /api/tsstore-alerts/rules/:alert_id?connection_id=... endpoint,
@@ -41,6 +41,7 @@ import './TsStoreAlertRuleEditorPage.scss';
  */
 function TsStoreAlertRuleViewPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { connectionId, alertId } = useParams();
   // #248: the rule's store rides as ?store= (required for rules on
   // endpoint-scoped connections; absent links to pinned-connection rules
@@ -132,6 +133,25 @@ function TsStoreAlertRuleViewPage() {
           <h1>Rule details</h1>
         </div>
         <div className="page-actions">
+          {/* Edit is offered only when the caller arrived from a row
+              known to be manageable. can_manage is computed by the
+              aggregated list (it needs the key's per-store grants),
+              not by the detail read — so when this page is opened
+              directly by URL the flag is absent and the button stays
+              hidden rather than offering an action that would 403. */}
+          {location.state?.canManage && (
+            <Button
+              kind="primary"
+              renderIcon={Edit}
+              size="md"
+              onClick={() => navigate(
+                `/design/extensions/tsstore-alerts/${connectionId}/${alertId}/edit?store=${encodeURIComponent(storeParam)}`,
+                { state: { store: storeParam } },
+              )}
+            >
+              Edit
+            </Button>
+          )}
           <Button
             kind="secondary"
             renderIcon={Close}

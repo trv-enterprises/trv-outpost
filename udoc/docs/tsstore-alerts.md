@@ -24,6 +24,9 @@ connections still render normally.
   and store name).
 - **Open** a rule's detail view (read-only) by clicking its row's
   view icon.
+- **Edit** a rule in place with the pencil icon — the condition,
+  cooldown, restart policy and dashboard link are all editable
+  (see [below](#editing-a-rule)).
 - **Delete** an alert — one alert is one rule, so this removes
   exactly the row you clicked (see [below](#one-alert-one-rule)).
 - **Create new rules** via the **+ New rule** button, which opens a
@@ -64,6 +67,41 @@ chosen ts-store connection (and store). If the connection's stored
 API key doesn't pass ts-store's auth middleware, the submit button is
 disabled with an explanation — saves you from a 401 surprise after
 filling out the whole form.
+
+## Editing a rule
+
+The pencil on a rule row opens the same form the wizard uses,
+prefilled from the rule as ts-store currently holds it. Saving
+updates the rule **in place**, which keeps things a delete-and-
+recreate would destroy: the alert's id, its creation date, its poll
+cursor (so it resumes rather than replaying), and its fired counter.
+
+Everything that *addresses* the rule is fixed once it exists, and the
+form shows those as read-only:
+
+- **The connection.** The update is sent to whichever ts-store the
+  chosen connection points at, so this isn't a preference — it's how
+  the rule is reached.
+- **The store.** ts-store keeps each store's alerts separately — they
+  live in that store's own directory, not at the server level — so a
+  rule can't move between stores.
+- **The delivery type.** ts-store keeps webhook and MQTT alerts in
+  separate lists, so switching a rule between them isn't an edit.
+- **The destination URL.** ts-store hides the credential part of a
+  sink URL when it reads a rule back, and there is no way to tell a
+  hidden credential from a real one on save — so the dashboard keeps
+  the stored URL rather than risk overwriting a working one with a
+  masked copy. Where a credential is present it displays masked
+  (`********`), the same as secrets in the connection editor.
+
+To change any of those, delete the rule and create a new one.
+
+What stays editable is the rule's *behavior*: name, condition,
+cooldown, restart policy, MQTT topic and QoS, and the dashboard
+deep-link.
+
+Rules on a connection whose key lacks **manage** on that store show
+the pencil greyed out — you can read them, but not administer them.
 
 ## One alert, one rule
 

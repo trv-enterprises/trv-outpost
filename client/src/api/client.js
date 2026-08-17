@@ -1885,6 +1885,20 @@ class APIClient {
     });
   }
 
+  // Edit an existing alert rule in place (ts-store#166). Body is the
+  // same shape as createTSStoreAlertRule. Unlike delete+recreate this
+  // keeps the alert id, created_at, the poll cursor and the fired
+  // counter. The sink URL is NOT editable — the server carries the
+  // stored one over, because ts-store's read API redacts query-string
+  // credentials and has no un-redact on write. Changing a URL means
+  // deleting the alert and creating a new one.
+  async updateTSStoreAlertRule(alertId, body) {
+    return this.request(`/api/tsstore-alerts/rules/${alertId}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+  }
+
   // Cheap authenticated probe against a tsstore connection — used by
   // the rule-create wizard to gate the submit button when the
   // connection's API key won't pass ts-store auth. Returns

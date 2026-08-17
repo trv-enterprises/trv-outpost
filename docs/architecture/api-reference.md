@@ -294,6 +294,7 @@ are NOT affected by this toggle.
 | GET    | `/api/tsstore-alerts/rules`                    | Aggregated rules across every ts-store connection     |
 | GET    | `/api/tsstore-alerts/rules/:alert_id`          | Full detail for a single alert (needs `connection_id`) |
 | POST   | `/api/tsstore-alerts/rules`                    | Create a new alert rule (webhook or MQTT)             |
+| PUT    | `/api/tsstore-alerts/rules/:alert_id`          | Edit a rule in place — keeps the alert id, `created_at`, poll cursor and fired counter. Sink URL and transport type are immutable (400 on a type change; delete+recreate instead) |
 | DELETE | `/api/tsstore-alerts/rules/:alert_id`          | Delete the alert and ALL its rules                    |
 | GET    | `/api/tsstore-alerts/probe`                    | Pre-submit auth probe used by the rule-create wizard  |
 
