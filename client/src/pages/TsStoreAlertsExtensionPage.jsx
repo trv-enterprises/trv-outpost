@@ -325,7 +325,6 @@ function TsStoreAlertsExtensionPage() {
             size="md"
           />
         )}
-        <div className="toolbar-spacer" />
         <ResetFiltersButton
           active={!!search || !!connectionFilter || !!ruleNameFilter || !!ruleTypeFilter}
           onReset={() => {
@@ -342,6 +341,9 @@ function TsStoreAlertsExtensionPage() {
           hasIconOnly
           onClick={refresh}
         />
+        {/* Only the create action is right-aligned; reset and refresh
+            stay with the filters they act on. */}
+        <div className="toolbar-spacer" />
         {/* Create dropdown — Create Rule / From Existing (clone),
             matching the connection/component pattern. No AI option. */}
         <CreateMenu
