@@ -37,6 +37,52 @@
   .cds--table-toolbar {
     flex-shrink: 0;
     background-color: var(--cds-layer-01);
+
+    // Match the connection list page's toolbar: a fixed-width search
+    // followed by filter dropdowns wide enough to READ. Connection and
+    // rule names run long (e.g. "TRV-SRV-001 system-stats tsstore-ws"),
+    // and a dropdown that truncates to "TRV-SRV-001 sys…" defeats the
+    // point of filtering by name.
+    .cds--toolbar-content {
+      align-items: center;
+      gap: spacing.$spacing-04;
+    }
+
+    .cds--search {
+      width: 300px;
+      background-color: var(--cds-layer-01);
+    }
+
+    #alerts-connection-filter,
+    #alerts-rule-filter {
+      // Wide enough for a full connection / rule name at the sizes in
+      // use today, and it degrades to an ellipsis rather than pushing
+      // the toolbar wider.
+      min-width: 320px;
+    }
+
+    #alerts-ruletype-filter {
+      // Two short, fixed labels — no need for the same width.
+      min-width: 190px;
+    }
+
+    // Each filter carries the bottom rule Carbon gives form fields, so
+    // the dropdowns read as separate controls rather than as one
+    // continuous strip — matching the connection list page's toolbar.
+    #alerts-connection-filter,
+    #alerts-rule-filter,
+    #alerts-ruletype-filter {
+      background-color: var(--cds-field-01);
+      border-bottom: 1px solid var(--cds-border-strong-01);
+    }
+
+    // The open menu can be wider than its trigger, so a long name is
+    // fully readable while choosing even if the closed field clips it.
+    .cds--list-box__menu {
+      min-width: 100%;
+      width: max-content;
+      max-width: 520px;
+    }
   }
 
   .cds--data-table-content {

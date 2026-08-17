@@ -74,6 +74,7 @@ function TsStoreAlertsExtensionPage() {
   // specific connection or rule. '' = no filter.
   const [connectionFilter, setConnectionFilter] = useState('');
   const [ruleNameFilter, setRuleNameFilter] = useState('');
+  const [ruleTypeFilter, setRuleTypeFilter] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [rulePickerOpen, setRulePickerOpen] = useState(false); // "From Existing" clone-source picker
@@ -139,6 +140,23 @@ function TsStoreAlertsExtensionPage() {
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [rules]);
 
+  // Rule type — the #242 discriminator. Built from the loaded rules
+  // rather than hardcoded, so a type ts-store adds later shows up
+  // without a client change.
+  const ruleTypeOptions = useMemo(() => {
+    const set = new Set();
+    rules.forEach((r) => { if (r.rule_type) set.add(r.rule_type); });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [rules]);
+
+  // The two known rule types are always offered so the filter doesn't
+  // appear and disappear as rules change, plus anything unexpected
+  // ts-store starts returning.
+  const ruleTypeItems = useMemo(
+    () => ['', ...new Set(['condition', 'staleness', ...ruleTypeOptions])],
+    [ruleTypeOptions],
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rules.filter((r) => {
@@ -146,6 +164,7 @@ function TsStoreAlertsExtensionPage() {
       // Column filters are exact-match and AND together with search.
       if (connectionFilter && !conns.some((c) => c.connection_name === connectionFilter)) return false;
       if (ruleNameFilter && r.rule_name !== ruleNameFilter) return false;
+      if (ruleTypeFilter && r.rule_type !== ruleTypeFilter) return false;
       if (!q) return true;
       // Free-text search stays broad — any of the visible fields.
       if (r.rule_name?.toLowerCase().includes(q)) return true;
@@ -157,7 +176,7 @@ function TsStoreAlertsExtensionPage() {
       if (r.store_name?.toLowerCase().includes(q)) return true;
       return conns.some((c) => c.connection_name?.toLowerCase().includes(q));
     });
-  }, [rules, search, connectionFilter, ruleNameFilter]);
+  }, [rules, search, connectionFilter, ruleNameFilter, ruleTypeFilter]);
 
   const handleDelete = async () => {
     if (!confirmDelete) return;
@@ -257,7 +276,7 @@ function TsStoreAlertsExtensionPage() {
                     happens in `filtered` above; don't re-add
                     onInputChange here. */}
                 <TableToolbarSearch
-                  placeholder="Search rules, conditions, connections…"
+                  placeholder="Search"
                   onChange={(e) => setSearch(e.target.value)}
                   persistent
                   value={search}
@@ -286,12 +305,33 @@ function TsStoreAlertsExtensionPage() {
                   onChange={({ selectedItem }) => setRuleNameFilter(selectedItem || '')}
                   size="md"
                 />
+                {/* Rule type — condition vs staleness (#242). Always
+                    offered, even when the current rules are all one
+                    type: hiding it would make the filter appear and
+                    disappear as rules change, and it is how a user
+                    discovers that staleness rules exist at all. */}
+                {(
+                  <Dropdown
+                    id="alerts-ruletype-filter"
+                    titleText=""
+                    label="Fires when: any"
+                    items={ruleTypeItems}
+                    itemToString={(t) => {
+                      if (t === '') return 'Fires when: any';
+                      return t === 'staleness' ? 'No data arrives' : 'Record matches';
+                    }}
+                    selectedItem={ruleTypeFilter}
+                    onChange={({ selectedItem }) => setRuleTypeFilter(selectedItem || '')}
+                    size="md"
+                  />
+                )}
                 <ResetFiltersButton
-                  active={!!search || !!connectionFilter || !!ruleNameFilter}
+                  active={!!search || !!connectionFilter || !!ruleNameFilter || !!ruleTypeFilter}
                   onReset={() => {
                     setSearch('');
                     setConnectionFilter('');
                     setRuleNameFilter('');
+                    setRuleTypeFilter('');
                   }}
                 />
                 <Button
