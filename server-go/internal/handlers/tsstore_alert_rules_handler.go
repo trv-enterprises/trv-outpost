@@ -79,6 +79,12 @@ func (h *TSStoreAlertRulesHandler) Create(c *gin.Context) {
 	}
 	resp, err := h.rules.CreateAlert(c.Request.Context(), &req, callerGUID)
 	if err != nil {
+		// Same mapping as Update: a rule-shape refusal is the caller's
+		// fault and must read as a 400, not a server fault.
+		if errors.Is(err, service.ErrAlertValidation) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		respondError(c, err)
 		return
 	}

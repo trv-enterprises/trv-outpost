@@ -164,6 +164,19 @@
     font-size: 0.8125rem;
   }
 
+  // A staleness rule has no condition expression — it shows a type tag
+  // plus its max_age, stacked so the tag doesn't crowd the text.
+  .rule-trigger--staleness {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: spacing.$spacing-02;
+  }
+
+  .empty-value {
+    color: var(--cds-text-secondary);
+  }
+
   code {
     color: var(--cds-text-primary);
     background-color: var(--cds-layer-01);

@@ -37,8 +37,19 @@ connections still render normally.
 The new-rule wizard walks through:
 
 1. **Connection** — which ts-store the rule lives on.
-2. **Condition** — the alert predicate (a SQL-like expression
-  ts-store evaluates against incoming data).
+2. **Fires when** — what makes the rule trigger. Two kinds:
+   - **A record matches a condition** — a SQL-like expression
+     ts-store evaluates against each arriving record. This is the
+     original behavior and the default.
+   - **No data arrives for a while** — a *staleness* rule. Instead
+     of inspecting records, it watches for their absence: give it a
+     **max age** (`90s`, `5m`, `2h`) and it fires when the store has
+     gone that long without a new record. Use it to catch a
+     collector that died, which no condition can express — absence
+     has no record to compare against.
+
+  The two are mutually exclusive: picking one swaps the form field
+  for the other, because ts-store rejects a rule carrying both.
 3. **Transport** — how ts-store fires the alert when the condition
   trips. Two choices:
    - **Webhook** — ts-store POSTs the alert payload to a URL on
@@ -96,7 +107,8 @@ form shows those as read-only:
 
 To change any of those, delete the rule and create a new one.
 
-What stays editable is the rule's *behavior*: name, condition,
+What stays editable is the rule's *behavior*: name, what makes it
+fire (condition or max age — you can switch a rule between the two),
 cooldown, restart policy, MQTT topic and QoS, and the dashboard
 deep-link.
 
@@ -105,12 +117,36 @@ the pencil greyed out — you can read them, but not administer them.
 
 ## One alert, one rule
 
-In ts-store, an **alert carries exactly one rule** — a condition —
-and exactly one sink. Deleting a row therefore deletes precisely
-what you clicked; there are no sibling rules to take with it.
+In ts-store, an **alert carries exactly one rule** — either a
+condition or a staleness check — and exactly one sink. Deleting a row
+therefore deletes precisely what you clicked; there are no sibling
+rules to take with it.
 
-To send the same condition to more than one destination, create
-one alert per destination.
+To send the same rule to more than one destination, create one alert
+per destination.
+
+## Staleness rules
+
+A staleness rule fires on the **absence** of data: if the store has
+received nothing for longer than its **max age**, it fires. Worth
+knowing before you rely on one:
+
+- **It is per store, not per series.** It catches a collector that
+  stopped writing entirely — not one field going quiet while others
+  keep reporting.
+- **A store that has never received data never fires.** There is no
+  "last record" to measure against.
+- **Recovery is silent.** When data starts flowing again the rule
+  simply stops firing; there is no "resolved" notification.
+- **There is no default max age, on purpose.** A collector polling
+  every 60s should alert after a few missed polls, while an
+  event-driven source (a door contact) can be legitimately quiet for
+  days. Any single default would flood one of those cases.
+- **Restart behavior doesn't apply.** A staleness rule is driven by
+  the clock rather than a scan position, so it has no cursor to
+  resume from — the editor hides the setting for this rule type.
+
+When one fires, the bell row reads like `no data for 5m0s`.
 
 :::note
 Before ts-store issue #4 (post-v0.15.0), an alert held a *list* of

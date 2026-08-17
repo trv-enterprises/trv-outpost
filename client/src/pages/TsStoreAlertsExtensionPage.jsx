@@ -42,6 +42,24 @@ import './TsStoreAlertsExtensionPage.scss';
  * "+ New rule" launches the create-rule editor at
  * /design/extensions/tsstore-alerts/new.
  */
+// What makes a rule fire, rendered for the list's Condition column.
+// A condition rule shows its expression; a staleness rule has no
+// condition at all (ts-store rejects one) and is defined by its
+// max_age instead — rendering r.condition for it would leave a blank
+// cell under a column header that claims otherwise.
+function ruleTrigger(r) {
+  if (r.rule_type === 'staleness') {
+    return (
+      <span className="rule-trigger rule-trigger--staleness">
+        <Tag type="cool-gray" size="sm">staleness</Tag>
+        <code className="condition">{r.max_age ? `no data for ${r.max_age}` : 'no data'}</code>
+      </span>
+    );
+  }
+  if (!r.condition) return <span className="empty-value">—</span>;
+  return <code className="condition">{r.condition}</code>;
+}
+
 function TsStoreAlertsExtensionPage() {
   const navigate = useNavigate();
   const { isEnabled, loading: extLoading } = useExtensions();
@@ -132,6 +150,10 @@ function TsStoreAlertsExtensionPage() {
       // Free-text search stays broad — any of the visible fields.
       if (r.rule_name?.toLowerCase().includes(q)) return true;
       if (r.condition?.toLowerCase().includes(q)) return true;
+      // A staleness rule has no condition; max_age is its defining
+      // attribute, so it must be searchable by it.
+      if (r.max_age?.toLowerCase().includes(q)) return true;
+      if (r.rule_type?.toLowerCase().includes(q)) return true;
       if (r.store_name?.toLowerCase().includes(q)) return true;
       return conns.some((c) => c.connection_name?.toLowerCase().includes(q));
     });
@@ -338,7 +360,7 @@ function TsStoreAlertsExtensionPage() {
                               <Tag size="sm">{r.alert_type}</Tag>
                             </div>
                           </TableCell>
-                          <TableCell><code className="condition">{r.condition}</code></TableCell>
+                          <TableCell>{ruleTrigger(r)}</TableCell>
                           <TableCell>{r.cooldown || <span className="muted">—</span>}</TableCell>
                           <TableCell>
                             {r.dashboard_id ? (
@@ -475,7 +497,9 @@ function TsStoreAlertsExtensionPage() {
               >
                 <span className="rule-clone-name">{r.rule_name}</span>
                 <Tag size="sm">{r.alert_type}</Tag>
-                <code className="rule-clone-condition">{r.condition}</code>
+                <code className="rule-clone-condition">
+                  {r.rule_type === 'staleness' ? `no data for ${r.max_age || '?'}` : r.condition}
+                </code>
               </button>
             ))}
           </div>
