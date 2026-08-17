@@ -43,27 +43,39 @@
     // rule names run long (e.g. "TRV-SRV-001 system-stats tsstore-ws"),
     // and a dropdown that truncates to "TRV-SRV-001 sys…" defeats the
     // point of filtering by name.
+    // Carbon's TableToolbarContent right-aligns its children and lets
+    // the search flex. The connection list page instead packs the
+    // filters against the LEFT edge and pushes only the create action
+    // right, which is the layout being matched here.
     .cds--toolbar-content {
       align-items: center;
+      justify-content: flex-start;
       gap: spacing.$spacing-04;
+      width: 100%;
     }
 
     .cds--search {
-      width: 300px;
+      width: 260px;
+      flex: 0 0 260px;
       background-color: var(--cds-layer-01);
     }
 
+    // Everything after the last filter (reset, refresh, Create) goes to
+    // the right-hand end, matching the connection page's split toolbar.
+    .toolbar-spacer {
+      margin-left: auto;
+    }
+
+    // Sized to the content each holds: connection and rule names run
+    // long, the two "fires when" labels are short. Wide enough to read
+    // a typical name without stretching the toolbar edge to edge.
     #alerts-connection-filter,
     #alerts-rule-filter {
-      // Wide enough for a full connection / rule name at the sizes in
-      // use today, and it degrades to an ellipsis rather than pushing
-      // the toolbar wider.
-      min-width: 320px;
+      min-width: 240px;
     }
 
     #alerts-ruletype-filter {
-      // Two short, fixed labels — no need for the same width.
-      min-width: 190px;
+      min-width: 180px;
     }
 
     // Each filter carries the bottom rule Carbon gives form fields, so
@@ -130,6 +142,19 @@
     border-radius: 2px;
     font-family: 'IBM Plex Mono', monospace;
     font-size: 0.8125rem;
+  }
+
+  // A staleness rule has no condition expression — it shows a type tag
+  // plus its max_age, stacked so the tag doesn't crowd the text.
+  .rule-trigger--staleness {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: spacing.$spacing-02;
+  }
+
+  .empty-value {
+    color: var(--cds-text-secondary);
   }
 
   .muted {
@@ -208,19 +233,6 @@
     border-radius: 2px;
     font-family: 'IBM Plex Mono', monospace;
     font-size: 0.8125rem;
-  }
-
-  // A staleness rule has no condition expression — it shows a type tag
-  // plus its max_age, stacked so the tag doesn't crowd the text.
-  .rule-trigger--staleness {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: spacing.$spacing-02;
-  }
-
-  .empty-value {
-    color: var(--cds-text-secondary);
   }
 
   code {

@@ -325,6 +325,7 @@ function TsStoreAlertsExtensionPage() {
                     size="md"
                   />
                 )}
+                <div className="toolbar-spacer" />
                 <ResetFiltersButton
                   active={!!search || !!connectionFilter || !!ruleNameFilter || !!ruleTypeFilter}
                   onReset={() => {
