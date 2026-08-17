@@ -68,13 +68,21 @@
       margin-left: auto;
     }
 
-    // Sized to the content each holds: connection and rule names run
-    // long, the two "fires when" labels are short.
-    #alerts-connection-filter,
-    #alerts-rule-filter {
-      min-width: 240px;
+    // Sized to the content each holds, allowing ~50px for Carbon's
+    // chevron and field padding on top of the text itself. Measured
+    // against the real names rather than guessed: the longest
+    // connection ("TRV-PI-001 system-stats tsstore-ws rollup") needs
+    // ~270px of text and the longest rule name ~210px, so a 240px
+    // field clipped both.
+    #alerts-connection-filter {
+      min-width: 330px;
     }
 
+    #alerts-rule-filter {
+      min-width: 270px;
+    }
+
+    // Two short, fixed labels — no need for the same room.
     #alerts-ruletype-filter {
       min-width: 180px;
     }
