@@ -13,8 +13,6 @@ import {
   TableHeader,
   TableBody,
   TableCell,
-  TableToolbar,
-  TableToolbarContent,
   TableToolbarSearch,
   Button,
   IconButton,
@@ -263,93 +261,99 @@ function TsStoreAlertsExtensionPage() {
         />
       )}
 
+      {/* Toolbar lives OUTSIDE the DataTable, matching the
+          connection / component / dashboard list pages: a
+          transparent bar on the page background with a gap
+          before the table, not Carbon's filled in-table
+          TableToolbar butted against the column headers. */}
+      <div className="page-toolbar">
+        <div className="toolbar-left">
+        {/* Search is OURS, not Carbon's. `rows` carry only
+            {id, raw} — the cells are rendered by hand below —
+            so Carbon's onInputChange has no cell values to
+            match and rejects every row, which made search
+            report "no rules match" for any term. Filtering
+            happens in `filtered` above; don't re-add
+            onInputChange here. */}
+        <TableToolbarSearch
+          placeholder="Search"
+          onChange={(e) => setSearch(e.target.value)}
+          persistent
+          value={search}
+        />
+        {/* Column filters, matching the connection list page:
+            exact-match narrowing that ANDs with the free-text
+            search. Options come from the loaded rules, so a
+            filter can never select an empty set. */}
+        <Dropdown
+          id="alerts-connection-filter"
+          titleText=""
+          label="All connections"
+          items={['', ...connectionOptions]}
+          itemToString={(c) => (c === '' ? 'All connections' : c)}
+          selectedItem={connectionFilter}
+          onChange={({ selectedItem }) => setConnectionFilter(selectedItem || '')}
+          size="md"
+        />
+        <Dropdown
+          id="alerts-rule-filter"
+          titleText=""
+          label="All rules"
+          items={['', ...ruleNameOptions]}
+          itemToString={(n) => (n === '' ? 'All rules' : n)}
+          selectedItem={ruleNameFilter}
+          onChange={({ selectedItem }) => setRuleNameFilter(selectedItem || '')}
+          size="md"
+        />
+        {/* Rule type — condition vs staleness (#242). Always
+            offered, even when the current rules are all one
+            type: hiding it would make the filter appear and
+            disappear as rules change, and it is how a user
+            discovers that staleness rules exist at all. */}
+        {(
+          <Dropdown
+            id="alerts-ruletype-filter"
+            titleText=""
+            label="Fires when: any"
+            items={ruleTypeItems}
+            itemToString={(t) => {
+              if (t === '') return 'Fires when: any';
+              return t === 'staleness' ? 'No data arrives' : 'Record matches';
+            }}
+            selectedItem={ruleTypeFilter}
+            onChange={({ selectedItem }) => setRuleTypeFilter(selectedItem || '')}
+            size="md"
+          />
+        )}
+        <div className="toolbar-spacer" />
+        <ResetFiltersButton
+          active={!!search || !!connectionFilter || !!ruleNameFilter || !!ruleTypeFilter}
+          onReset={() => {
+            setSearch('');
+            setConnectionFilter('');
+            setRuleNameFilter('');
+            setRuleTypeFilter('');
+          }}
+        />
+        <Button
+          kind="ghost"
+          renderIcon={Renew}
+          iconDescription="Refresh"
+          hasIconOnly
+          onClick={refresh}
+        />
+        {/* Create dropdown — Create Rule / From Existing (clone),
+            matching the connection/component pattern. No AI option. */}
+        <CreateMenu
+          onCreate={() => navigate('/design/extensions/tsstore-alerts/new')}
+          onSelectExisting={() => setRulePickerOpen(true)}
+        />
+        </div>
+      </div>
+
       <DataTable rows={rows} headers={headers} isSortable>
-        {({ rows: rowsView, headers: hdrs, getHeaderProps, getRowProps, getTableProps, getToolbarProps }) => (
+        {({ rows: rowsView, headers: hdrs, getHeaderProps, getRowProps, getTableProps }) => (
           <TableContainer>
-            <TableToolbar {...getToolbarProps()}>
-              <TableToolbarContent>
-                {/* Search is OURS, not Carbon's. `rows` carry only
-                    {id, raw} — the cells are rendered by hand below —
-                    so Carbon's onInputChange has no cell values to
-                    match and rejects every row, which made search
-                    report "no rules match" for any term. Filtering
-                    happens in `filtered` above; don't re-add
-                    onInputChange here. */}
-                <TableToolbarSearch
-                  placeholder="Search"
-                  onChange={(e) => setSearch(e.target.value)}
-                  persistent
-                  value={search}
-                />
-                {/* Column filters, matching the connection list page:
-                    exact-match narrowing that ANDs with the free-text
-                    search. Options come from the loaded rules, so a
-                    filter can never select an empty set. */}
-                <Dropdown
-                  id="alerts-connection-filter"
-                  titleText=""
-                  label="All connections"
-                  items={['', ...connectionOptions]}
-                  itemToString={(c) => (c === '' ? 'All connections' : c)}
-                  selectedItem={connectionFilter}
-                  onChange={({ selectedItem }) => setConnectionFilter(selectedItem || '')}
-                  size="md"
-                />
-                <Dropdown
-                  id="alerts-rule-filter"
-                  titleText=""
-                  label="All rules"
-                  items={['', ...ruleNameOptions]}
-                  itemToString={(n) => (n === '' ? 'All rules' : n)}
-                  selectedItem={ruleNameFilter}
-                  onChange={({ selectedItem }) => setRuleNameFilter(selectedItem || '')}
-                  size="md"
-                />
-                {/* Rule type — condition vs staleness (#242). Always
-                    offered, even when the current rules are all one
-                    type: hiding it would make the filter appear and
-                    disappear as rules change, and it is how a user
-                    discovers that staleness rules exist at all. */}
-                {(
-                  <Dropdown
-                    id="alerts-ruletype-filter"
-                    titleText=""
-                    label="Fires when: any"
-                    items={ruleTypeItems}
-                    itemToString={(t) => {
-                      if (t === '') return 'Fires when: any';
-                      return t === 'staleness' ? 'No data arrives' : 'Record matches';
-                    }}
-                    selectedItem={ruleTypeFilter}
-                    onChange={({ selectedItem }) => setRuleTypeFilter(selectedItem || '')}
-                    size="md"
-                  />
-                )}
-                <div className="toolbar-spacer" />
-                <ResetFiltersButton
-                  active={!!search || !!connectionFilter || !!ruleNameFilter || !!ruleTypeFilter}
-                  onReset={() => {
-                    setSearch('');
-                    setConnectionFilter('');
-                    setRuleNameFilter('');
-                    setRuleTypeFilter('');
-                  }}
-                />
-                <Button
-                  kind="ghost"
-                  renderIcon={Renew}
-                  iconDescription="Refresh"
-                  hasIconOnly
-                  onClick={refresh}
-                />
-                {/* Create dropdown — Create Rule / From Existing (clone),
-                    matching the connection/component pattern. No AI option. */}
-                <CreateMenu
-                  onCreate={() => navigate('/design/extensions/tsstore-alerts/new')}
-                  onSelectExisting={() => setRulePickerOpen(true)}
-                />
-              </TableToolbarContent>
-            </TableToolbar>
             {loading ? (
               <Loading description="Loading rules" withOverlay={false} small />
             ) : (

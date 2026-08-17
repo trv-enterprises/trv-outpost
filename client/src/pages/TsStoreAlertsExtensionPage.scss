@@ -34,22 +34,25 @@
     overflow: hidden;
   }
 
-  .cds--table-toolbar {
+  // Toolbar sits on the PAGE, outside the DataTable — same as the
+  // connection / component / dashboard lists. Transparent (no filled
+  // band) with bottom padding so there is a clear gap before the table
+  // header, rather than Carbon's in-table toolbar butted against it.
+  .page-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    // No horizontal padding: this page's own padding (spacing-07)
+    // already sets the gutter, so the connection page's extra 24px
+    // would indent the search past the table's left edge. Only the
+    // bottom padding is kept — that's the gap before the table header.
+    padding: 0 0 spacing.$spacing-05;
+    gap: spacing.$spacing-04;
     flex-shrink: 0;
-    background-color: var(--cds-layer-01);
 
-    // Match the connection list page's toolbar: a fixed-width search
-    // followed by filter dropdowns wide enough to READ. Connection and
-    // rule names run long (e.g. "TRV-SRV-001 system-stats tsstore-ws"),
-    // and a dropdown that truncates to "TRV-SRV-001 sys…" defeats the
-    // point of filtering by name.
-    // Carbon's TableToolbarContent right-aligns its children and lets
-    // the search flex. The connection list page instead packs the
-    // filters against the LEFT edge and pushes only the create action
-    // right, which is the layout being matched here.
-    .cds--toolbar-content {
+    .toolbar-left {
+      display: flex;
       align-items: center;
-      justify-content: flex-start;
       gap: spacing.$spacing-04;
       width: 100%;
     }
@@ -57,18 +60,16 @@
     .cds--search {
       width: 260px;
       flex: 0 0 260px;
-      background-color: var(--cds-layer-01);
     }
 
     // Everything after the last filter (reset, refresh, Create) goes to
-    // the right-hand end, matching the connection page's split toolbar.
+    // the right-hand end.
     .toolbar-spacer {
       margin-left: auto;
     }
 
     // Sized to the content each holds: connection and rule names run
-    // long, the two "fires when" labels are short. Wide enough to read
-    // a typical name without stretching the toolbar edge to edge.
+    // long, the two "fires when" labels are short.
     #alerts-connection-filter,
     #alerts-rule-filter {
       min-width: 240px;
@@ -76,16 +77,6 @@
 
     #alerts-ruletype-filter {
       min-width: 180px;
-    }
-
-    // Each filter carries the bottom rule Carbon gives form fields, so
-    // the dropdowns read as separate controls rather than as one
-    // continuous strip — matching the connection list page's toolbar.
-    #alerts-connection-filter,
-    #alerts-rule-filter,
-    #alerts-ruletype-filter {
-      background-color: var(--cds-field-01);
-      border-bottom: 1px solid var(--cds-border-strong-01);
     }
 
     // The open menu can be wider than its trigger, so a long name is
