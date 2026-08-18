@@ -141,3 +141,131 @@ exceptions:
       from the deployed static site.
     remediation: >
       Same as GHSA-w3rx-r6r6-pgpr — take the first image-size release >2.0.2.
+
+  # ── github.com/lib/pq — 7 advisories disclosed 2026-08-18 ──────────────────
+  # A batch disclosure against the Postgres driver. Accepted as a group: they
+  # share one threat model and one blocked remediation path, so splitting the
+  # justification would just repeat it seven times.
+  #
+  # WHY THE BLAST RADIUS DOES NOT REACH US
+  # Every one of these is a MALICIOUS-SERVER attack: the vulnerable code parses
+  # what a Postgres server sends BACK to our client (backend frames, auth
+  # exchanges, error payloads). Exploiting any of them requires the operator to
+  # point a SQL connection at a hostile database and authenticate to it. That is
+  # not an anonymous-attacker path: SQL connections are created by an
+  # authenticated Design-capability user, and the host is a deliberate
+  # configuration choice, not attacker-supplied input. An operator who can be
+  # induced to connect to an attacker's database already has strictly worse
+  # options available (arbitrary SELECT against that server, credential
+  # capture) than crashing their own dashboard process.
+  #
+  # We also never call lib/pq's API directly — it is a blank driver import
+  # (`_ "github.com/lib/pq"` in internal/connection/sql.go:16) reached only
+  # through database/sql. There is no path where untrusted data reaches the
+  # driver except by being the connected server.
+  #
+  # WHY WE CANNOT SIMPLY BUMP
+  # v1.12.3 is the LATEST published release and every advisory reports
+  # "Fixed in: N/A" — there is no patched version to move to. This is a direct
+  # dependency (not transitive), so we own the remediation.
+  #
+  # REMEDIATION (tracked as its own issue): migrate the SQL adapter from
+  # lib/pq to jackc/pgx, which is actively maintained and is the de-facto
+  # modern Postgres driver for Go. Not a same-day change — it touches the
+  # adapter that #185 already flags for unbounded result-set fetching — so it
+  # is scheduled rather than rushed. Re-review at expiry: if lib/pq has by then
+  # shipped fixes, take them instead.
+  - id: GO-2026-6173
+    scanner: govulncheck
+    module: github.com/lib/pq@v1.12.3
+    accepted_by: Tom Viviano
+    accepted_on: 2026-08-18
+    expires_on: 2026-11-17
+    reason: >
+      Pre-protocol error reader permits unbounded memory consumption. Requires
+      connecting to a hostile Postgres server (see the lib/pq block comment
+      above). No patched release exists — v1.12.3 is latest, "Fixed in: N/A".
+    remediation: >
+      Migrate to jackc/pgx, or take a fixed lib/pq release if one ships first.
+
+  - id: GO-2026-6172
+    scanner: govulncheck
+    module: github.com/lib/pq@v1.12.3
+    accepted_by: Tom Viviano
+    accepted_on: 2026-08-18
+    expires_on: 2026-11-17
+    reason: >
+      Backend frame lengths cause pre-validation memory exhaustion. Malicious
+      server required; no patched release exists.
+    remediation: >
+      Migrate to jackc/pgx, or take a fixed lib/pq release if one ships first.
+
+  - id: GO-2026-6171
+    scanner: govulncheck
+    module: github.com/lib/pq@v1.12.3
+    accepted_by: Tom Viviano
+    accepted_on: 2026-08-18
+    expires_on: 2026-11-17
+    reason: >
+      Malformed RowDescription and DataRow messages cause panics. Malicious
+      server required; worst case is a crash of the process already talking to
+      that server. No patched release exists.
+    remediation: >
+      Migrate to jackc/pgx, or take a fixed lib/pq release if one ships first.
+
+  - id: GO-2026-6170
+    scanner: govulncheck
+    module: github.com/lib/pq@v1.12.3
+    accepted_by: Tom Viviano
+    accepted_on: 2026-08-18
+    expires_on: 2026-11-17
+    reason: >
+      Malformed backend frame length causes panic. Malicious server required;
+      no patched release exists.
+    remediation: >
+      Migrate to jackc/pgx, or take a fixed lib/pq release if one ships first.
+
+  - id: GO-2026-6169
+    scanner: govulncheck
+    module: github.com/lib/pq@v1.12.3
+    accepted_by: Tom Viviano
+    accepted_on: 2026-08-18
+    expires_on: 2026-11-17
+    reason: >
+      Discloses the wrong .pgpass credential when hostaddr is used. NOT
+      REACHABLE HERE: we never use .pgpass and never set hostaddr — connection
+      strings are built by buildConnectionString() from the stored connection
+      record's explicit host/user/password fields, and credentials come from
+      the connection config, not from an on-disk pgpass file. No patched
+      release exists.
+    remediation: >
+      Migrate to jackc/pgx, or take a fixed lib/pq release if one ships first.
+
+  - id: GO-2026-6168
+    scanner: govulncheck
+    module: github.com/lib/pq@v1.12.3
+    accepted_by: Tom Viviano
+    accepted_on: 2026-08-18
+    expires_on: 2026-11-17
+    reason: >
+      Unbounded SCRAM iteration count causes CPU denial of service. The
+      iteration count is chosen by the SERVER during authentication, so this
+      requires authenticating against a hostile database. No patched release
+      exists.
+    remediation: >
+      Migrate to jackc/pgx, or take a fixed lib/pq release if one ships first.
+
+  - id: GO-2026-6166
+    scanner: govulncheck
+    module: github.com/lib/pq@v1.12.3
+    accepted_by: Tom Viviano
+    accepted_on: 2026-08-18
+    expires_on: 2026-11-17
+    reason: >
+      GSS authentication completes without mutual proof, so a server can
+      impersonate the expected principal. NOT REACHABLE HERE: we never enable
+      GSSAPI — buildConnectionString() emits only host/port/user/password/
+      dbname/sslmode, and no code path sets a krbsrvname or GSS credential.
+      No patched release exists.
+    remediation: >
+      Migrate to jackc/pgx, or take a fixed lib/pq release if one ships first.
