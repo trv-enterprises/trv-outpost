@@ -13126,6 +13126,10 @@
                 "mqtt_topic": {
                     "type": "string"
                 },
+                "namespace": {
+                    "description": "Namespace files this rule's FIRED ALERTS into a namespace, which is\nwhat decides who can see them on the bell (#263). Independent of the\nrule's connection: one store is commonly reachable through several\nconnections in different namespaces, so inheriting the delivering\nconnection's namespace made visibility depend on which connection\nhappened to be picked. Empty = fall back to that old behavior.",
+                    "type": "string"
+                },
                 "poll_interval": {
                     "type": "string"
                 },
@@ -13201,6 +13205,10 @@
                 "alert_id": {
                     "type": "string"
                 },
+                "alert_namespace": {
+                    "description": "AlertNamespace is the namespace the rule's FIRED ALERTS are filed\ninto, which is what gates who can see them (#263). Decoded from\nexternal_ref. Empty when the rule predates #263 or came from the\nts-store CLI — the webhook receiver then falls back to the\ndelivering connection's namespace, the pre-#263 behavior.",
+                    "type": "string"
+                },
                 "alert_target": {
                     "type": "string"
                 },
@@ -13255,6 +13263,7 @@
                     "type": "string"
                 },
                 "namespace": {
+                    "description": "Namespace is the primary CONNECTION's namespace — where the\nconnection record lives. NOT necessarily where this rule's fired\nalerts are filed; see AlertNamespace.",
                     "type": "string"
                 },
                 "rule_name": {

@@ -113,11 +113,20 @@ type TSStoreAggregatedRule struct {
 	ConnectionName  string                 `json:"connection_name"`
 	Connections     []TSStoreConnectionRef `json:"connections,omitempty"`
 	ConnectionCount int                    `json:"connection_count"`
-	Namespace       string                 `json:"namespace,omitempty"`
-	StoreName       string                 `json:"store_name"`
-	AlertID         string                 `json:"alert_id"`
-	AlertType       string                 `json:"alert_type"` // webhook | ws | mqtt
-	AlertTarget     string                 `json:"alert_target,omitempty"`
+	// Namespace is the primary CONNECTION's namespace — where the
+	// connection record lives. NOT necessarily where this rule's fired
+	// alerts are filed; see AlertNamespace.
+	Namespace string `json:"namespace,omitempty"`
+	// AlertNamespace is the namespace the rule's FIRED ALERTS are filed
+	// into, which is what gates who can see them (#263). Decoded from
+	// external_ref. Empty when the rule predates #263 or came from the
+	// ts-store CLI — the webhook receiver then falls back to the
+	// delivering connection's namespace, the pre-#263 behavior.
+	AlertNamespace string `json:"alert_namespace,omitempty"`
+	StoreName      string `json:"store_name"`
+	AlertID        string `json:"alert_id"`
+	AlertType      string `json:"alert_type"` // webhook | ws | mqtt
+	AlertTarget    string `json:"alert_target,omitempty"`
 
 	// Rule-level fields straight from ts-store.
 	RuleName string `json:"rule_name"`
@@ -606,6 +615,7 @@ func (s *TSStoreAlertRulesService) fetchRulesForConnection(ctx context.Context, 
 			ExternalRef:    rule.ExternalRef,
 			DashboardID:    decodeDashboardID(rule.ExternalRef),
 			DashboardVars:  decodeDashboardVars(rule.ExternalRef),
+			AlertNamespace: decodeNamespace(rule.ExternalRef),
 			State:          st.State,
 			AlertsFired:    st.AlertsFired,
 		})
@@ -824,8 +834,15 @@ type CreateAlertRequest struct {
 	// staleness rule fires ("5m"). Required for staleness, rejected
 	// otherwise. No default by design — a 60s collector and an
 	// event-driven source can't share one.
-	MaxAge      string `json:"max_age,omitempty"`
-	Cooldown    string `json:"cooldown,omitempty"`     // "5m" etc., ts-store duration
+	MaxAge   string `json:"max_age,omitempty"`
+	Cooldown string `json:"cooldown,omitempty"` // "5m" etc., ts-store duration
+	// Namespace files this rule's FIRED ALERTS into a namespace, which is
+	// what decides who can see them on the bell (#263). Independent of the
+	// rule's connection: one store is commonly reachable through several
+	// connections in different namespaces, so inheriting the delivering
+	// connection's namespace made visibility depend on which connection
+	// happened to be picked. Empty = fall back to that old behavior.
+	Namespace   string `json:"namespace,omitempty"`
 	DashboardID string `json:"dashboard_id,omitempty"` // optional bell deep-link target
 	// DashboardVars pre-scopes the deep-linked dashboard: variable name →
 	// value, appended to the bell link as ?var_<name>=<value> so the dashboard
@@ -929,7 +946,7 @@ func commonAlertBody(req *CreateAlertRequest) map[string]interface{} {
 	if req.Cooldown != "" {
 		body["cooldown"] = req.Cooldown
 	}
-	if ref := encodeExternalRef(req.DashboardID, req.DashboardVars); ref != "" {
+	if ref := encodeExternalRef(req.DashboardID, req.DashboardVars, req.Namespace); ref != "" {
 		body["external_ref"] = ref
 	}
 	if req.PollInterval != "" {
@@ -1281,19 +1298,40 @@ func (s *TSStoreAlertRulesService) UpdateAlert(ctx context.Context, alertID stri
 // chosen. dashboard_vars is omitted when empty. Empty dashboardID stays empty so
 // ts-store doesn't store an empty JSON object. Variables without a dashboard are
 // meaningless (there's no link to scope), so they're dropped in that case (#125).
-func encodeExternalRef(dashboardID string, dashboardVars map[string]string) string {
-	if dashboardID == "" {
+func encodeExternalRef(dashboardID string, dashboardVars map[string]string, namespace string) string {
+	// Namespace alone is enough to warrant a payload: it decides who can
+	// SEE the fired alert (#263), so a rule with no dashboard deep-link
+	// still needs to carry one. Only a completely empty ref stays "".
+	if dashboardID == "" && strings.TrimSpace(namespace) == "" {
 		return ""
 	}
 	payload := struct {
-		DashboardID   string            `json:"dashboard_id"`
+		DashboardID   string            `json:"dashboard_id,omitempty"`
 		DashboardVars map[string]string `json:"dashboard_vars,omitempty"`
-	}{DashboardID: dashboardID}
+		Namespace     string            `json:"namespace,omitempty"`
+	}{DashboardID: dashboardID, Namespace: strings.TrimSpace(namespace)}
 	if len(dashboardVars) > 0 {
 		payload.DashboardVars = dashboardVars
 	}
 	buf, _ := json.Marshal(payload)
 	return string(buf)
+}
+
+// decodeNamespace pulls the authored namespace out of external_ref. Empty
+// when the rule predates #263, was created by the ts-store CLI, or carries
+// a non-JSON ref — callers fall back to the delivering connection's
+// namespace, which is the pre-#263 behavior.
+func decodeNamespace(externalRef string) string {
+	if externalRef == "" {
+		return ""
+	}
+	var parsed struct {
+		Namespace string `json:"namespace"`
+	}
+	if err := json.Unmarshal([]byte(externalRef), &parsed); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(parsed.Namespace)
 }
 
 // decodeDashboardVars returns the dashboard_vars map when external_ref carries

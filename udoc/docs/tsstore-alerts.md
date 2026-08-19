@@ -115,6 +115,27 @@ deep-link.
 Rules on a connection whose key lacks **manage** on that store show
 the pencil greyed out — you can read them, but not administer them.
 
+## Who sees a fired alert
+
+An alert is filed into a **namespace**, and only users with access to that
+namespace see it on the bell. The rule editor's **File alerts into** field
+chooses it.
+
+Left as *Follow the connection*, the alert inherits the namespace of the
+connection that delivered it — which is fine when a store is reached through
+one connection. When the same store is reachable through several connections
+in **different** namespaces, that inheritance is arbitrary: whichever
+connection was picked in the wizard decides who can see the alerts. Setting
+the field explicitly removes the guesswork.
+
+This is one of the few things that IS editable on an existing rule. Unlike
+the connection, store, delivery type and destination URL, the namespace does
+not *address* the rule — changing it moves nothing, it only changes who the
+fired alerts are visible to.
+
+Rules created before this existed, or created by the ts-store CLI, carry no
+namespace and keep inheriting the connection's.
+
 ## One alert, one rule
 
 In ts-store, an **alert carries exactly one rule** — either a
