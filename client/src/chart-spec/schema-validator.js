@@ -186,26 +186,33 @@ function validateField(field, path, errors, sectionFieldIds) {
     }
   }
   if (field.visibleWhen) {
-    if (typeof field.visibleWhen !== 'object') {
-      pushErr(errors, `${path}.visibleWhen`, 'must be an object');
-    } else {
-      // `allOf` composes clauses with AND; each member is itself a clause.
-      const clauses = Array.isArray(field.visibleWhen.allOf)
-        ? field.visibleWhen.allOf
-        : [field.visibleWhen];
-      clauses.forEach((vw, i) => {
-        const at = Array.isArray(field.visibleWhen.allOf)
-          ? `${path}.visibleWhen.allOf[${i}]`
-          : `${path}.visibleWhen`;
-        if (typeof vw?.field !== 'string') {
-          pushErr(errors, `${at}.field`, 'missing or not a string');
-        }
-        if (!SUPPORTED_VW_OPERATORS.has(vw?.operator)) {
-          pushErr(errors, `${at}.operator`, `unsupported operator "${vw?.operator}"`);
-        }
-      });
-    }
+    validateVisibleWhen(field.visibleWhen, `${path}.visibleWhen`, errors);
   }
+}
+
+// A visibleWhen clause is either a single {field, operator, value} or an
+// `allOf` array composing several with AND. Validated in one place because
+// fields AND sections/subsections both accept the shape — they had
+// divergent copies, and only one of them learned about allOf (CI caught it).
+function validateVisibleWhen(vw, path, errors) {
+  if (typeof vw !== 'object' || vw === null) {
+    pushErr(errors, path, 'must be an object');
+    return;
+  }
+  const clauses = Array.isArray(vw.allOf) ? vw.allOf : [vw];
+  if (Array.isArray(vw.allOf) && vw.allOf.length === 0) {
+    pushErr(errors, `${path}.allOf`, 'must not be empty');
+    return;
+  }
+  clauses.forEach((clause, i) => {
+    const at = Array.isArray(vw.allOf) ? `${path}.allOf[${i}]` : path;
+    if (typeof clause?.field !== 'string') {
+      pushErr(errors, `${at}.field`, 'missing or not a string');
+    }
+    if (!SUPPORTED_VW_OPERATORS.has(clause?.operator)) {
+      pushErr(errors, `${at}.operator`, `unsupported operator "${clause?.operator}"`);
+    }
+  });
 }
 
 function validateSection(section, path, errors, allFieldIds, depth = 0) {
@@ -226,17 +233,7 @@ function validateSection(section, path, errors, allFieldIds, depth = 0) {
   // gated on a sibling field (e.g. right-y-range subsection appears
   // only when multipleYAxis is on).
   if (section.visibleWhen) {
-    if (typeof section.visibleWhen !== 'object') {
-      pushErr(errors, `${path}.visibleWhen`, 'must be an object');
-    } else {
-      const vw = section.visibleWhen;
-      if (typeof vw.field !== 'string') {
-        pushErr(errors, `${path}.visibleWhen.field`, 'missing or not a string');
-      }
-      if (!SUPPORTED_VW_OPERATORS.has(vw.operator)) {
-        pushErr(errors, `${path}.visibleWhen.operator`, `unsupported operator "${vw.operator}"`);
-      }
-    }
+    validateVisibleWhen(section.visibleWhen, `${path}.visibleWhen`, errors);
   }
   const hasFields = Array.isArray(section.fields) && section.fields.length > 0;
   const hasSubsections = Array.isArray(section.subsections) && section.subsections.length > 0;
