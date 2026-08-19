@@ -81,23 +81,40 @@ type tsstoreAlertPayload struct {
 // failure.
 // It also returns the optional `dashboard_vars` map (variable name → value)
 // used to pre-scope the deep-linked dashboard (#125); nil when absent.
-func decodeExternalRef(ref string) (string, map[string]string) {
+// externalRefFields is the dashboard convention carried in ts-store's
+// external_ref. Returned as a struct rather than a widening tuple —
+// namespace was the third field to be added (#263).
+type externalRefFields struct {
+	DashboardID   string
+	DashboardVars map[string]string
+	// Namespace is the namespace the rule's author chose for its FIRED
+	// ALERTS. Empty for rules created before #263 or by the ts-store CLI;
+	// the caller then falls back to the delivering connection's namespace.
+	Namespace string
+}
+
+func decodeExternalRef(ref string) externalRefFields {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
-		return "", nil
+		return externalRefFields{}
 	}
 	var parsed struct {
 		DashboardID   string            `json:"dashboard_id"`
 		DashboardVars map[string]string `json:"dashboard_vars"`
+		Namespace     string            `json:"namespace"`
 	}
 	if err := json.Unmarshal([]byte(ref), &parsed); err != nil {
-		return "", nil
+		return externalRefFields{}
 	}
 	vars := parsed.DashboardVars
 	if len(vars) == 0 {
 		vars = nil
 	}
-	return parsed.DashboardID, vars
+	return externalRefFields{
+		DashboardID:   parsed.DashboardID,
+		DashboardVars: vars,
+		Namespace:     strings.TrimSpace(parsed.Namespace),
+	}
 }
 
 // HandleTSStoreAlert receives an alert from a ts-store webhook rule
@@ -277,7 +294,21 @@ func (h *WebhookHandler) acceptTSStoreAlert(c *gin.Context, connectionID string)
 	// so future producers / future schema can still see the raw
 	// value, but DashboardID stays empty and the bell row just
 	// doesn't render an "Open dashboard" link.
-	dashboardID, dashboardVars := decodeExternalRef(payload.ExternalRef)
+	refFields := decodeExternalRef(payload.ExternalRef)
+	dashboardID, dashboardVars := refFields.DashboardID, refFields.DashboardVars
+
+	// Which namespace this alert is FILED into decides who can see it —
+	// AlertService.authorizeAlert gates every read on it (#4). Prefer the
+	// namespace the rule's author chose (#263). Falling back to the
+	// delivering connection's namespace preserves pre-#263 behavior, but
+	// that fallback is the bug: since #248 one store is commonly reachable
+	// through several connections in DIFFERENT namespaces, so visibility
+	// used to depend on which connection happened to be picked in the
+	// wizard rather than on intent.
+	alertNamespace := refFields.Namespace
+	if alertNamespace == "" {
+		alertNamespace = conn.Namespace
+	}
 
 	// Persist first, fan-out second. Persistence is the
 	// "doesn't get lost if nobody is watching" guarantee; the SSE
@@ -293,7 +324,7 @@ func (h *WebhookHandler) acceptTSStoreAlert(c *gin.Context, connectionID string)
 		Subtitle:      payload.Condition,
 		Source:        payload.StoreName,
 		RuleName:      payload.RuleName,
-		Namespace:     conn.Namespace,
+		Namespace:     alertNamespace,
 		ConnectionID:  connectionID,
 		Payload:       payload.Data,
 		ExternalRef:   payload.ExternalRef,
@@ -312,7 +343,7 @@ func (h *WebhookHandler) acceptTSStoreAlert(c *gin.Context, connectionID string)
 	}
 	ev := service.Event{
 		Kind:      "alert",
-		Namespace: conn.Namespace,
+		Namespace: alertNamespace,
 		Payload: service.AlertPayload{
 			ID:            alertID,
 			Severity:      "warning",

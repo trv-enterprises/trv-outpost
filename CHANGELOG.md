@@ -55,6 +55,19 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A rule now chooses which namespace its fired alerts are filed into**
+  (#263). That namespace gates who can see the alert on the bell, but it used
+  to be copied from whichever connection delivered the webhook — and since
+  #248 one store is commonly reachable through several connections in
+  different namespaces, so visibility depended on which connection happened to
+  be picked in the wizard rather than on intent. The rule editor gained a
+  **File alerts into** field (editable on existing rules — unlike the
+  connection/store/type/URL it doesn't address the rule, so changing it moves
+  nothing), carried through ts-store's `external_ref`. Rules created before
+  this, or by the ts-store CLI, carry no namespace and keep inheriting the
+  connection's — no migration.
+
+
 - **Agent dashboard edits no longer destroy panel variable bindings** (#268).
   `update_dashboard` replaces the whole panel array, but the panel schema shown
   to the Assistant and to MCP omitted `connection_tags` (per-panel connection

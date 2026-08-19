@@ -98,6 +98,11 @@ function TsStoreAlertRuleEditorPage() {
   // Deliberately NOT a multiselect: choosing the namespace to work in is a
   // one-of choice here, and the count-pill UX read as broken.
   const [namespaceFilter, setNamespaceFilter] = useState('');
+  // #263: the namespace a rule's FIRED ALERTS are filed into — a rule
+  // property carried in ts-store's external_ref, NOT the picker filter
+  // above. Empty = inherit the delivering connection's namespace, which
+  // is the pre-#263 behavior and stays the default.
+  const [alertNamespace, setAlertNamespace] = useState('');
   const [connectionId, setConnectionId] = useState('');
   // #248: target store for an ENDPOINT-SCOPED connection (no pinned
   // store_name) — required there; a pinned connection's rule always
@@ -252,6 +257,8 @@ function TsStoreAlertRuleEditorPage() {
     // would silently produce an unsubmittable condition-rule form with
     // the staleness semantics dropped.
     setRuleType(src.rule_type || 'condition');
+    // Carry the authored alert namespace onto the copy (#263).
+    if (src.alert_namespace) setAlertNamespace(String(src.alert_namespace));
     setMaxAge(src.max_age || '');
     setCondition(src.condition || '');
     if (src.cooldown) setCooldown(src.cooldown);
@@ -304,6 +311,12 @@ function TsStoreAlertRuleEditorPage() {
         // Rule type + its one field. ts-store omits rule_type on rules
         // that predate #134, so absent means condition.
         setRuleType(sink?.rule_type || d?.rule_type || 'condition');
+        // Authored alert namespace, if the rule carries one. Absent on
+        // pre-#263 rules — the field then shows "Follow the connection".
+        try {
+          const ref = sink?.external_ref ? JSON.parse(sink.external_ref) : null;
+          if (ref?.namespace) setAlertNamespace(String(ref.namespace));
+        } catch { /* non-JSON ref (CLI producer) — leave unset */ }
         setMaxAge(sink?.max_age || '');
         setCondition(sink?.condition || '');
         setCooldown(sink?.cooldown || '');
@@ -641,6 +654,10 @@ function TsStoreAlertRuleEditorPage() {
         condition: ruleType === 'staleness' ? undefined : condition.trim(),
         max_age: ruleType === 'staleness' ? maxAge.trim() : undefined,
         cooldown: cooldown.trim() || undefined,
+        // #263 — where fired alerts are filed (gates who can see them).
+        // Omitted when unset so the server keeps inheriting the
+        // connection's namespace, preserving pre-#263 behavior.
+        namespace: alertNamespace || undefined,
         dashboard_id: dashboardId || undefined,
         // Pre-scope the deep link: variable name → value. Only non-empty
         // values for variables the picked dashboard actually has; dropped
@@ -783,27 +800,44 @@ function TsStoreAlertRuleEditorPage() {
             )}
           </FormGroup>
 
-          {/* 3. Namespace — its own section, above Store. It scopes
-              which connections the picker offers; it is not part of
-              the rule, which is why it doesn't sit inside Store.
-              Hidden while editing: the connection is fixed there, so
-              there is nothing left to narrow and showing the control
-              would imply the rule could be moved. */}
-          {!isEditing && !connectionsLoading && (
+          {/* 3. Namespace. TWO different things share the word, so they
+              are separate controls:
+                - the PICKER FILTER (create only) just narrows the
+                  connection list below; it is not stored anywhere.
+                - ALERT NAMESPACE is a property of the rule (#263). It
+                  decides who can SEE this rule's fired alerts on the
+                  bell, and is carried in ts-store's external_ref. It is
+                  editable on an existing rule precisely because it does
+                  NOT address the rule — unlike connection/store/type/URL,
+                  changing it moves nothing. */}
+          {!connectionsLoading && (
             <FormGroup legendText="Namespace">
               <div className="namespace-section">
+                {!isEditing && (
+                  <Dropdown
+                    id="rule-namespace-filter"
+                    titleText="Filter connections by namespace"
+                    label="All"
+                    items={['', ...namespaceOptions]}
+                    itemToString={(ns) => (ns === '' ? 'All' : ns)}
+                    selectedItem={namespaceFilter}
+                    onChange={({ selectedItem }) => setNamespaceFilter(selectedItem || '')}
+                    size="md"
+                    helperText="Narrows the connection list below. Not saved on the rule."
+                  />
+                )}
                 <Dropdown
-                  id="rule-namespace-filter"
-                  /* No titleText — the section legend above already
-                     says "Namespace"; repeating it stutters. */
-                  titleText=""
-                  label="All"
+                  id="rule-alert-namespace"
+                  titleText="File alerts into"
+                  label="Follow the connection"
                   items={['', ...namespaceOptions]}
-                  itemToString={(ns) => (ns === '' ? 'All' : ns)}
-                  selectedItem={namespaceFilter}
-                  onChange={({ selectedItem }) => setNamespaceFilter(selectedItem || '')}
+                  itemToString={(ns) => (ns === '' ? 'Follow the connection' : ns)}
+                  selectedItem={alertNamespace}
+                  onChange={({ selectedItem }) => setAlertNamespace(selectedItem || '')}
                   size="md"
-                  helperText="Narrows the connection list below."
+                  helperText={alertNamespace
+                    ? `Fired alerts are filed into “${alertNamespace}”. Only users with access to that namespace see them on the bell.`
+                    : 'Fired alerts inherit the delivering connection’s namespace. Set one explicitly when a store is reachable through connections in several namespaces.'}
                 />
               </div>
             </FormGroup>

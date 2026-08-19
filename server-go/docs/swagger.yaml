@@ -4315,6 +4315,15 @@ definitions:
         type: integer
       mqtt_topic:
         type: string
+      namespace:
+        description: |-
+          Namespace files this rule's FIRED ALERTS into a namespace, which is
+          what decides who can see them on the bell (#263). Independent of the
+          rule's connection: one store is commonly reachable through several
+          connections in different namespaces, so inheriting the delivering
+          connection's namespace made visibility depend on which connection
+          happened to be picked. Empty = fall back to that old behavior.
+        type: string
       poll_interval:
         type: string
       restart_policy:
@@ -4385,6 +4394,14 @@ definitions:
     properties:
       alert_id:
         type: string
+      alert_namespace:
+        description: |-
+          AlertNamespace is the namespace the rule's FIRED ALERTS are filed
+          into, which is what gates who can see them (#263). Decoded from
+          external_ref. Empty when the rule predates #263 or came from the
+          ts-store CLI — the webhook receiver then falls back to the
+          delivering connection's namespace, the pre-#263 behavior.
+        type: string
       alert_target:
         type: string
       alert_type:
@@ -4448,6 +4465,10 @@ definitions:
       max_age:
         type: string
       namespace:
+        description: |-
+          Namespace is the primary CONNECTION's namespace — where the
+          connection record lives. NOT necessarily where this rule's fired
+          alerts are filed; see AlertNamespace.
         type: string
       rule_name:
         description: Rule-level fields straight from ts-store.

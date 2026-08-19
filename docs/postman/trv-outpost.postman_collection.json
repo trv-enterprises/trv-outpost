@@ -5862,7 +5862,7 @@
             "description": "Create an alert rule on a tsstore connection\n\nOptional extension endpoint — only mounted when the admin setting `extensions.tsstore_alerts.enabled` is true. Returns 403 when the extension is disabled.\n\n\nResponses: 201, 400, 403, 500",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"condition\": \"\",\n  \"connection_id\": \"\",\n  \"cooldown\": \"\",\n  \"dashboard_id\": \"\",\n  \"dashboard_vars\": {\n    \"<key>\": \"\"\n  },\n  \"max_age\": \"\",\n  \"max_replay\": \"\",\n  \"mqtt_qos\": 0,\n  \"mqtt_topic\": \"\",\n  \"poll_interval\": \"\",\n  \"restart_policy\": \"\",\n  \"rule_name\": \"\",\n  \"rule_type\": \"\",\n  \"sink_connection_id\": \"\",\n  \"store_name\": \"\",\n  \"timeout\": \"\",\n  \"type\": \"\",\n  \"webhook_headers\": {\n    \"<key>\": \"\"\n  },\n  \"webhook_url_override\": \"\"\n}",
+              "raw": "{\n  \"condition\": \"\",\n  \"connection_id\": \"\",\n  \"cooldown\": \"\",\n  \"dashboard_id\": \"\",\n  \"dashboard_vars\": {\n    \"<key>\": \"\"\n  },\n  \"max_age\": \"\",\n  \"max_replay\": \"\",\n  \"mqtt_qos\": 0,\n  \"mqtt_topic\": \"\",\n  \"namespace\": \"\",\n  \"poll_interval\": \"\",\n  \"restart_policy\": \"\",\n  \"rule_name\": \"\",\n  \"rule_type\": \"\",\n  \"sink_connection_id\": \"\",\n  \"store_name\": \"\",\n  \"timeout\": \"\",\n  \"type\": \"\",\n  \"webhook_headers\": {\n    \"<key>\": \"\"\n  },\n  \"webhook_url_override\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6049,7 +6049,7 @@
             "description": "Update a ts-store alert rule in place\n\nOptional extension endpoint — only mounted when the admin setting `extensions.tsstore_alerts.enabled` is true. Returns 403 when the extension is disabled.\n\n\nResponses: 204, 400, 403, 500",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"condition\": \"\",\n  \"connection_id\": \"\",\n  \"cooldown\": \"\",\n  \"dashboard_id\": \"\",\n  \"dashboard_vars\": {\n    \"<key>\": \"\"\n  },\n  \"max_age\": \"\",\n  \"max_replay\": \"\",\n  \"mqtt_qos\": 0,\n  \"mqtt_topic\": \"\",\n  \"poll_interval\": \"\",\n  \"restart_policy\": \"\",\n  \"rule_name\": \"\",\n  \"rule_type\": \"\",\n  \"sink_connection_id\": \"\",\n  \"store_name\": \"\",\n  \"timeout\": \"\",\n  \"type\": \"\",\n  \"webhook_headers\": {\n    \"<key>\": \"\"\n  },\n  \"webhook_url_override\": \"\"\n}",
+              "raw": "{\n  \"condition\": \"\",\n  \"connection_id\": \"\",\n  \"cooldown\": \"\",\n  \"dashboard_id\": \"\",\n  \"dashboard_vars\": {\n    \"<key>\": \"\"\n  },\n  \"max_age\": \"\",\n  \"max_replay\": \"\",\n  \"mqtt_qos\": 0,\n  \"mqtt_topic\": \"\",\n  \"namespace\": \"\",\n  \"poll_interval\": \"\",\n  \"restart_policy\": \"\",\n  \"rule_name\": \"\",\n  \"rule_type\": \"\",\n  \"sink_connection_id\": \"\",\n  \"store_name\": \"\",\n  \"timeout\": \"\",\n  \"type\": \"\",\n  \"webhook_headers\": {\n    \"<key>\": \"\"\n  },\n  \"webhook_url_override\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"

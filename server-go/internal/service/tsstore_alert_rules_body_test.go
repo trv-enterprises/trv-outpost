@@ -144,3 +144,67 @@ func TestValidateRuleTypeFields_DoesNotParseMaxAge(t *testing.T) {
 		t.Fatalf("local validation should defer max_age parsing to ts-store, got %v", err)
 	}
 }
+
+// ─── #263: alert namespace as a rule property ────────────────────────
+//
+// Which namespace a fired alert is filed into decides WHO CAN SEE IT
+// (AlertService.authorizeAlert gates every read on it). Before #263 it was
+// inherited from whichever connection delivered the webhook, so with one
+// store reachable through several connections in different namespaces,
+// visibility depended on which connection happened to be picked.
+
+func TestEncodeExternalRef_NamespaceOnly(t *testing.T) {
+	// A rule with no dashboard deep-link must still carry its namespace —
+	// encodeExternalRef used to return "" whenever dashboard_id was empty,
+	// which would have silently dropped it.
+	ref := encodeExternalRef("", nil, "trv-homelab")
+	if ref == "" {
+		t.Fatal("namespace alone must produce an external_ref, got empty")
+	}
+	if got := decodeNamespace(ref); got != "trv-homelab" {
+		t.Errorf("decodeNamespace = %q, want trv-homelab", got)
+	}
+	if got := decodeDashboardID(ref); got != "" {
+		t.Errorf("dashboard_id should be absent, got %q", got)
+	}
+}
+
+func TestEncodeExternalRef_RoundTripsAllThree(t *testing.T) {
+	ref := encodeExternalRef("dash-1", map[string]string{"host": "srv-001"}, "trv-homelab")
+	if got := decodeDashboardID(ref); got != "dash-1" {
+		t.Errorf("dashboard_id = %q, want dash-1", got)
+	}
+	if got := decodeNamespace(ref); got != "trv-homelab" {
+		t.Errorf("namespace = %q, want trv-homelab", got)
+	}
+	if got := decodeDashboardVars(ref)["host"]; got != "srv-001" {
+		t.Errorf("dashboard_vars[host] = %q, want srv-001", got)
+	}
+}
+
+func TestEncodeExternalRef_StaysEmptyWhenNothingToCarry(t *testing.T) {
+	// Preserves the pre-#263 wire shape on the common path: a rule with
+	// neither a dashboard nor a namespace sends no external_ref at all.
+	if ref := encodeExternalRef("", nil, ""); ref != "" {
+		t.Errorf("expected empty ref, got %q", ref)
+	}
+	if ref := encodeExternalRef("", nil, "   "); ref != "" {
+		t.Errorf("whitespace-only namespace should not produce a ref, got %q", ref)
+	}
+}
+
+func TestDecodeNamespace_BackCompat(t *testing.T) {
+	// Rules that predate #263, come from the ts-store CLI, or carry a
+	// non-JSON ref must decode to "" so the caller falls back to the
+	// delivering connection's namespace (the old behavior).
+	for name, ref := range map[string]string{
+		"empty":             "",
+		"pre-263 dash-only": `{"dashboard_id":"dash-1"}`,
+		"non-JSON":          "some-cli-provided-token",
+		"JSON, no ns key":   `{"other":"value"}`,
+	} {
+		if got := decodeNamespace(ref); got != "" {
+			t.Errorf("%s: decodeNamespace = %q, want empty (so the caller falls back)", name, got)
+		}
+	}
+}
