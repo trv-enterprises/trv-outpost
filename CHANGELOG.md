@@ -53,6 +53,31 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 - The destination URL displays with its credential masked (`********`),
   matching the connection editor's treatment of secrets.
 
+### Fixed
+
+- **Agent dashboard edits no longer destroy panel variable bindings** (#268).
+  `update_dashboard` replaces the whole panel array, but the panel schema shown
+  to the Assistant and to MCP omitted `connection_tags` (per-panel connection
+  family in tag_value swap mode) and `component_overrides` (per-panel
+  component-swap rules). An agent that read a dashboard, moved one panel and
+  wrote it back silently wiped both on every panel — it was never told they
+  existed. Both are now advertised on both surfaces, with an explicit warning
+  that panels are replace-semantics and must be echoed back.
+- `DashboardPanel` is now covered by the schema-parity backstop (#54), which
+  previously locked only `ChartDataMapping`, `DashboardSettings` and
+  `ChartQueryConfig`. That gap is why #268 could happen: a field added to the
+  panel model stayed invisible to the agent with nothing failing. A new panel
+  field must now be exposed, or allowlisted with a stated reason.
+- Removed a phantom `title` property from the Assistant's panel schema —
+  `DashboardPanel` has no such field, so anything an agent set there was
+  silently discarded.
+- MCP's `update_dashboard` described settings as "replaces the whole settings
+  object". It has merged per-key since #135; the description now says so, and
+  contrasts it with `panels`, which really does replace.
+- MCP settings documentation gained `panel_background`, undocumented on both
+  create and update.
+
+
 ## [0.56.0] — 2026-08-15
 
 ### Added

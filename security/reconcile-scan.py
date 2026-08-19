@@ -121,11 +121,19 @@ def today():
 
 
 def is_expired(entry):
-    exp = (entry.get("expires_on") or "").strip()
-    if not exp:
+    raw = entry.get("expires_on")
+    if not raw:
         return False  # no expiry → treat as non-expired (registry validation warns separately)
+    # PyYAML parses an unquoted ISO date (expires_on: 2026-11-17) into a
+    # datetime.date, while the built-in fallback parser leaves it a string.
+    # Accept both — assuming a string here crashed CI the first time this
+    # script ran in an environment that HAD PyYAML installed.
+    if isinstance(raw, datetime.datetime):
+        return today() > raw.date()
+    if isinstance(raw, datetime.date):
+        return today() > raw
     try:
-        return today() > datetime.date.fromisoformat(exp)
+        return today() > datetime.date.fromisoformat(str(raw).strip())
     except ValueError:
         return False
 

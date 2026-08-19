@@ -97,11 +97,20 @@ jobs:
       # The tool is installed at latest — its vuln DB is fetched live at
       # run time either way, so pinning the binary buys no reproducibility
       # on findings, only staleness in the analyzer.
+      #
+      # Reconciled against security/accepted-vulns.yaml rather than run bare:
+      # a bare `govulncheck ./...` has no way to express a consciously accepted
+      # risk, so ONE unfixable advisory in a dependency blocks every PR forever
+      # (lib/pq, 2026-08-18 — 7 advisories, all "Fixed in: N/A"). The registry
+      # is human-authored, code-reviewed, and every entry carries a mandatory
+      # expiry, so acceptance is explicit and re-reviewed rather than silent.
+      # Same reconciler `make security-scan` uses, so CI and the release gate
+      # agree. A finding NOT in the registry still fails the job.
       - name: govulncheck
-        working-directory: server-go
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+          (cd server-go && govulncheck -json ./... 2>/dev/null) \
+            | python3 security/reconcile-scan.py --scanner govulncheck --label "govulncheck (Go deps + stdlib)"
 
       # gofmt, scoped to the Go files THIS PR touches.
       #
