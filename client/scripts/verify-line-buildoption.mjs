@@ -179,6 +179,39 @@ const data = {
   check('case 7: visualMap present, piecewise', opt.visualMap?.type === 'piecewise');
   check('case 7: 3 pieces (below first, between, above last)', opt.visualMap?.pieces?.length === 3);
   check('case 7: no markLine on series', !opt.series[0]?.markLine);
+  // REGRESSION GUARD: every piece must carry a FINITE lower bound.
+  // ECharts throws "can't access property 'coord', m[0] is undefined" on
+  // the FIRST render when a piecewise entry is open-ended below
+  // (`gt: -Infinity`, or an `lte`/`max` with no lower bound), so a chart
+  // that gained a threshold simply never draws. Verified against
+  // echarts 6.1.0 — a finite `gt` renders, -Infinity does not.
+  check(
+    'case 7: every piece has a finite lower bound (echarts crashes otherwise)',
+    opt.visualMap.pieces.every((p) => p.gt === undefined || Number.isFinite(p.gt)),
+  );
+  check(
+    'case 7: no piece is open-ended below',
+    opt.visualMap.pieces.every((p) => Number.isFinite(p.gt) || Number.isFinite(p.min)),
+  );
+}
+
+// --- Case 7b: 'both' mode emits markLine AND a finite-bounded visualMap ---
+// The failing prod config (#271): a single threshold with renderMode 'both'.
+{
+  const values = {
+    data_mapping: { x_axis: 'ts', y_axis: [{ column: 'cpu', stack: false, axis: 'left' }] },
+    options: {
+      yThresholds: [{ value: 24.3, color: '#f1c21b', label: '' }],
+      yThresholdRenderMode: 'both',
+    },
+  };
+  const opt = buildOption(values, data, { formatCellValue, chartType: 'line' });
+  check('case 7b: markLine present', !!opt.series[0]?.markLine);
+  check('case 7b: visualMap present', opt.visualMap?.type === 'piecewise');
+  check(
+    'case 7b: lowest piece lower bound is finite',
+    Number.isFinite(opt.visualMap.pieces[0].gt),
+  );
 }
 
 // --- Case 8: tooltip hidden ---
