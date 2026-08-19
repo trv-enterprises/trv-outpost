@@ -1,0 +1,85 @@
+// Copyright (c) 2026 TRV Enterprises LLC
+// Licensed under Apache 2.0
+// See LICENSE file for details.
+
+@use '@carbon/react/scss/spacing' as spacing;
+
+.series-transform-picker {
+  display: inline-flex;
+
+  // Theme the popover surface to the app's dark layer (matches
+  // ColorSwatchPicker / CountListPopover).
+  .cds--popover-content {
+    background-color: var(--cds-layer-01);
+    border: 1px solid var(--cds-border-subtle-01);
+  }
+  .cds--popover-caret {
+    background-color: var(--cds-layer-01);
+  }
+
+  // The trigger renders the target unit symbol itself, so it must stay
+  // narrow enough not to widen the series row while still fitting a
+  // 3-4 char symbol like "inHg". min-width keeps the unset "—" state the
+  // same size as a short symbol so rows don't jitter when one is set.
+  &__trigger {
+    min-width: 2.25rem;
+    height: 1.5rem;
+    padding: 0 spacing.$spacing-02;
+    border-radius: 0.25rem;
+    border: 1px solid var(--cds-border-strong-01);
+    background-color: var(--cds-field-01);
+    color: var(--cds-text-secondary);
+    font-size: 0.75rem;
+    font-weight: 400;
+    line-height: 1;
+    cursor: pointer;
+    white-space: nowrap;
+
+    &:hover { background-color: var(--cds-field-hover-01); }
+    &:focus-visible { outline: 2px solid var(--cds-focus); outline-offset: 1px; }
+
+    // Active: a conversion is set. Reads as a filled token rather than an
+    // empty field so it's obvious at a glance across a list of rows.
+    &.is-active {
+      color: var(--cds-text-on-color);
+      background-color: var(--cds-interactive);
+      border-color: var(--cds-interactive);
+      font-weight: 600;
+
+      &:hover { background-color: var(--cds-background-inverse-hover); }
+    }
+  }
+
+  &__content {
+    padding: spacing.$spacing-04;
+    width: 20rem;
+    display: flex;
+    flex-direction: column;
+    gap: spacing.$spacing-03;
+  }
+
+  &__title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--cds-text-primary);
+  }
+
+  &__hint {
+    font-size: 0.75rem;
+    color: var(--cds-text-secondary);
+    line-height: 1.34;
+  }
+
+  &__row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: spacing.$spacing-03;
+  }
+
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: spacing.$spacing-02;
+    margin-top: spacing.$spacing-02;
+  }
+}

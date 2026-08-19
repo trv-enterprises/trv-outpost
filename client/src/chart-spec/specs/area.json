@@ -125,11 +125,12 @@
               "type": "y_axis_columns_list",
               "label": "Series",
               "required": true,
-              "helperText": "Numeric columns to plot, one series each. The series label overrides what appears in the legend; leave empty to use the data column name. Use In-stack to stack a subset of series (series left out draw independently, stack-free \u2014 useful for a high-water total line). Tick \u0394 Delta on a series whose values are a monotonically-increasing counter (odometer, packet/request total, kWh meter) to plot its per-interval change instead of the raw ramp.",
-              "helperTextDualAxis": "Numeric columns to plot, one series each — one per axis (Left/Right). The series label overrides what appears in the legend; leave empty to use the data column name. Tick Δ Delta on a series whose values are a monotonically-increasing counter (odometer, packet/request total, kWh meter) to plot its per-interval change instead of the raw ramp.",
+              "helperText": "Numeric columns to plot, one series each. The series label overrides what appears in the legend; leave empty to use the data column name. Use In-stack to stack a subset of series (series left out draw independently, stack-free \u2014 useful for a high-water total line). Tick \u0394 Delta on a series whose values are a monotonically-increasing counter (odometer, packet/request total, kWh meter) to plot its per-interval change instead of the raw ramp. Use the Unit button on a series to convert its values before plotting (e.g. a column stored in Celsius displayed as Fahrenheit) \u2014 the axis, thresholds, and tooltip all follow the converted values.",
+              "helperTextDualAxis": "Numeric columns to plot, one series each — one per axis (Left/Right). The series label overrides what appears in the legend; leave empty to use the data column name. Tick Δ Delta on a series whose values are a monotonically-increasing counter (odometer, packet/request total, kWh meter) to plot its per-interval change instead of the raw ramp. Use the Unit button on a series to convert its values before plotting (e.g. a column stored in Celsius displayed as Fahrenheit) \u2014 the axis, thresholds, and tooltip all follow the converted values.",
               "modeFieldId": "multipleYAxis",
               "maxInDualAxis": 2,
-              "showAccumulator": true
+              "showAccumulator": true,
+              "showConvert": true
             }
           ]
         },

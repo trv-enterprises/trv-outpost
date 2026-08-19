@@ -8643,6 +8643,14 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "y_axis_conversions": {
+                    "description": "YAxisConversions is the PER-COLUMN unit conversion (#265): a parallel\narray index-aligned to YAxis (like YAxisColors/AccumulatorColumns). A\nnon-null entry converts that series' values BEFORE they are plotted, so\nthe axis, thresholds and tooltip all read the converted unit — e.g. a\ncolumn stored in Celsius displayed as Fahrenheit.\n\nEach entry is either a registry conversion {dimension, from, to} (e.g.\n{\"dimension\":\"temperature\",\"from\":\"c\",\"to\":\"f\"}) or the custom affine\nform {dimension:\"custom\", scale, offset, symbol?}. The unit tables and\nall conversion math live client-side in client/src/chart-spec/units.js;\nthe server stores and round-trips the descriptor without interpreting\nit, which is why this is a free-form map rather than a typed struct —\nadding a dimension must not require a server change.",
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                    }
+                },
                 "y_axis_label": {
                     "description": "AXIS label rendered along the Y axis (single-axis charts only; dual-axis charts render no axis labels). Series/legend labels live in YAxisLabels. The old save-path mirror (YAxisLabels[0] copied here) was removed; strip_y_axis_label_mirror cleaned stored copies.",
                     "type": "string"

@@ -8,7 +8,39 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Per-series unit conversion on line and area charts** (#265). A stored
+  column doesn't always hold the unit you want to display — a sensor records
+  Celsius, the dashboard should read Fahrenheit. Each series row now has a
+  **Unit** button that converts that series' values, so you no longer have to
+  change the collector or add a second stored column to see a different unit.
+  Built-in tables cover temperature, pressure, distance, mass and speed, and a
+  **Custom (scale + offset)** option handles arithmetic they don't
+  (a 0–1 ratio shown as a percentage, say).
+
+  The conversion is applied to the **data**, before the chart is built, so the
+  axis, thresholds and tooltip all agree — a threshold typed as `80` on a
+  series displayed in Fahrenheit means 80 °F. When every converted series
+  shares one target unit, the tooltip adopts it automatically unless you set
+  your own unit text; a chart that genuinely mixes units (legitimate across a
+  dual axis) is left alone rather than mislabelled.
+
+  The setting is scoped to the **component**, so two components reading the
+  same column can display different units. The button shows the target unit
+  itself (`°F`, `psi`) rather than a generic icon, so a converted series is
+  visible at a glance without opening anything, and no row is added to the
+  series list. Round-trips through the AI surfaces as
+  `data_mapping.y_axis_conversions`.
+
 ### Fixed
+
+- **Ticking Δ Delta did nothing until the chart was saved and reopened.** The
+  per-column accumulator flag (#8) was dropped when it arrived inline on a
+  y-axis entry — the shape the editor's live preview emits — so the parallel
+  `accumulator_columns` array always won. The preview ignored the tick, then
+  the saved chart deltaed correctly, which read as the setting not working.
+  Found while adding per-series unit conversion, which uses the same seam.
 
 - **Threshold bands on line, area and bar charts were shifted by one.** Each
   band took the color of the threshold that *ended* it rather than the one

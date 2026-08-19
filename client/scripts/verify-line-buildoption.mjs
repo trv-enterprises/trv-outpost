@@ -862,6 +862,120 @@ const data = {
   check('case 7d: dual axis still renders its series', dual.series?.length === 2 && dual.series[1]?.yAxisIndex === 1);
 }
 
+// --- Case 8: per-series unit conversion (#265) ---
+// The load-bearing claim of the feature is that conversion happens on the
+// DATA, not at format time — so the plotted geometry, the axis, thresholds
+// and the tooltip all agree. These checks pin that: if someone ever moves
+// the conversion into a formatter, series.data stays in Celsius and the
+// first assertion fails.
+{
+  const dm = (convert) => ({
+    x_axis: 'ts',
+    y_axis: [{ column: 'cpu', stack: false, axis: 'left', convert }],
+  });
+  const c2f = { dimension: 'temperature', from: 'c', to: 'f' };
+
+  const converted = buildOption({ data_mapping: dm(c2f), options: {} }, data, { formatCellValue, chartType: 'line' });
+  // cpu column is [12, 18, 22, 19, 25] → °F
+  check('case 8: series DATA is converted, not just the label',
+    JSON.stringify(converted.series[0].data.map((v) => Math.round(v * 100) / 100))
+      === JSON.stringify([53.6, 64.4, 71.6, 66.2, 77]),
+    JSON.stringify(converted.series[0].data));
+
+  // No conversion → untouched, byte-for-byte the raw column.
+  const plain = buildOption({ data_mapping: dm(null), options: {} }, data, { formatCellValue, chartType: 'line' });
+  check('case 8: absent conversion leaves data untouched',
+    JSON.stringify(plain.series[0].data) === JSON.stringify([12, 18, 22, 19, 25]));
+
+  // An identity pair (from === to) must be treated as unconfigured.
+  const ident = buildOption(
+    { data_mapping: dm({ dimension: 'temperature', from: 'c', to: 'c' }), options: {} },
+    data, { formatCellValue, chartType: 'line' });
+  check('case 8: identity conversion is a no-op',
+    JSON.stringify(ident.series[0].data) === JSON.stringify([12, 18, 22, 19, 25]));
+
+  // Parallel-array wire shape (y_axis is a string array, per-column
+  // settings ride alongside) must behave identically to the inline form.
+  const viaArray = buildOption({
+    data_mapping: { x_axis: 'ts', y_axis: ['cpu'], y_axis_conversions: [c2f] },
+    options: {},
+  }, data, { formatCellValue, chartType: 'line' });
+  check('case 8: y_axis_conversions parallel array matches the inline shape',
+    JSON.stringify(viaArray.series[0].data) === JSON.stringify(converted.series[0].data));
+
+  // Auto unit label: one shared target symbol and no author-set unit →
+  // the tooltip adopts it.
+  check('case 8: single shared target unit auto-labels the tooltip',
+    typeof converted.tooltip?.formatter === 'function'
+      && converted.tooltip.formatter([{ value: 53.6, seriesName: 'cpu', axisValueLabel: 'x' }]).includes('°F'));
+
+  // An explicit author unit always wins — never overwrite typed text.
+  const authored = buildOption(
+    { data_mapping: dm(c2f), options: { tooltip: { units: 'degrees' } } },
+    data, { formatCellValue, chartType: 'line' });
+  check('case 8: an explicit tooltip unit is not overwritten',
+    authored.tooltip.formatter([{ value: 53.6, seriesName: 'cpu', axisValueLabel: 'x' }]).includes('degrees'));
+
+  // MIXED target units (legit on a dual axis) → no single honest label,
+  // so the tooltip must be left alone rather than guessing one of them.
+  const mixed = buildOption({
+    data_mapping: {
+      x_axis: 'ts',
+      y_axis: [
+        { column: 'cpu', axis: 'left', convert: c2f },
+        { column: 'mem', axis: 'right', convert: { dimension: 'pressure', from: 'pa', to: 'psi' } },
+      ],
+      multiple_y_axis: true,
+    },
+    options: {},
+  }, data, { formatCellValue, chartType: 'line' });
+  const mixedOut = mixed.tooltip.formatter([{ value: 1, seriesName: 'cpu', axisValueLabel: 'x' }]);
+  check('case 8: mixed target units leave the tooltip unlabelled',
+    !mixedOut.includes('°F') && !mixedOut.includes('psi'), mixedOut);
+
+  // Convert BEFORE accumulate: for an affine unit the delta must be taken
+  // in the DISPLAY unit. The first cpu delta is 18-12 = 6 °C, which is a
+  // 10.8 °F change — NOT 6*1.8+32. Getting the order wrong (delta first,
+  // then convert) would yield 42.8 here, so this pins the ordering.
+  const deltaF = buildOption({
+    data_mapping: { x_axis: 'ts', y_axis: [{ column: 'cpu', axis: 'left', convert: c2f, accumulate: true }] },
+    options: {},
+  }, data, { formatCellValue, chartType: 'line' });
+  const d1 = deltaF.series[0].data[1];
+  check('case 8: conversion runs BEFORE the accumulator (affine-safe delta)',
+    Math.abs(d1 - 10.8) < 1e-9, `got ${d1}`);
+}
+
+// --- Case 9: inline per-entry accumulate (#8 regression guard) ---
+// normalizeYEntry used to drop `e.accumulate`, so the parallel-array merge
+// always overwrote it. Object-form entries are exactly what the EDITOR
+// PREVIEW emits, so ticking Δ Delta appeared to do nothing until the chart
+// was saved and reloaded in the parallel-array shape. Both shapes must agree.
+{
+  const f = (v) => String(v ?? '');
+  const inline = buildOption({
+    data_mapping: { x_axis: 'ts', y_axis: [{ column: 'cpu', axis: 'left', accumulate: true }] },
+    options: {},
+  }, data, { formatCellValue: f, chartType: 'line' });
+  const viaArray = buildOption({
+    data_mapping: { x_axis: 'ts', y_axis: ['cpu'], accumulator_columns: [true] },
+    options: {},
+  }, data, { formatCellValue: f, chartType: 'line' });
+  check('case 9: inline accumulate matches the parallel-array shape',
+    JSON.stringify(inline.series[0].data) === JSON.stringify(viaArray.series[0].data),
+    `inline=${JSON.stringify(inline.series[0].data)} array=${JSON.stringify(viaArray.series[0].data)}`);
+  check('case 9: inline accumulate actually deltas',
+    JSON.stringify(inline.series[0].data) !== JSON.stringify([12, 18, 22, 19, 25]));
+  // An explicit `accumulate: false` must WIN over the parallel array, not
+  // be treated as "unset" and silently overridden.
+  const off = buildOption({
+    data_mapping: { x_axis: 'ts', y_axis: [{ column: 'cpu', axis: 'left', accumulate: false }], accumulator_columns: [true] },
+    options: {},
+  }, data, { formatCellValue: f, chartType: 'line' });
+  check('case 9: explicit inline accumulate:false overrides the parallel array',
+    JSON.stringify(off.series[0].data) === JSON.stringify([12, 18, 22, 19, 25]));
+}
+
 if (FAILURES.length > 0) {
   process.stderr.write(`\n${FAILURES.length} failure(s):\n${FAILURES.join('\n')}\n`);
   process.exit(1);

@@ -59,6 +59,7 @@ import ConnectionPickerModal from './ConnectionPickerModal';
 import CollapsibleTile from './shared/CollapsibleTile';
 import { getChartTypeSpec } from '../chart-spec';
 import { hasBuildOption as chartHasBuildOption } from '../chart-spec/build-options';
+import { normalizeConversion } from '../chart-spec/units';
 import { getScheme as getBandScheme } from '../chart-spec/specs/band-schemes';
 import {
   CLASSIC_GAUGE_STYLE,
@@ -682,6 +683,10 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // line/area column's delta from the previous point (for monotonic counters).
   // reset_policy (chart-wide) governs counter resets (delta < 0).
   const [yAxisAccumulate, setYAxisAccumulate] = useState([]);
+  // Per-column unit conversion (#265) — index-aligned to yAxisColumns, same
+  // shape/lifecycle as yAxisColors/yAxisAccumulate. Each entry is a convert
+  // descriptor ({dimension, from, to} or the custom affine form) or null.
+  const [yAxisConversions, setYAxisConversions] = useState([]);
   const [accumulatorResetPolicy, setAccumulatorResetPolicy] = useState('drop_negative');
 
   // Filters and aggregation
@@ -1294,6 +1299,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         Array.isArray(rawAccum) ? rawAccum[i] === true : legacyAccumAll
       )));
       setAccumulatorResetPolicy(chart.data_mapping?.accumulator_reset_policy || 'drop_negative');
+      // Per-column unit conversion (#265). Prefer the parallel
+      // y_axis_conversions array; fall back to inline entry.convert if a
+      // record was ever saved in object form (same precedence as colors).
+      const rawConversions = chart.data_mapping?.y_axis_conversions;
+      setYAxisConversions(loadedYCols.map((_c, i) => {
+        if (Array.isArray(rawConversions) && rawConversions[i]) return normalizeConversion(rawConversions[i]);
+        const e = loadedYAxis[i];
+        return (typeof e === 'object' && e?.convert) ? normalizeConversion(e.convert) : null;
+      }));
       setFilters(chart.data_mapping?.filters || []);
       setAggregation(chart.data_mapping?.aggregation || { type: '', sortBy: '', field: '', count: 10 });
       setSortBy(chart.data_mapping?.sort_by || '');
@@ -3019,6 +3033,15 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           return aligned.some(Boolean) ? aligned : undefined;
         })(),
         accumulator_reset_policy: (Array.isArray(yAxisAccumulate) && yAxisAccumulate.some(Boolean)) ? accumulatorResetPolicy : undefined,
+        // Per-column unit conversion (#265). Parallel array realigned to the
+        // FILTERED y_axis (same realignment as y_axis_colors). Omitted when no
+        // column converts, so existing records stay byte-identical and the
+        // shape only appears once someone uses it.
+        y_axis_conversions: (() => {
+          const keep = yAxisColumns.map((c, i) => (typeof c === 'string' && c.length > 0 ? i : -1)).filter((i) => i >= 0);
+          const aligned = keep.map((i) => (Array.isArray(yAxisConversions) ? normalizeConversion(yAxisConversions[i]) : null));
+          return aligned.some(Boolean) ? aligned : undefined;
+        })(),
         // Scatter bubble mode: column whose value sizes each point.
         // Persisted on data_mapping (a data dimension, like series) so
         // scatter.js reads it alongside x/y. Empty for non-scatter.
@@ -4650,6 +4673,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         color: (Array.isArray(yAxisColors) ? yAxisColors[i] : '') || '',
                         // Per-column accumulator/delta flag (#8), index-aligned.
                         accumulate: (Array.isArray(yAxisAccumulate) ? yAxisAccumulate[i] : false) === true,
+                        // Per-column unit conversion (#265), index-aligned.
+                        convert: (Array.isArray(yAxisConversions) ? yAxisConversions[i] : null) || null,
                       })),
                       x_axis_column: xAxisColumn,
                       x_axis_label: xAxisLabel || '',
@@ -4824,10 +4849,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           const colors = (value || []).map((e) => (typeof e?.color === 'string' ? e.color : ''));
                           // Per-column accumulator/delta flag (#8), index-aligned.
                           const accum = (value || []).map((e) => e?.accumulate === true);
+                          // Per-column unit conversion (#265), index-aligned.
+                          const conversions = (value || []).map((e) => normalizeConversion(e?.convert));
                           setYAxisColumns(cols);
                           setYAxisLabels(labels);
                           setYAxisColors(colors);
                           setYAxisAccumulate(accum);
+                          setYAxisConversions(conversions);
                           const anyStacked = (value || []).some((e) => e?.stack);
                           updateChartOption('chartStacked', anyStacked);
                           break;
@@ -5907,6 +5935,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                               stack: Boolean(chartOptions.chartStacked),
                               axis: i === 1 && chartOptions.multipleYAxis ? 'right' : 'left',
                               color: (Array.isArray(yAxisColors) ? yAxisColors[i] : '') || '',
+                              // Per-column unit conversion (#265). This path
+                              // emits OBJECT entries, so it rides inline rather
+                              // than as the parallel y_axis_conversions array
+                              // the saved record uses — line.js reads either.
+                              convert: (Array.isArray(yAxisConversions) ? normalizeConversion(yAxisConversions[i]) : null),
                             }))
                             .filter((e) => e.column && e.column.length > 0),
                           // Dual-axis is the user's explicit choice only;

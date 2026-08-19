@@ -177,6 +177,43 @@ sub-type (ECharts visualizations).
 }
 ```
 
+#### Per-series settings on `data_mapping`
+
+`y_axis` is a plain array of column-name strings. Settings that vary
+*per series* ride alongside it as **parallel arrays, index-aligned to
+`y_axis`** rather than turning its entries into objects:
+
+| Field | Type | Purpose |
+| ----- | ---- | ------- |
+| `y_axis_labels` | `[string]` | Legend/series name (empty → column name) |
+| `y_axis_colors` | `[string]` | Color override (`""` → auto palette) |
+| `accumulator_columns` | `[bool]` | Per-column delta transform (#8) |
+| `y_axis_conversions` | `[object\|null]` | Per-series unit conversion (#265) |
+
+Each is omitted entirely when no series uses it, so records only carry
+the shapes they need.
+
+The renderer also accepts the **object form** (`y_axis` entries as
+`{column, label, color, accumulate, convert}`) and merges the two, with
+the inline value winning. That path is what the editor's live preview
+emits, so both shapes must stay behaviourally identical.
+
+`y_axis_conversions` entries are either a registry conversion
+(`{dimension, from, to}` — e.g.
+`{"dimension":"temperature","from":"c","to":"f"}`) or the custom affine
+form (`{dimension:"custom", scale, offset, symbol?}`). The conversion is
+applied to the **data**, before the ECharts option is built, so the
+plotted geometry, axis bounds, thresholds and tooltip all read converted
+values. Unit tables and the conversion math live client-side in
+`client/src/chart-spec/units.js`; the server stores the descriptor
+without interpreting it, so adding a dimension needs no server change.
+
+> Contrast with the Value tile's `valueSourceUnit`, which scales at
+> *format* time. That is correct for a single-number surface, where
+> formatting is the render. A chart consumes the number in four places,
+> so a format-time conversion would move only the tooltip and leave the
+> geometry, axis and thresholds in the source unit.
+
 ### `component_type`
 
 | Value     | Meaning                                               |

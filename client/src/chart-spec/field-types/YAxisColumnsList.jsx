@@ -6,10 +6,13 @@ import { Select, SelectItem, TextInput, Checkbox, IconButton, Button } from '@ca
 import { Add, Close } from '@carbon/icons-react';
 import { useSpecRenderContext } from '../SpecContext';
 import ColorSwatchPicker from '../../components/shared/ColorSwatchPicker';
+import SeriesTransformPicker from '../../components/shared/SeriesTransformPicker';
+import { normalizeConversion } from '../units';
 
 /**
  * Free list of Y-axis column entries. Each entry is
- * `{ column: string, label: string, stack: boolean, axis?: 'left' | 'right' }`.
+ * `{ column: string, label: string, stack: boolean, axis?: 'left' | 'right',
+ *   color?: string, accumulate?: boolean, convert?: object|null }`.
  *
  * Per-row label is the user-facing series name (shows in the legend,
  * tooltip series prefix). Empty falls back to the column name.
@@ -49,8 +52,8 @@ export default function YAxisColumnsListField({ field }) {
   // Normalize legacy/loose shapes. A bare string (legacy y_axis: ['a','b'])
   // becomes a default entry; partial objects fill in defaults too.
   const normalized = raw.map((e) => {
-    if (typeof e === 'string') return { column: e, label: '', stack: false, axis: 'left', color: '', accumulate: false };
-    if (!e || typeof e !== 'object') return { column: '', label: '', stack: false, axis: 'left', color: '', accumulate: false };
+    if (typeof e === 'string') return { column: e, label: '', stack: false, axis: 'left', color: '', accumulate: false, convert: null };
+    if (!e || typeof e !== 'object') return { column: '', label: '', stack: false, axis: 'left', color: '', accumulate: false, convert: null };
     return {
       column: typeof e.column === 'string' ? e.column : '',
       label: typeof e.label === 'string' ? e.label : '',
@@ -58,6 +61,10 @@ export default function YAxisColumnsListField({ field }) {
       axis: e.axis === 'right' ? 'right' : 'left',
       color: typeof e.color === 'string' ? e.color : '',
       accumulate: Boolean(e.accumulate),
+      // Per-series unit conversion (#265). normalizeConversion drops a
+      // partial/stale descriptor to null, so a half-written record never
+      // reaches the converter.
+      convert: normalizeConversion(e.convert),
     };
   });
   // A chart needs at least one y-column. When the field is required, always
@@ -68,7 +75,7 @@ export default function YAxisColumnsListField({ field }) {
   // column, so it doesn't dirty an untouched chart.
   const isRequired = field.required === true;
   const entries = normalized.length === 0 && isRequired
-    ? [{ column: '', label: '', stack: false, axis: 'left', color: '', accumulate: false }]
+    ? [{ column: '', label: '', stack: false, axis: 'left', color: '', accumulate: false, convert: null }]
     : normalized;
 
   // Per-column accumulator/delta (#8) — line/area only (gauges/bars don't
@@ -76,6 +83,13 @@ export default function YAxisColumnsListField({ field }) {
   // other chart types. Pivots split one column at runtime; the delta still
   // applies per the single y-column's flag, so we keep showing it.
   const showAccumulator = field.showAccumulator === true;
+
+  // Per-series unit conversion (#265) — spec-gated like the accumulator so
+  // chart types that don't convert on the data path stay unaffected.
+  // Unlike the color picker, this DOES show for pivots: every runtime
+  // series comes from the same y-column, so one conversion applies to all
+  // of them (matching how `accumulate` behaves on the pivot path).
+  const showConvert = field.showConvert === true;
 
   const updateEntry = (index, patch) => {
     const next = entries.map((e, i) => (i === index ? { ...e, ...patch } : e));
@@ -89,7 +103,7 @@ export default function YAxisColumnsListField({ field }) {
 
   const addEntry = () => {
     const nextAxis = isDualAxis && entries.length === 1 ? 'right' : 'left';
-    const next = [...entries, { column: '', label: '', stack: false, axis: nextAxis, color: '', accumulate: false }];
+    const next = [...entries, { column: '', label: '', stack: false, axis: nextAxis, color: '', accumulate: false, convert: null }];
     onFieldChange(field.id, next);
   };
 
@@ -184,6 +198,19 @@ export default function YAxisColumnsListField({ field }) {
                   labelText="Δ Delta"
                   checked={entry.accumulate}
                   onChange={(_e, { checked }) => updateEntry(i, { accumulate: checked })}
+                />
+              </div>
+            )}
+            {/* Per-series unit conversion (#265). The trigger renders the
+                TARGET unit symbol inline, so the row itself says "°F"
+                rather than merely hinting that a setting exists. */}
+            {showConvert && (
+              <div className="spec-yacl__convert">
+                {i === 0 && <span className="spec-yacl__convert-label">Unit</span>}
+                <SeriesTransformPicker
+                  value={entry.convert}
+                  onChange={(convert) => updateEntry(i, { convert })}
+                  label={entry.column || `Series ${i + 1}`}
                 />
               </div>
             )}

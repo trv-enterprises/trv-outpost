@@ -34,6 +34,7 @@ import {
   formatSI,
 } from '../option-helpers.js';
 import { parseTimestamp } from '../../utils/dataTransforms.js';
+import { applyConversion, normalizeConversion, distinctConversionSymbols } from '../units.js';
 
 // Carbon's blue+purple dual-axis palette. Single-y mode forces blue
 // (matches legacy). N-series single-axis mode uses the Carbon
@@ -139,8 +140,8 @@ function resolveAutoXFormat(xValues, xAxisCol, formatCellValue) {
  * cleanly without a Mongo migration.
  */
 function normalizeYEntry(e) {
-  if (typeof e === 'string') return { column: e, label: '', stack: false, axis: undefined, color: '' };
-  if (!e || typeof e !== 'object') return { column: '', label: '', stack: false, axis: undefined, color: '' };
+  if (typeof e === 'string') return { column: e, label: '', stack: false, axis: undefined, color: '', convert: null };
+  if (!e || typeof e !== 'object') return { column: '', label: '', stack: false, axis: undefined, color: '', convert: null };
   return {
     column: typeof e.column === 'string' ? e.column : '',
     label: typeof e.label === 'string' ? e.label : '',
@@ -148,6 +149,17 @@ function normalizeYEntry(e) {
     axis: e.axis === 'right' ? 'right' : e.axis === 'left' ? 'left' : undefined,
     // Optional per-series color override (resolved hex; '' = auto palette).
     color: typeof e.color === 'string' ? e.color : '',
+    // Optional per-column accumulator/delta flag (#8). Carried through ONLY
+    // when the entry actually declares it — left undefined otherwise so the
+    // parallel-array merge below can still supply it (that merge tests for
+    // `== null`). Without this line an INLINE `accumulate: true` was
+    // silently dropped and the parallel array always won, which broke the
+    // editor's live preview: that path emits object entries, so ticking
+    // Δ Delta changed nothing until the chart was saved and reloaded.
+    accumulate: typeof e.accumulate === 'boolean' ? e.accumulate : undefined,
+    // Optional per-series unit conversion (#265). Normalized to null when
+    // absent/partial/identity, so downstream can just test truthiness.
+    convert: normalizeConversion(e.convert),
   };
 }
 
@@ -155,6 +167,17 @@ function buildSeriesForColumn(entry, idx, ctx) {
   const { columnIndex, rows, dualAxis, stackedCount, smooth, showSymbol, sampling, showDataLabels, siDataLabels, chartType, seriesName, accumulatorResetPolicy } = ctx;
   const colIdx = columnIndex(entry.column);
   let data = rows.map((r) => r[colIdx]);
+  // Unit conversion (#265) BEFORE the accumulator. Order matters and is
+  // deliberate: a delta of converted values is the conversion of the delta
+  // only for purely multiplicative units, and is WRONG for affine ones
+  // (a 1 °C rise is 1.8 °F, not 33.8 °F). Converting first means the delta
+  // is taken in the display unit, which is what "change in °F" means.
+  //
+  // Applied to the DATA, not at format time, so the plotted geometry, the
+  // axis min/max, thresholds, and the tooltip all read converted values
+  // with no further plumbing. See units.js for why format-time scaling
+  // (valueSourceUnit) is the wrong seam for a chart.
+  if (entry.convert) data = applyConversion(data, entry.convert);
   // Accumulator mode: plot this column's delta from the previous point (#8).
   // Per-column (entry.accumulate), so a chart can delta one series and leave
   // another raw. Applied per series → each deltas against its own history.
@@ -499,6 +522,12 @@ export function buildOption(values, data, helpers = {}) {
   // entry as `accumulate` and read inside buildSeriesForColumn, so it applies
   // on both the normal and pivot paths. Reset policy is chart-wide.
   const rawAccumCols = Array.isArray(values?.data_mapping?.accumulator_columns) ? values.data_mapping.accumulator_columns : null;
+  // Per-column unit conversion (#265) — parallel array `y_axis_conversions`,
+  // index-aligned to y_axis, exactly like y_axis_colors/labels and
+  // accumulator_columns. The wire y_axis is a string array, so per-column
+  // settings ride alongside it rather than inline. An inline entry.convert
+  // (object-form record) still wins if present.
+  const rawYConversions = Array.isArray(values?.data_mapping?.y_axis_conversions) ? values.data_mapping.y_axis_conversions : null;
   const accumulatorAll = values?.data_mapping?.accumulator_mode === true && !rawAccumCols;
   const accumulatorResetPolicy = values?.data_mapping?.accumulator_reset_policy || 'drop_negative';
   const yEntries = rawYAxis
@@ -512,6 +541,9 @@ export function buildOption(values, data, helpers = {}) {
       }
       if (norm.accumulate == null) {
         norm.accumulate = accumulatorAll || (rawAccumCols ? rawAccumCols[i] === true : false);
+      }
+      if (!norm.convert && rawYConversions) {
+        norm.convert = normalizeConversion(rawYConversions[i]);
       }
       return norm;
     })
@@ -694,7 +726,16 @@ export function buildOption(values, data, helpers = {}) {
         // so apply the accumulator delta to the aligned group here (#8). Pivot
         // splits one y-column (yEntries[0]) into per-value series, so that
         // column's per-column flag governs every group.
-        built.data = yEntries[0]?.accumulate ? applyAccumulator(g.aligned, accumulatorResetPolicy) : g.aligned;
+        // Unit conversion (#265) then accumulator — same order as the
+        // non-pivot path in buildSeriesForColumn (convert first so an affine
+        // delta is taken in the display unit). A pivot splits ONE y-column
+        // into runtime series, so that column's conversion applies to every
+        // group — which is why the editor keeps the picker visible for
+        // pivots even though it hides the per-series color swatch.
+        const converted = yEntries[0]?.convert
+          ? applyConversion(g.aligned, yEntries[0].convert)
+          : g.aligned;
+        built.data = yEntries[0]?.accumulate ? applyAccumulator(converted, accumulatorResetPolicy) : converted;
         return built;
       });
       // The carbon-dark ECharts theme carries a top-level `color` palette that
@@ -725,7 +766,25 @@ export function buildOption(values, data, helpers = {}) {
     }));
   }
 
-  const tooltip = buildTooltip(opts.tooltip || {}, siPrefixes);
+  // Auto unit label (#265): when EVERY converted series lands on the same
+  // target unit and the author hasn't set an explicit tooltip unit, default
+  // it to that symbol — a chart converted to °F should say °F on hover
+  // without extra configuration.
+  //
+  // Only when the symbol set is exactly one. A chart can legitimately mix
+  // units across a dual axis (°C left, °F right), and there is no single
+  // honest label for that, so mixed conversions leave the tooltip alone
+  // rather than guessing. An explicit opts.tooltip.units always wins — we
+  // never overwrite what the author typed. Axis NAMES are deliberately not
+  // auto-managed here; that's the author's text to own.
+  const convertSymbols = distinctConversionSymbols(yEntries);
+  const tooltipCfg = opts.tooltip || {};
+  const tooltip = buildTooltip(
+    (convertSymbols.length === 1 && !tooltipCfg.units)
+      ? { ...tooltipCfg, units: convertSymbols[0] }
+      : tooltipCfg,
+    siPrefixes,
+  );
   const { block: legend, reservedWidth: legendReservedWidth } = buildLegend(
     opts.legend || {},
     dualAxis,

@@ -51,6 +51,46 @@ choose) and is shown greyed out to make that clear. What the average is taken
 sliding window if one is set — so on a live chart, "average over the last 5
 minutes, ignoring spikes" is a sliding window of 5 minutes plus **Average**.
 
+### Unit Conversion
+
+A stored column doesn't always hold the unit you want to display. A sensor
+records `temp.c` in Celsius, but the dashboard should read Fahrenheit. Rather
+than changing the collector or adding a second stored column, convert it on
+the chart.
+
+On **line** and **area** charts each series row in **Series** has a small
+**Unit** button. Unset it shows a dash; once a conversion is set the button
+shows the target unit itself (`°F`, `psi`), so you can see at a glance which
+series are converted without opening anything.
+
+Click it to pick:
+
+- **Quantity** — temperature, pressure, distance, mass, or speed
+- **Stored as** — what the column already holds
+- **Display as** — what the chart should show
+
+The conversion is applied to the values *before* they are plotted, so the
+axis, any thresholds, and the tooltip all read the converted unit. A
+threshold typed as `80` on a series displayed in Fahrenheit means 80 °F. When
+every converted series on a chart shares one target unit, the tooltip picks
+that unit up automatically unless you've set your own unit text.
+
+The conversion belongs to the component, not the connection — two components
+reading the same column can display different units.
+
+**Custom (scale + offset)** covers arithmetic the built-in tables don't:
+the value is multiplied by **Multiply by** and then **Then add** is applied
+(`value × scale + offset`), with an optional symbol for the button and
+tooltip. Use it for things like a 0–1 ratio shown as a percentage
+(multiply by 100, symbol `%`). Math across *two* columns isn't supported
+here — that needs a query-side expression.
+
+:::note
+Unit conversion is per-series on line and area charts. The **Source unit**
+setting on Value tiles is a different thing: it declares the magnitude a
+number is already stored in (KB/MB/GB) so it can be abbreviated correctly.
+:::
+
 ### Current State Per Series
 
 Streaming data arrives as a running history: every disk reports over and over,
