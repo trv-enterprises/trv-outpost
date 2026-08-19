@@ -103,6 +103,21 @@ func TestDashboardSettingsSchemaParity(t *testing.T) {
 	assertParity(t, models.DashboardSettings{}, dashboardSettingsSchema(), allow)
 }
 
+// TestDashboardPanelSchemaParity closes the gap that let #268 happen: the
+// panel schema was hand-written like the others but was never locked to the
+// model, so connection_tags and component_overrides could be added to
+// DashboardPanel and stay invisible to the agent. Because update_dashboard
+// REPLACES the whole panel array, an unadvertised panel field isn't merely
+// un-authorable — it is silently destroyed on the next agent edit.
+func TestDashboardPanelSchemaParity(t *testing.T) {
+	// The panel schema is an ARRAY schema; parity is over its item object.
+	items, ok := dashboardPanelsSchema()["items"].(map[string]interface{})
+	if !ok {
+		t.Fatal("dashboardPanelsSchema has no items object")
+	}
+	assertParity(t, models.DashboardPanel{}, items, nil)
+}
+
 func TestChartQueryConfigSchemaParity(t *testing.T) {
 	assertParity(t, models.ChartQueryConfig{}, chartQueryConfigSchema(), nil)
 }
