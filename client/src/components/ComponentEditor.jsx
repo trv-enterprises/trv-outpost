@@ -2171,7 +2171,20 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     if (xAxisColumn && !has(xAxisColumn)) setXAxisColumn('');
     setYAxisColumns((prev) => {
       const kept = (prev || []).filter(has);
-      return kept.length === (prev || []).length ? prev : kept;
+      if (kept.length === (prev || []).length) return prev;
+      // Every per-series setting is a PARALLEL array index-aligned to
+      // yAxisColumns, so dropping a column has to project them through the
+      // same index map — otherwise the survivors silently inherit their
+      // former neighbour's label / color / delta / unit. Compute the kept
+      // indices from the same `prev` we just filtered (not current state,
+      // which may be a render behind) and reindex all four together.
+      const keepIdx = (prev || []).map((c, i) => (has(c) ? i : -1)).filter((i) => i >= 0);
+      const project = (arr, empty) => (Array.isArray(arr) ? keepIdx.map((i) => arr[i] ?? empty) : arr);
+      setYAxisLabels((l) => project(l, ''));
+      setYAxisColors((c) => project(c, ''));
+      setYAxisAccumulate((a2) => project(a2, false));
+      setYAxisConversions((cv) => project(cv, null));
+      return kept;
     });
     if (seriesColumn && !has(seriesColumn)) setSeriesColumn('');
     if (groupByColumn && !has(groupByColumn)) setGroupByColumn('');
