@@ -189,13 +189,21 @@ function validateField(field, path, errors, sectionFieldIds) {
     if (typeof field.visibleWhen !== 'object') {
       pushErr(errors, `${path}.visibleWhen`, 'must be an object');
     } else {
-      const vw = field.visibleWhen;
-      if (typeof vw.field !== 'string') {
-        pushErr(errors, `${path}.visibleWhen.field`, 'missing or not a string');
-      }
-      if (!SUPPORTED_VW_OPERATORS.has(vw.operator)) {
-        pushErr(errors, `${path}.visibleWhen.operator`, `unsupported operator "${vw.operator}"`);
-      }
+      // `allOf` composes clauses with AND; each member is itself a clause.
+      const clauses = Array.isArray(field.visibleWhen.allOf)
+        ? field.visibleWhen.allOf
+        : [field.visibleWhen];
+      clauses.forEach((vw, i) => {
+        const at = Array.isArray(field.visibleWhen.allOf)
+          ? `${path}.visibleWhen.allOf[${i}]`
+          : `${path}.visibleWhen`;
+        if (typeof vw?.field !== 'string') {
+          pushErr(errors, `${at}.field`, 'missing or not a string');
+        }
+        if (!SUPPORTED_VW_OPERATORS.has(vw?.operator)) {
+          pushErr(errors, `${at}.operator`, `unsupported operator "${vw?.operator}"`);
+        }
+      });
     }
   }
 }

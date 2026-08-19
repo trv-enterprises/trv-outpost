@@ -60,6 +60,12 @@ export function setByPath(obj, path, value) {
  */
 export function isVisible(visibleWhen, formState) {
   if (!visibleWhen) return true;
+  // `allOf` composes clauses with AND. Added for the threshold group,
+  // which must be both non-empty AND on a single y-axis; a single clause
+  // could express neither condition without dropping the other.
+  if (Array.isArray(visibleWhen.allOf)) {
+    return visibleWhen.allOf.every((clause) => isVisible(clause, formState));
+  }
   const { field, operator, value } = visibleWhen;
   // `field` is the spec field id; we look up the matching field's
   // current value via the formState. Callers must pass formState as

@@ -218,6 +218,13 @@ themselves by value, so you can type them in any order.
 **Threshold lines / Value color / Both** chooses what the bands do: draw the
 boundary lines only, recolor the data line only, or both.
 
+Thresholds are **single-axis only** — the settings disappear when *Dual
+Y-axis* is on. A threshold value has no unambiguous meaning across two
+axes: the boundary line can only be drawn against one of them, and the
+band coloring applies to every series regardless of which axis it belongs
+to, so a series in a different magnitude (bytes against a 0–100
+percentage) would be painted one flat color.
+
 **Text — Color rules.** Add a rule per state you care about; there's no limit.
 Each rule is an operator (**equals** or **contains**), the text to match, and a
 color. Matching **ignores case**, so a rule for `online` catches `ONLINE`.

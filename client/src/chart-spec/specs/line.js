@@ -733,7 +733,19 @@ export function buildOption(values, data, helpers = {}) {
     series.map((s) => s.name),
   );
 
-  const { markLine, visualMap, labelGutter } = buildThresholds(opts.yThresholds, opts.yThresholdRenderMode);
+  // Thresholds are single-axis only. On a dual-axis chart a threshold
+  // value has no unambiguous meaning: the boundary line can only be drawn
+  // against ONE axis (it lands on series 0's, silently wrong for the
+  // other), and the visualMap has no seriesIndex so it recolors EVERY
+  // series by the same y-values — a right-axis series in a different
+  // magnitude (bytes vs a 0-100 percentage) gets painted a single
+  // permanent color. The editor hides the fields when the second axis is
+  // on; this drops any values a chart was already saved with, so an
+  // existing dual-axis chart stops rendering the wrong bands rather than
+  // waiting to be re-saved.
+  const { markLine, visualMap, labelGutter } = dualAxis
+    ? { markLine: undefined, visualMap: undefined, labelGutter: 0 }
+    : buildThresholds(opts.yThresholds, opts.yThresholdRenderMode);
   if (markLine) {
     // Attach to the first series so the marker overlays exist exactly once.
     if (series[0]) series[0] = { ...series[0], markLine };

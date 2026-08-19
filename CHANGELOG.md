@@ -22,6 +22,13 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Thresholds are now single-axis only.** The settings hide when *Dual
+  Y-axis* is on, and a chart already saved with both stops rendering them.
+  A threshold value has no unambiguous meaning across two axes: the boundary
+  line could only attach to one of them (silently the wrong one for the other
+  series), and the band coloring applied to *every* series regardless of axis
+  — so a right-axis series in a different magnitude (bytes against a 0–100
+  percentage) was painted one flat color.
 - The threshold editor reflects that model: the base row has **no value
   input** (its number was never used, and an editable one invited someone to
   set it to something other than the true floor), rows re-sort by value on

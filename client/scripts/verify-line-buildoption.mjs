@@ -829,6 +829,39 @@ const data = {
     unsorted.visualMap.pieces[1].gt === 24 && unsorted.visualMap.pieces[2].gt === 30);
 }
 
+// --- Case 7d: thresholds are single-axis only ---
+// On a dual-axis chart a threshold value has no unambiguous meaning. The
+// boundary line can only attach to ONE axis (it lands on series 0's), and
+// the visualMap carries no seriesIndex, so it recolors EVERY series by the
+// same y-values — a right-axis series in a different magnitude (bytes
+// against a 0-100 percentage) gets painted one permanent color. The editor
+// hides the fields; the renderer drops them too, so a chart already SAVED
+// with both stops rendering wrong bands without waiting to be re-saved.
+{
+  const thr = [
+    { value: 0, color: '#24a148' },
+    { value: 24, color: '#f1c21b' },
+  ];
+  const dm = (dual) => ({
+    x_axis: 'ts',
+    y_axis: [
+      { column: 'cpu', stack: false, axis: 'left' },
+      { column: 'mem', stack: false, axis: dual ? 'right' : 'left' },
+    ],
+    multiple_y_axis: dual,
+  });
+  const opts = { yThresholds: thr, yThresholdRenderMode: 'both' };
+
+  const single = buildOption({ data_mapping: dm(false), options: opts }, data, { formatCellValue, chartType: 'line' });
+  check('case 7d: single axis still gets threshold lines', !!single.series[0]?.markLine);
+  check('case 7d: single axis still gets colour bands', !!single.visualMap);
+
+  const dual = buildOption({ data_mapping: dm(true), options: opts }, data, { formatCellValue, chartType: 'line' });
+  check('case 7d: dual axis drops threshold lines', !dual.series[0]?.markLine);
+  check('case 7d: dual axis drops the visualMap (would recolour BOTH series)', !dual.visualMap);
+  check('case 7d: dual axis still renders its series', dual.series?.length === 2 && dual.series[1]?.yAxisIndex === 1);
+}
+
 if (FAILURES.length > 0) {
   process.stderr.write(`\n${FAILURES.length} failure(s):\n${FAILURES.join('\n')}\n`);
   process.exit(1);
