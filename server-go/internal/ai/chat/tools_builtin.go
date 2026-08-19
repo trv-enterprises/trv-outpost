@@ -631,7 +631,30 @@ func dashboardPanelsSchema() map[string]interface{} {
 				"w":            map[string]interface{}{"type": "integer", "description": "Width in grid cells."},
 				"h":            map[string]interface{}{"type": "integer", "description": "Height in grid cells."},
 				"component_id": map[string]interface{}{"type": "string", "description": "ID of the component to render in this panel. Omit (and set text_config instead) for a text-only header panel."},
-				"title":        map[string]interface{}{"type": "string", "description": "Optional panel-level title override (falls back to the component's title or name)."},
+				// Panel fields that carry dashboard-variable behavior. Both are
+				// REPLACE-semantics casualties if omitted: update_dashboard
+				// rewrites the whole panel array, so a panel sent without these
+				// loses them. Read the dashboard first and echo them back on
+				// any panel you are not deliberately changing (#268).
+				"connection_tags": map[string]interface{}{
+					"type":        "array",
+					"items":       map[string]interface{}{"type": "string"},
+					"description": "Binds THIS panel to a different connection family when the dashboard's connection_swap variable is in tag_value mode. The panel resolves to the connection matching these tags plus the key tag (prefix:<selected value>). Empty/omitted = the panel follows the variable's primary family. Preserve existing values when editing other properties of a panel.",
+				},
+				"component_overrides": map[string]interface{}{
+					"type":        "array",
+					"description": "Per-panel component-swap rules: render a DIFFERENT component when the dashboard variable's value matches a predicate. Preserve existing values when editing other properties of a panel.",
+					"items": map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"subject":      map[string]interface{}{"type": "string", "description": "What the predicate tests — see the ComponentOverride model for accepted values (e.g. the variable's effective value)."},
+							"op":           map[string]interface{}{"type": "string", "description": "Comparison operator."},
+							"value":        map[string]interface{}{"type": "string", "description": "Value compared against the subject."},
+							"component_id": map[string]interface{}{"type": "string", "description": "Component rendered in this panel when the predicate matches."},
+						},
+						"required": []string{"subject", "op", "value", "component_id"},
+					},
+				},
 				"text_config": map[string]interface{}{
 					"type":        "object",
 					"description": "Inline text panel for section headers / dividers / dashboard titles. Set this and leave component_id unset for a text-only panel. Always set display_content to \"title\" for static text (other values render live date/time).",

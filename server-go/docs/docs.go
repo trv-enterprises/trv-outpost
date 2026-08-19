@@ -13089,13 +13089,13 @@ const docTemplate = `{
         "service.CreateAlertRequest": {
             "type": "object",
             "required": [
-                "condition",
                 "connection_id",
                 "rule_name",
                 "type"
             ],
             "properties": {
                 "condition": {
+                    "description": "Condition is required for condition rules and REJECTED for\nstaleness ones — hence no binding:\"required\" here; the check is\nconditional on RuleType (see validateRuleTypeFields).",
                     "type": "string"
                 },
                 "connection_id": {
@@ -13117,6 +13117,10 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "max_age": {
+                    "description": "MaxAge is how long the store may go without a record before a\nstaleness rule fires (\"5m\"). Required for staleness, rejected\notherwise. No default by design — a 60s collector and an\nevent-driven source can't share one.",
+                    "type": "string"
+                },
                 "max_replay": {
                     "description": "e.g. \"1h\"; only valid when restart_policy==\"resume\"",
                     "type": "string"
@@ -13136,6 +13140,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "rule_name": {
+                    "type": "string"
+                },
+                "rule_type": {
+                    "description": "RuleType selects how the rule fires: \"condition\" (default, and the\nonly kind before ts-store#134) or \"staleness\". Empty means\ncondition, so existing clients are unaffected.",
                     "type": "string"
                 },
                 "sink_connection_id": {
@@ -13249,11 +13257,18 @@ const docTemplate = `{
                 "external_ref": {
                     "type": "string"
                 },
+                "max_age": {
+                    "type": "string"
+                },
                 "namespace": {
                     "type": "string"
                 },
                 "rule_name": {
                     "description": "Rule-level fields straight from ts-store.",
+                    "type": "string"
+                },
+                "rule_type": {
+                    "description": "RuleType is always populated on the wire (never \"\"), so clients\ncan switch on it without repeating the empty-means-condition\ndefault. Condition and MaxAge are mutually exclusive: a condition\nrule has the former, a staleness rule the latter.",
                     "type": "string"
                 },
                 "state": {

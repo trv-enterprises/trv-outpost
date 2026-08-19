@@ -10,6 +10,21 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Staleness alert rules** (#242). A rule can now fire on the *absence*
+  of data instead of on a matching record: give it a max age (`90s`,
+  `5m`, `2h`) and it fires when the store has gone that long without
+  receiving anything — catching a collector that died, which no
+  condition can express. The editor swaps the Condition field for Max
+  age when the type is selected, so the combination ts-store rejects
+  (both fields, or neither) can't be entered. Staleness is per store,
+  not per series; a store that never received data never fires; and
+  recovery is silent rather than emitting a "resolved" event.
+- Alert lists, the detail view, the clone picker and search are all
+  rule-type aware — a staleness rule shows `no data for 5m` where a
+  condition rule shows its expression, and is searchable by its max age.
+  Rules created before ts-store#134 carry no rule type and continue to
+  render exactly as before.
+
 - **Alert rules can be edited in place.** The pencil on an alert row
   opens the rule wizard prefilled from ts-store, and saving updates the
   rule via ts-store's new `PUT /api/stores/:store/alerts/:id`
@@ -37,6 +52,31 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   topic/QoS and the dashboard deep-link.
 - The destination URL displays with its credential masked (`********`),
   matching the connection editor's treatment of secrets.
+
+### Fixed
+
+- **Agent dashboard edits no longer destroy panel variable bindings** (#268).
+  `update_dashboard` replaces the whole panel array, but the panel schema shown
+  to the Assistant and to MCP omitted `connection_tags` (per-panel connection
+  family in tag_value swap mode) and `component_overrides` (per-panel
+  component-swap rules). An agent that read a dashboard, moved one panel and
+  wrote it back silently wiped both on every panel — it was never told they
+  existed. Both are now advertised on both surfaces, with an explicit warning
+  that panels are replace-semantics and must be echoed back.
+- `DashboardPanel` is now covered by the schema-parity backstop (#54), which
+  previously locked only `ChartDataMapping`, `DashboardSettings` and
+  `ChartQueryConfig`. That gap is why #268 could happen: a field added to the
+  panel model stayed invisible to the agent with nothing failing. A new panel
+  field must now be exposed, or allowlisted with a stated reason.
+- Removed a phantom `title` property from the Assistant's panel schema —
+  `DashboardPanel` has no such field, so anything an agent set there was
+  silently discarded.
+- MCP's `update_dashboard` described settings as "replaces the whole settings
+  object". It has merged per-key since #135; the description now says so, and
+  contrasts it with `panels`, which really does replace.
+- MCP settings documentation gained `panel_background`, undocumented on both
+  create and update.
+
 
 ## [0.56.0] — 2026-08-15
 

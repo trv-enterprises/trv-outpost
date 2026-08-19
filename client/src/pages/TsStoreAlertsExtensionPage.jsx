@@ -13,8 +13,6 @@ import {
   TableHeader,
   TableBody,
   TableCell,
-  TableToolbar,
-  TableToolbarContent,
   TableToolbarSearch,
   Button,
   IconButton,
@@ -42,6 +40,24 @@ import './TsStoreAlertsExtensionPage.scss';
  * "+ New rule" launches the create-rule editor at
  * /design/extensions/tsstore-alerts/new.
  */
+// What makes a rule fire, rendered for the list's Condition column.
+// A condition rule shows its expression; a staleness rule has no
+// condition at all (ts-store rejects one) and is defined by its
+// max_age instead — rendering r.condition for it would leave a blank
+// cell under a column header that claims otherwise.
+function ruleTrigger(r) {
+  if (r.rule_type === 'staleness') {
+    return (
+      <span className="rule-trigger rule-trigger--staleness">
+        <Tag type="cool-gray" size="sm">staleness</Tag>
+        <code className="condition">{r.max_age ? `no data for ${r.max_age}` : 'no data'}</code>
+      </span>
+    );
+  }
+  if (!r.condition) return <span className="empty-value">—</span>;
+  return <code className="condition">{r.condition}</code>;
+}
+
 function TsStoreAlertsExtensionPage() {
   const navigate = useNavigate();
   const { isEnabled, loading: extLoading } = useExtensions();
@@ -56,6 +72,7 @@ function TsStoreAlertsExtensionPage() {
   // specific connection or rule. '' = no filter.
   const [connectionFilter, setConnectionFilter] = useState('');
   const [ruleNameFilter, setRuleNameFilter] = useState('');
+  const [ruleTypeFilter, setRuleTypeFilter] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [rulePickerOpen, setRulePickerOpen] = useState(false); // "From Existing" clone-source picker
@@ -121,6 +138,23 @@ function TsStoreAlertsExtensionPage() {
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [rules]);
 
+  // Rule type — the #242 discriminator. Built from the loaded rules
+  // rather than hardcoded, so a type ts-store adds later shows up
+  // without a client change.
+  const ruleTypeOptions = useMemo(() => {
+    const set = new Set();
+    rules.forEach((r) => { if (r.rule_type) set.add(r.rule_type); });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [rules]);
+
+  // The two known rule types are always offered so the filter doesn't
+  // appear and disappear as rules change, plus anything unexpected
+  // ts-store starts returning.
+  const ruleTypeItems = useMemo(
+    () => ['', ...new Set(['condition', 'staleness', ...ruleTypeOptions])],
+    [ruleTypeOptions],
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rules.filter((r) => {
@@ -128,14 +162,19 @@ function TsStoreAlertsExtensionPage() {
       // Column filters are exact-match and AND together with search.
       if (connectionFilter && !conns.some((c) => c.connection_name === connectionFilter)) return false;
       if (ruleNameFilter && r.rule_name !== ruleNameFilter) return false;
+      if (ruleTypeFilter && r.rule_type !== ruleTypeFilter) return false;
       if (!q) return true;
       // Free-text search stays broad — any of the visible fields.
       if (r.rule_name?.toLowerCase().includes(q)) return true;
       if (r.condition?.toLowerCase().includes(q)) return true;
+      // A staleness rule has no condition; max_age is its defining
+      // attribute, so it must be searchable by it.
+      if (r.max_age?.toLowerCase().includes(q)) return true;
+      if (r.rule_type?.toLowerCase().includes(q)) return true;
       if (r.store_name?.toLowerCase().includes(q)) return true;
       return conns.some((c) => c.connection_name?.toLowerCase().includes(q));
     });
-  }, [rules, search, connectionFilter, ruleNameFilter]);
+  }, [rules, search, connectionFilter, ruleNameFilter, ruleTypeFilter]);
 
   const handleDelete = async () => {
     if (!confirmDelete) return;
@@ -222,71 +261,101 @@ function TsStoreAlertsExtensionPage() {
         />
       )}
 
+      {/* Toolbar lives OUTSIDE the DataTable, matching the
+          connection / component / dashboard list pages: a
+          transparent bar on the page background with a gap
+          before the table, not Carbon's filled in-table
+          TableToolbar butted against the column headers. */}
+      <div className="page-toolbar">
+        <div className="toolbar-left">
+        {/* Search is OURS, not Carbon's. `rows` carry only
+            {id, raw} — the cells are rendered by hand below —
+            so Carbon's onInputChange has no cell values to
+            match and rejects every row, which made search
+            report "no rules match" for any term. Filtering
+            happens in `filtered` above; don't re-add
+            onInputChange here. */}
+        <TableToolbarSearch
+          placeholder="Search"
+          onChange={(e) => setSearch(e.target.value)}
+          persistent
+          value={search}
+        />
+        {/* Column filters, matching the connection list page:
+            exact-match narrowing that ANDs with the free-text
+            search. Options come from the loaded rules, so a
+            filter can never select an empty set. */}
+        <Dropdown
+          id="alerts-connection-filter"
+          titleText=""
+          label="All connections"
+          items={['', ...connectionOptions]}
+          itemToString={(c) => (c === '' ? 'All connections' : c)}
+          selectedItem={connectionFilter}
+          onChange={({ selectedItem }) => setConnectionFilter(selectedItem || '')}
+          size="md"
+        />
+        <Dropdown
+          id="alerts-rule-filter"
+          titleText=""
+          label="All rules"
+          items={['', ...ruleNameOptions]}
+          itemToString={(n) => (n === '' ? 'All rules' : n)}
+          selectedItem={ruleNameFilter}
+          onChange={({ selectedItem }) => setRuleNameFilter(selectedItem || '')}
+          size="md"
+        />
+        {/* Rule type — condition vs staleness (#242). Always
+            offered, even when the current rules are all one
+            type: hiding it would make the filter appear and
+            disappear as rules change, and it is how a user
+            discovers that staleness rules exist at all. */}
+        {(
+          <Dropdown
+            id="alerts-ruletype-filter"
+            titleText=""
+            label="Fires when: any"
+            items={ruleTypeItems}
+            itemToString={(t) => {
+              if (t === '') return 'Fires when: any';
+              return t === 'staleness' ? 'No data arrives' : 'Record matches';
+            }}
+            selectedItem={ruleTypeFilter}
+            onChange={({ selectedItem }) => setRuleTypeFilter(selectedItem || '')}
+            size="md"
+          />
+        )}
+        <ResetFiltersButton
+          active={!!search || !!connectionFilter || !!ruleNameFilter || !!ruleTypeFilter}
+          onReset={() => {
+            setSearch('');
+            setConnectionFilter('');
+            setRuleNameFilter('');
+            setRuleTypeFilter('');
+          }}
+        />
+        <Button
+          kind="ghost"
+          renderIcon={Renew}
+          iconDescription="Refresh"
+          hasIconOnly
+          onClick={refresh}
+        />
+        {/* Only the create action is right-aligned; reset and refresh
+            stay with the filters they act on. */}
+        <div className="toolbar-spacer" />
+        {/* Create dropdown — Create Rule / From Existing (clone),
+            matching the connection/component pattern. No AI option. */}
+        <CreateMenu
+          onCreate={() => navigate('/design/extensions/tsstore-alerts/new')}
+          onSelectExisting={() => setRulePickerOpen(true)}
+        />
+        </div>
+      </div>
+
       <DataTable rows={rows} headers={headers} isSortable>
-        {({ rows: rowsView, headers: hdrs, getHeaderProps, getRowProps, getTableProps, getToolbarProps }) => (
+        {({ rows: rowsView, headers: hdrs, getHeaderProps, getRowProps, getTableProps }) => (
           <TableContainer>
-            <TableToolbar {...getToolbarProps()}>
-              <TableToolbarContent>
-                {/* Search is OURS, not Carbon's. `rows` carry only
-                    {id, raw} — the cells are rendered by hand below —
-                    so Carbon's onInputChange has no cell values to
-                    match and rejects every row, which made search
-                    report "no rules match" for any term. Filtering
-                    happens in `filtered` above; don't re-add
-                    onInputChange here. */}
-                <TableToolbarSearch
-                  placeholder="Search rules, conditions, connections…"
-                  onChange={(e) => setSearch(e.target.value)}
-                  persistent
-                  value={search}
-                />
-                {/* Column filters, matching the connection list page:
-                    exact-match narrowing that ANDs with the free-text
-                    search. Options come from the loaded rules, so a
-                    filter can never select an empty set. */}
-                <Dropdown
-                  id="alerts-connection-filter"
-                  titleText=""
-                  label="All connections"
-                  items={['', ...connectionOptions]}
-                  itemToString={(c) => (c === '' ? 'All connections' : c)}
-                  selectedItem={connectionFilter}
-                  onChange={({ selectedItem }) => setConnectionFilter(selectedItem || '')}
-                  size="md"
-                />
-                <Dropdown
-                  id="alerts-rule-filter"
-                  titleText=""
-                  label="All rules"
-                  items={['', ...ruleNameOptions]}
-                  itemToString={(n) => (n === '' ? 'All rules' : n)}
-                  selectedItem={ruleNameFilter}
-                  onChange={({ selectedItem }) => setRuleNameFilter(selectedItem || '')}
-                  size="md"
-                />
-                <ResetFiltersButton
-                  active={!!search || !!connectionFilter || !!ruleNameFilter}
-                  onReset={() => {
-                    setSearch('');
-                    setConnectionFilter('');
-                    setRuleNameFilter('');
-                  }}
-                />
-                <Button
-                  kind="ghost"
-                  renderIcon={Renew}
-                  iconDescription="Refresh"
-                  hasIconOnly
-                  onClick={refresh}
-                />
-                {/* Create dropdown — Create Rule / From Existing (clone),
-                    matching the connection/component pattern. No AI option. */}
-                <CreateMenu
-                  onCreate={() => navigate('/design/extensions/tsstore-alerts/new')}
-                  onSelectExisting={() => setRulePickerOpen(true)}
-                />
-              </TableToolbarContent>
-            </TableToolbar>
             {loading ? (
               <Loading description="Loading rules" withOverlay={false} small />
             ) : (
@@ -338,7 +407,7 @@ function TsStoreAlertsExtensionPage() {
                               <Tag size="sm">{r.alert_type}</Tag>
                             </div>
                           </TableCell>
-                          <TableCell><code className="condition">{r.condition}</code></TableCell>
+                          <TableCell>{ruleTrigger(r)}</TableCell>
                           <TableCell>{r.cooldown || <span className="muted">—</span>}</TableCell>
                           <TableCell>
                             {r.dashboard_id ? (
@@ -475,7 +544,9 @@ function TsStoreAlertsExtensionPage() {
               >
                 <span className="rule-clone-name">{r.rule_name}</span>
                 <Tag size="sm">{r.alert_type}</Tag>
-                <code className="rule-clone-condition">{r.condition}</code>
+                <code className="rule-clone-condition">
+                  {r.rule_type === 'staleness' ? `no data for ${r.max_age || '?'}` : r.condition}
+                </code>
               </button>
             ))}
           </div>

@@ -18,12 +18,12 @@ func TestDecodeIntoDataMappingFieldComplete(t *testing.T) {
 	// Mirror what the JSON-RPC decoder produces: JSON-native types
 	// (float64 numbers, string, bool, []interface{}, map[string]interface{}).
 	dm := map[string]interface{}{
-		"x_axis":        "ts",
-		"x_axis_format": "chart_time",
-		"y_axis":        []interface{}{"cpu", "mem"},
-		"y_axis_labels": []interface{}{"CPU %", "Mem %"},
-		"y_axis_colors": []interface{}{"7", "purple70"},
-		"series":        "host",
+		"x_axis":          "ts",
+		"x_axis_format":   "chart_time",
+		"y_axis":          []interface{}{"cpu", "mem"},
+		"y_axis_labels":   []interface{}{"CPU %", "Mem %"},
+		"y_axis_colors":   []interface{}{"7", "purple70"},
+		"series":          "host",
 		"multiple_y_axis": true,
 		"sliding_window": map[string]interface{}{
 			"duration": float64(3600), "timestamp_col": "ts",
@@ -141,5 +141,64 @@ func TestDecodeIntoPanelsFieldComplete(t *testing.T) {
 	}
 	if got[1].TextConfig == nil || got[1].TextConfig.Content != "Header" {
 		t.Errorf("panel 1 text_config dropped/wrong: %#v", got[1].TextConfig)
+	}
+}
+
+// TestDecodeIntoPreservesPanelVariableFields is the regression guard for
+// #268. update_dashboard REPLACES the whole panel array, so a panel field
+// that survives decodeInto only if the caller sends it is a field the agent
+// can silently destroy. These assert the decode side works — the schema
+// change (telling the agent the fields exist) is what makes it usable, and
+// the chat-side parity test locks that in.
+func TestDecodeIntoPreservesPanelVariableFields(t *testing.T) {
+	raw := []interface{}{
+		map[string]interface{}{
+			"id": "panel-kpi", "x": 0, "y": 0, "w": 5, "h": 3,
+			"component_id":    "comp-1",
+			"connection_tags": []interface{}{"docker-daemon"},
+			"component_overrides": []interface{}{
+				map[string]interface{}{
+					"subject": "variable", "op": "equals",
+					"value": "trv-srv-001", "component_id": "comp-2",
+				},
+			},
+		},
+	}
+
+	var panels []models.DashboardPanel
+	if err := decodeInto(raw, &panels); err != nil {
+		t.Fatalf("decodeInto: %v", err)
+	}
+	if len(panels) != 1 {
+		t.Fatalf("expected 1 panel, got %d", len(panels))
+	}
+	p := panels[0]
+
+	if len(p.ConnectionTags) != 1 || p.ConnectionTags[0] != "docker-daemon" {
+		t.Errorf("connection_tags = %v, want [docker-daemon]", p.ConnectionTags)
+	}
+	if len(p.ComponentOverrides) != 1 {
+		t.Fatalf("component_overrides = %v, want 1 rule", p.ComponentOverrides)
+	}
+	ov := p.ComponentOverrides[0]
+	if ov.Subject != "variable" || ov.Op != "equals" || ov.Value != "trv-srv-001" || ov.ComponentID != "comp-2" {
+		t.Errorf("override decoded wrong: %+v", ov)
+	}
+}
+
+// A panel sent WITHOUT the fields decodes to empty — which is exactly the
+// data loss in #268, since the repo then $sets the whole array. Pinned as a
+// characterization test: if panel writes ever become a merge, this changes
+// deliberately rather than by accident.
+func TestDecodeIntoDropsOmittedPanelFields(t *testing.T) {
+	raw := []interface{}{
+		map[string]interface{}{"id": "panel-kpi", "x": 0, "y": 0, "w": 5, "h": 3, "component_id": "comp-1"},
+	}
+	var panels []models.DashboardPanel
+	if err := decodeInto(raw, &panels); err != nil {
+		t.Fatalf("decodeInto: %v", err)
+	}
+	if len(panels[0].ConnectionTags) != 0 || len(panels[0].ComponentOverrides) != 0 {
+		t.Fatalf("expected omitted fields to decode empty, got %+v", panels[0])
 	}
 }
