@@ -198,6 +198,33 @@ any order.
 |---|---|---|---|
 | 0 green, 80 yellow, 90 red | green | yellow | red |
 
+**Line, area and bar — Threshold bands.** Same rule, applied to a series
+instead of a single number: each threshold's color runs from its value
+*upward*, until the next threshold takes over.
+
+The first row is the **Base**. It has a color but no value — it paints
+everything below the first real threshold, which is why the editor shows it
+without a number field. Every row after it is a *starts at* value: from there
+up, that row's color applies, and a dashed boundary line is drawn at that
+value. The base has no boundary line, because nothing changes there.
+
+| Bands | a point at 10 | at 26 | at 33 |
+|---|---|---|---|
+| Base green, 24 amber, 30 red | green | amber | red |
+
+The band strip above the rows previews the colors in order. Rows re-sort
+themselves by value, so you can type them in any order.
+
+**Threshold lines / Value color / Both** chooses what the bands do: draw the
+boundary lines only, recolor the data line only, or both.
+
+Thresholds are **single-axis only** — the settings disappear when *Dual
+Y-axis* is on. A threshold value has no unambiguous meaning across two
+axes: the boundary line can only be drawn against one of them, and the
+band coloring applies to every series regardless of which axis it belongs
+to, so a series in a different magnitude (bytes against a 0–100
+percentage) would be painted one flat color.
+
 **Text — Color rules.** Add a rule per state you care about; there's no limit.
 Each rule is an operator (**equals** or **contains**), the text to match, and a
 color. Matching **ignores case**, so a rule for `online` catches `ONLINE`.

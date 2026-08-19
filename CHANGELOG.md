@@ -8,6 +8,36 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Threshold bands on line, area and bar charts were shifted by one.** Each
+  band took the color of the threshold that *ended* it rather than the one
+  that *started* it, so a base-green / 24-amber / 30-red stack painted
+  0–24 amber and 24–30 red, and drew a stray boundary line at the base value.
+  Bands now follow the standard model (the same one the value chart already
+  documented, and the one Grafana uses): the first entry is the **Base** — a
+  color with no value, painting everything below the first real threshold —
+  and each later entry means "from this value upward, use this color", with
+  its boundary line belonging to the band it floors.
+
+### Changed
+
+- **Thresholds are now single-axis only.** The settings hide when *Dual
+  Y-axis* is on, and a chart already saved with both stops rendering them.
+  A threshold value has no unambiguous meaning across two axes: the boundary
+  line could only attach to one of them (silently the wrong one for the other
+  series), and the band coloring applied to *every* series regardless of axis
+  — so a right-axis series in a different magnitude (bytes against a 0–100
+  percentage) was painted one flat color.
+- The threshold editor reflects that model: the base row has **no value
+  input** (its number was never used, and an editable one invited someone to
+  set it to something other than the true floor), rows re-sort by value on
+  blur so they can be typed in any order, and a band-preview strip shows the
+  colors the chart will paint. New rows escalate OK → Warning → Caution →
+  Danger instead of starting on the informational blue.
+
+## [0.57.0] — 2026-08-19
+
 ### Added
 
 - **Staleness alert rules** (#242). A rule can now fire on the *absence*

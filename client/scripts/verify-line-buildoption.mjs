@@ -153,7 +153,10 @@ const data = {
   const values = {
     data_mapping: { x_axis: 'ts', y_axis: [{ column: 'cpu', stack: false, axis: 'left' }] },
     options: {
+      // Band model: entry 0 is the BASE (color only, no line). Lines
+      // are drawn for the real thresholds that follow.
       yThresholds: [
+        { value: 0, color: '#24a148' },
         { value: 70, color: '#f1c21b', label: 'Warning' },
         { value: 90, color: '#da1e28' },
       ],
@@ -164,6 +167,9 @@ const data = {
   check('case 6: markLine on series[0]', opt.series[0]?.markLine?.data?.length === 2);
   check('case 6: no visualMap', !opt.visualMap);
   check('case 6: threshold 70 yellow', opt.series[0].markLine.data[0]?.yAxis === 70 && opt.series[0].markLine.data[0]?.lineStyle?.color === '#f1c21b');
+  // The BASE gets no boundary line — a line at the base value would
+  // imply a threshold the author never set.
+  check('case 6: no markLine at the base value', !opt.series[0].markLine.data.some((d) => d.yAxis === 0));
 }
 
 // --- Case 7: thresholds in color_segments mode (visualMap) ---
@@ -171,13 +177,26 @@ const data = {
   const values = {
     data_mapping: { x_axis: 'ts', y_axis: [{ column: 'cpu', stack: false, axis: 'left' }] },
     options: {
-      yThresholds: [{ value: 70, color: '#f1c21b' }, { value: 90, color: '#da1e28' }],
+      yThresholds: [
+        { value: 0, color: '#24a148' },
+        { value: 70, color: '#f1c21b' },
+        { value: 90, color: '#da1e28' },
+      ],
       yThresholdRenderMode: 'color_segments',
     },
   };
   const opt = buildOption(values, data, { formatCellValue, chartType: 'line' });
   check('case 7: visualMap present, piecewise', opt.visualMap?.type === 'piecewise');
-  check('case 7: 3 pieces (below first, between, above last)', opt.visualMap?.pieces?.length === 3);
+  check('case 7: 3 pieces (base, mid, top)', opt.visualMap?.pieces?.length === 3);
+  // THE BAND MODEL: each band takes the color of the threshold that
+  // STARTS it, not the one that ends it. Getting this backwards shifted
+  // every band by one entry — the original bug this test now pins.
+  check('case 7: base band is the base color, capped at the first threshold',
+    opt.visualMap.pieces[0].color === '#24a148' && opt.visualMap.pieces[0].lte === 70);
+  check('case 7: 70-90 band takes the 70 threshold color',
+    opt.visualMap.pieces[1].gt === 70 && opt.visualMap.pieces[1].lte === 90 && opt.visualMap.pieces[1].color === '#f1c21b');
+  check('case 7: above 90 takes the 90 threshold color, open above',
+    opt.visualMap.pieces[2].gt === 90 && opt.visualMap.pieces[2].lte === undefined && opt.visualMap.pieces[2].color === '#da1e28');
   check('case 7: no markLine on series', !opt.series[0]?.markLine);
   // REGRESSION GUARD: every piece must carry a FINITE lower bound.
   // ECharts throws "can't access property 'coord', m[0] is undefined" on
@@ -201,7 +220,10 @@ const data = {
   const values = {
     data_mapping: { x_axis: 'ts', y_axis: [{ column: 'cpu', stack: false, axis: 'left' }] },
     options: {
-      yThresholds: [{ value: 24.3, color: '#f1c21b', label: '' }],
+      yThresholds: [
+        { value: 0, color: '#24a148' },
+        { value: 24.3, color: '#f1c21b', label: '' },
+      ],
       yThresholdRenderMode: 'both',
     },
   };
@@ -680,7 +702,9 @@ const data = {
 
   // Thresholds ride the value axis: markLine yAxis→xAxis under horizontal.
   const thresholds = buildOption(
-    { data_mapping: dm, options: { barOrientation: 'horizontal', yThresholds: [{ value: 15, color: '#f00' }] } },
+    // Needs a base + a real threshold: under the band model a lone entry
+    // IS the base, which has no boundary line to re-key.
+    { data_mapping: dm, options: { barOrientation: 'horizontal', yThresholds: [{ value: 0, color: '#0f0' }, { value: 15, color: '#f00' }] } },
     barData,
     { formatCellValue, chartType: 'bar' },
   );
@@ -749,6 +773,93 @@ const data = {
   );
   check('case 22: line ignores bar orientation', lineChart.xAxis?.type === 'category');
   check('case 22: line ignores barWidthPct', lineChart.series?.[0]?.barWidth === undefined);
+}
+
+// --- Case 7c: the band model, pinned ---
+// Regression guard for the off-by-one that shipped before: bands took the
+// color of the threshold that ENDED them, so base=green/24=yellow/30=red
+// painted 0-24 yellow and 24-30 red — every band shifted one entry, and a
+// stray boundary line was drawn at the base value.
+{
+  const dm = { x_axis: 'ts', y_axis: [{ column: 'cpu', stack: false, axis: 'left' }] };
+  const thr = [
+    { value: 0, color: '#24a148' },   // base
+    { value: 24, color: '#f1c21b' },  // warn
+    { value: 30, color: '#da1e28' },  // crit
+  ];
+  const opt = buildOption(
+    { data_mapping: dm, options: { yThresholds: thr, yThresholdRenderMode: 'both' } },
+    data,
+    { formatCellValue, chartType: 'line' },
+  );
+  const p = opt.visualMap.pieces;
+  check('case 7c: base band green, capped at the first threshold', p[0].color === '#24a148' && p[0].lte === 24);
+  check('case 7c: 24-30 is the 24 threshold color', p[1].gt === 24 && p[1].lte === 30 && p[1].color === '#f1c21b');
+  check('case 7c: above 30 is the 30 threshold color', p[2].gt === 30 && p[2].color === '#da1e28');
+  const lines = opt.series[0].markLine.data.map((d) => d.yAxis);
+  check('case 7c: boundary lines only at real thresholds', lines.length === 2 && lines.includes(24) && lines.includes(30));
+  check('case 7c: no boundary line at the base', !lines.includes(0));
+
+  // The base's VALUE is meaningless — only its color is used. The editor
+  // hides the input for this reason; the renderer must agree.
+  const nonsenseBase = buildOption(
+    { data_mapping: dm, options: { yThresholds: [{ value: 9999, color: '#24a148' }, { value: 24, color: '#f1c21b' }], yThresholdRenderMode: 'both' } },
+    data,
+    { formatCellValue, chartType: 'line' },
+  );
+  check('case 7c: base value is ignored, not sorted on',
+    nonsenseBase.visualMap.pieces[0].color === '#24a148' && nonsenseBase.visualMap.pieces[0].lte === 24);
+
+  // Degenerate: a lone base is a uniform color with nothing to divide.
+  const baseOnly = buildOption(
+    { data_mapping: dm, options: { yThresholds: [{ value: 0, color: '#24a148' }], yThresholdRenderMode: 'both' } },
+    data,
+    { formatCellValue, chartType: 'line' },
+  );
+  check('case 7c: lone base = one uniform band', baseOnly.visualMap.pieces.length === 1 && baseOnly.visualMap.pieces[0].lte === undefined);
+  check('case 7c: lone base draws no lines', !baseOnly.series[0]?.markLine);
+
+  // Out-of-order input must still produce ascending bands.
+  const unsorted = buildOption(
+    { data_mapping: dm, options: { yThresholds: [{ value: 0, color: '#24a148' }, { value: 30, color: '#da1e28' }, { value: 24, color: '#f1c21b' }], yThresholdRenderMode: 'color_segments' } },
+    data,
+    { formatCellValue, chartType: 'line' },
+  );
+  check('case 7c: unsorted input sorts into ascending bands',
+    unsorted.visualMap.pieces[1].gt === 24 && unsorted.visualMap.pieces[2].gt === 30);
+}
+
+// --- Case 7d: thresholds are single-axis only ---
+// On a dual-axis chart a threshold value has no unambiguous meaning. The
+// boundary line can only attach to ONE axis (it lands on series 0's), and
+// the visualMap carries no seriesIndex, so it recolors EVERY series by the
+// same y-values — a right-axis series in a different magnitude (bytes
+// against a 0-100 percentage) gets painted one permanent color. The editor
+// hides the fields; the renderer drops them too, so a chart already SAVED
+// with both stops rendering wrong bands without waiting to be re-saved.
+{
+  const thr = [
+    { value: 0, color: '#24a148' },
+    { value: 24, color: '#f1c21b' },
+  ];
+  const dm = (dual) => ({
+    x_axis: 'ts',
+    y_axis: [
+      { column: 'cpu', stack: false, axis: 'left' },
+      { column: 'mem', stack: false, axis: dual ? 'right' : 'left' },
+    ],
+    multiple_y_axis: dual,
+  });
+  const opts = { yThresholds: thr, yThresholdRenderMode: 'both' };
+
+  const single = buildOption({ data_mapping: dm(false), options: opts }, data, { formatCellValue, chartType: 'line' });
+  check('case 7d: single axis still gets threshold lines', !!single.series[0]?.markLine);
+  check('case 7d: single axis still gets colour bands', !!single.visualMap);
+
+  const dual = buildOption({ data_mapping: dm(true), options: opts }, data, { formatCellValue, chartType: 'line' });
+  check('case 7d: dual axis drops threshold lines', !dual.series[0]?.markLine);
+  check('case 7d: dual axis drops the visualMap (would recolour BOTH series)', !dual.visualMap);
+  check('case 7d: dual axis still renders its series', dual.series?.length === 2 && dual.series[1]?.yAxisIndex === 1);
 }
 
 if (FAILURES.length > 0) {

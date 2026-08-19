@@ -2300,6 +2300,46 @@
 // ThresholdList: free list of {value, color, label?} rows.
 // Layout: value | color-swatch | label | remove.
 .spec-threshold-list {
+  // Band preview — the colors the chart will paint, low (left) to high
+  // (right). Driven by the same ordering the renderer uses, so it can't
+  // drift from what actually draws.
+  .spec-threshold-list__preview {
+    display: flex;
+    height: spacing.$spacing-06;
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: spacing.$spacing-05;
+
+    .spec-threshold-list__band {
+      flex: 1 1 0;
+      min-width: 4px;
+    }
+  }
+
+  // The base row has no value input, so it sits shorter than the rest.
+  // Center it instead of bottom-aligning to the missing field.
+  .spec-threshold-list__row--base {
+    align-items: center;
+
+    .spec-threshold-list__base-label {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 1 1 0;
+
+      strong {
+        color: var(--cds-text-primary);
+        font-size: 0.875rem;
+        font-weight: 600;
+      }
+
+      span {
+        color: var(--cds-text-helper);
+        font-size: 0.75rem;
+      }
+    }
+  }
+
   .spec-threshold-list__rows {
     display: flex;
     flex-direction: column;
