@@ -123,6 +123,14 @@ function TsStoreAlertRuleEditorPage() {
   // re-prefilling from the rule name once they take ownership of it.
   const [mqttTopicDirty, setMqttTopicDirty] = useState(false);
   const [mqttQos, setMqttQos] = useState('1');
+  // Rule type (ts-store#134). 'condition' evaluates an expression
+  // against each arriving record; 'staleness' fires when NOTHING has
+  // arrived for longer than maxAge — which no condition can express,
+  // since absence has no record to compare. The two carry mutually
+  // exclusive fields, so the form SWAPS one for the other rather than
+  // validating a combination: an impossible state can't be entered.
+  const [ruleType, setRuleType] = useState('condition');
+  const [maxAge, setMaxAge] = useState('');
   const [condition, setCondition] = useState('');
   const [cooldown, setCooldown] = useState('5m');
   // Restart policy: "now" (default — start at wall-clock now, no
@@ -240,6 +248,11 @@ function TsStoreAlertRuleEditorPage() {
       setTimeout(() => setStoreName(src.store_name), 0);
     }
     setRuleName(src.rule_name ? `${src.rule_name} copy` : '');
+    // Carry the rule type + its field, or cloning a staleness rule
+    // would silently produce an unsubmittable condition-rule form with
+    // the staleness semantics dropped.
+    setRuleType(src.rule_type || 'condition');
+    setMaxAge(src.max_age || '');
     setCondition(src.condition || '');
     if (src.cooldown) setCooldown(src.cooldown);
     if (src.sink_connection_id) setSinkConnectionId(src.sink_connection_id);
@@ -288,6 +301,10 @@ function TsStoreAlertRuleEditorPage() {
         // in edit mode, so nothing races this.
         if (editStore) setStoreName(editStore);
         setRuleName(d?.rule_name || sink?.name || '');
+        // Rule type + its one field. ts-store omits rule_type on rules
+        // that predate #134, so absent means condition.
+        setRuleType(sink?.rule_type || d?.rule_type || 'condition');
+        setMaxAge(sink?.max_age || '');
         setCondition(sink?.condition || '');
         setCooldown(sink?.cooldown || '');
         setRestartPolicy(sink?.restart_policy || 'now');
@@ -551,7 +568,8 @@ function TsStoreAlertRuleEditorPage() {
     connectionId &&
     (!isEndpointScoped || storeName) &&
     ruleName.trim() &&
-    condition.trim() &&
+    // Each rule type requires its own field and only its own.
+    (ruleType === 'staleness' ? maxAge.trim() : condition.trim()) &&
     mqttReady &&
     !submitting &&
     // An edit whose prefill never completed would submit whatever
@@ -616,7 +634,12 @@ function TsStoreAlertRuleEditorPage() {
         connection_id: connectionId,
         store_name: isEndpointScoped ? storeName : undefined,
         rule_name: ruleName.trim(),
-        condition: condition.trim(),
+        // Exactly one of condition/max_age — ts-store rejects the other
+        // for each rule type. rule_type is sent only for staleness so
+        // condition-rule bodies stay identical to pre-#134 ones.
+        rule_type: ruleType === 'staleness' ? 'staleness' : undefined,
+        condition: ruleType === 'staleness' ? undefined : condition.trim(),
+        max_age: ruleType === 'staleness' ? maxAge.trim() : undefined,
         cooldown: cooldown.trim() || undefined,
         dashboard_id: dashboardId || undefined,
         // Pre-scope the deep link: variable name → value. Only non-empty
@@ -626,8 +649,13 @@ function TsStoreAlertRuleEditorPage() {
         // Only send restart_policy when it diverges from ts-store's
         // implicit default ("now"). max_replay is only valid on
         // resume; sending it with restart_policy=now would 400.
-        restart_policy: restartPolicy === 'resume' ? 'resume' : undefined,
-        max_replay: restartPolicy === 'resume' && maxReplay.trim() ? maxReplay.trim() : undefined,
+        //
+        // Forced off for staleness: it has no cursor to resume from and
+        // ts-store rejects the pairing. The control is hidden for that
+        // type, but a user who picked "resume" and THEN switched type
+        // would otherwise carry the stale value into the payload.
+        restart_policy: ruleType !== 'staleness' && restartPolicy === 'resume' ? 'resume' : undefined,
+        max_replay: ruleType !== 'staleness' && restartPolicy === 'resume' && maxReplay.trim() ? maxReplay.trim() : undefined,
         // MQTT sink fields. Only included when alertType=mqtt; the
         // server ignores them otherwise.
         sink_connection_id: alertType === 'mqtt' ? sinkConnectionId : undefined,
@@ -1008,7 +1036,49 @@ function TsStoreAlertRuleEditorPage() {
             </FormGroup>
           )}
 
-          {/* 5. Condition — uses fields from the chosen Store. */}
+          {/* 5. Fires when — the rule type, then the ONE field that
+              type needs. Condition and max_age are mutually exclusive
+              upstream (ts-store rejects each for the other's type), so
+              swapping the field makes the invalid combination
+              unrepresentable rather than merely validated. */}
+          <FormGroup legendText="Fires when">
+            <RadioButtonGroup
+              name="rule-rule-type"
+              legendText=""
+              orientation="horizontal"
+              valueSelected={ruleType}
+              onChange={(value) => setRuleType(value)}
+            >
+              <RadioButton
+                id="ruletype-condition"
+                value="condition"
+                labelText="A record matches a condition"
+              />
+              <RadioButton
+                id="ruletype-staleness"
+                value="staleness"
+                labelText="No data arrives for a while"
+              />
+            </RadioButtonGroup>
+          </FormGroup>
+
+          {ruleType === 'staleness' && (
+            <FormGroup legendText="Max age">
+              <TextInput
+                id="rule-max-age"
+                labelText=""
+                placeholder="5m"
+                value={maxAge}
+                onChange={(e) => setMaxAge(e.target.value)}
+                helperText="How long the store may go without a new record before this fires. Examples: 90s, 5m, 2h. No default — a 60s collector and an event-driven sensor need very different values. Checked on every poll tick, including ticks where nothing arrived."
+              />
+              <p className="dashboard-var-note">
+                Staleness is per <em>store</em>, not per series: it catches a collector that stopped writing, not one field going quiet while others keep reporting. A store that has never received data never fires, and recovery emits no “resolved” event — it simply stops firing.
+              </p>
+            </FormGroup>
+          )}
+
+          {ruleType === 'condition' && (
           <FormGroup legendText="Condition">
             {/* Field pills above the condition textarea. Drag a pill
                 onto the textarea to insert at the drop point, or click
@@ -1068,6 +1138,7 @@ function TsStoreAlertRuleEditorPage() {
               rows={3}
             />
           </FormGroup>
+          )}
 
           {/* 6. Policy — cooldown + restart behavior + (conditional)
               max replay window. Cooldown gates spam; restart_policy /
@@ -1081,6 +1152,14 @@ function TsStoreAlertRuleEditorPage() {
               onChange={(e) => setCooldown(e.target.value)}
               helperText="Minimum time between consecutive fires of this rule. Empty = no cooldown. Examples: 30s, 5m, 1h."
             />
+            {/* Restart behavior only applies to condition rules. A
+                staleness rule is driven by the clock, not by a scan
+                position, so it has no cursor to resume from — ts-store
+                rejects restart_policy=resume (and max_replay with it).
+                Hiding the control makes that unrepresentable instead of
+                mirroring the validation rule here, where it would drift. */}
+            {ruleType === 'condition' && (
+            <>
             <div className="restart-policy-row">
               <RadioButtonGroup
                 name="rule-restart-policy"
@@ -1108,6 +1187,8 @@ function TsStoreAlertRuleEditorPage() {
                 ? 'On server restart, replay records since the last seen timestamp. Use this for event streams (e.g. journal logs) where a missed match matters.'
                 : 'On server restart, begin evaluating from now. No replay of past records. Use this for metrics where a brief gap is fine.'}
             </p>
+            </>
+            )}
           </FormGroup>
 
           <FormGroup legendText="Target dashboard (optional)">

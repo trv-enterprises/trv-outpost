@@ -34,9 +34,66 @@
     overflow: hidden;
   }
 
-  .cds--table-toolbar {
+  // Toolbar sits on the PAGE, outside the DataTable — same as the
+  // connection / component / dashboard lists. Transparent (no filled
+  // band) with bottom padding so there is a clear gap before the table
+  // header, rather than Carbon's in-table toolbar butted against it.
+  .page-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    // No horizontal padding: this page's own padding (spacing-07)
+    // already sets the gutter, so the connection page's extra 24px
+    // would indent the search past the table's left edge. Only the
+    // bottom padding is kept — that's the gap before the table header.
+    padding: 0 0 spacing.$spacing-05;
+    gap: spacing.$spacing-04;
     flex-shrink: 0;
-    background-color: var(--cds-layer-01);
+
+    .toolbar-left {
+      display: flex;
+      align-items: center;
+      gap: spacing.$spacing-04;
+      width: 100%;
+    }
+
+    .cds--search {
+      width: 260px;
+      flex: 0 0 260px;
+    }
+
+    // Everything after the last filter (reset, refresh, Create) goes to
+    // the right-hand end.
+    .toolbar-spacer {
+      margin-left: auto;
+    }
+
+    // Sized to the content each holds, allowing ~50px for Carbon's
+    // chevron and field padding on top of the text itself. Measured
+    // against the real names rather than guessed: the longest
+    // connection ("TRV-PI-001 system-stats tsstore-ws rollup") needs
+    // ~270px of text and the longest rule name ~210px, so a 240px
+    // field clipped both.
+    #alerts-connection-filter {
+      min-width: 330px;
+    }
+
+    #alerts-rule-filter {
+      min-width: 270px;
+    }
+
+    // Two short, fixed labels — no need for the same room.
+    #alerts-ruletype-filter {
+      min-width: 180px;
+    }
+
+    // The open menu can be wider than its trigger, so a long name is
+    // fully readable while choosing even if the closed field clips it.
+    .cds--list-box__menu {
+      min-width: 100%;
+      width: max-content;
+      max-width: 520px;
+    }
   }
 
   .cds--data-table-content {
@@ -84,6 +141,19 @@
     border-radius: 2px;
     font-family: 'IBM Plex Mono', monospace;
     font-size: 0.8125rem;
+  }
+
+  // A staleness rule has no condition expression — it shows a type tag
+  // plus its max_age, stacked so the tag doesn't crowd the text.
+  .rule-trigger--staleness {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: spacing.$spacing-02;
+  }
+
+  .empty-value {
+    color: var(--cds-text-secondary);
   }
 
   .muted {

@@ -120,8 +120,14 @@ type TSStoreAggregatedRule struct {
 	AlertTarget     string                 `json:"alert_target,omitempty"`
 
 	// Rule-level fields straight from ts-store.
-	RuleName    string `json:"rule_name"`
-	Condition   string `json:"condition"`
+	RuleName string `json:"rule_name"`
+	// RuleType is always populated on the wire (never ""), so clients
+	// can switch on it without repeating the empty-means-condition
+	// default. Condition and MaxAge are mutually exclusive: a condition
+	// rule has the former, a staleness rule the latter.
+	RuleType    string `json:"rule_type"`
+	Condition   string `json:"condition,omitempty"`
+	MaxAge      string `json:"max_age,omitempty"`
 	Cooldown    string `json:"cooldown,omitempty"`
 	ExternalRef string `json:"external_ref,omitempty"`
 
@@ -507,10 +513,34 @@ type tsStoreAlertDetail struct {
 }
 
 type tsStoreRuleConfig struct {
-	Name        string `json:"name"`
-	Condition   string `json:"condition"`
+	Name string `json:"name"`
+	// RuleType is ts-store's discriminator (#134). Absent on every rule
+	// created before it shipped, which is why the empty string means
+	// "condition" — see effectiveRuleType.
+	RuleType    string `json:"rule_type,omitempty"`
+	Condition   string `json:"condition,omitempty"`
+	MaxAge      string `json:"max_age,omitempty"`
 	Cooldown    string `json:"cooldown,omitempty"`
 	ExternalRef string `json:"external_ref,omitempty"`
+}
+
+// Rule types, mirroring ts-store's pkg/store constants. A condition rule
+// evaluates an expression against each arriving record; a staleness rule
+// fires when NOTHING has arrived for longer than max_age, which no
+// condition can express (absence has no record to compare against).
+const (
+	RuleTypeCondition = "condition"
+	RuleTypeStaleness = "staleness"
+)
+
+// effectiveRuleType applies the empty-means-condition default, mirroring
+// ts-store's AlertCommon.EffectiveRuleType. Rules that predate #134 carry
+// no rule_type and must keep behaving exactly as before.
+func effectiveRuleType(ruleType string) string {
+	if ruleType == "" {
+		return RuleTypeCondition
+	}
+	return ruleType
 }
 
 // fetchRulesForConnection lists alerts on one tsstore connection,
@@ -569,7 +599,9 @@ func (s *TSStoreAlertRulesService) fetchRulesForConnection(ctx context.Context, 
 			AlertType:      st.Type,
 			AlertTarget:    st.Target,
 			RuleName:       name,
+			RuleType:       effectiveRuleType(rule.RuleType),
 			Condition:      rule.Condition,
+			MaxAge:         rule.MaxAge,
 			Cooldown:       rule.Cooldown,
 			ExternalRef:    rule.ExternalRef,
 			DashboardID:    decodeDashboardID(rule.ExternalRef),
@@ -778,9 +810,21 @@ type CreateAlertRequest struct {
 	// StoreName targets the rule's store on an ENDPOINT-SCOPED connection
 	// (required there; ignored when the connection pins a store — the pin
 	// wins, same as every other alerts operation). (#248)
-	StoreName   string `json:"store_name,omitempty"`
-	RuleName    string `json:"rule_name" binding:"required"`
-	Condition   string `json:"condition" binding:"required"`
+	StoreName string `json:"store_name,omitempty"`
+	RuleName  string `json:"rule_name" binding:"required"`
+	// RuleType selects how the rule fires: "condition" (default, and the
+	// only kind before ts-store#134) or "staleness". Empty means
+	// condition, so existing clients are unaffected.
+	RuleType string `json:"rule_type,omitempty"`
+	// Condition is required for condition rules and REJECTED for
+	// staleness ones — hence no binding:"required" here; the check is
+	// conditional on RuleType (see validateRuleTypeFields).
+	Condition string `json:"condition,omitempty"`
+	// MaxAge is how long the store may go without a record before a
+	// staleness rule fires ("5m"). Required for staleness, rejected
+	// otherwise. No default by design — a 60s collector and an
+	// event-driven source can't share one.
+	MaxAge      string `json:"max_age,omitempty"`
 	Cooldown    string `json:"cooldown,omitempty"`     // "5m" etc., ts-store duration
 	DashboardID string `json:"dashboard_id,omitempty"` // optional bell deep-link target
 	// DashboardVars pre-scopes the deep-linked dashboard: variable name →
@@ -832,11 +876,55 @@ type CreateAlertResponse struct {
 // field reverts to its default), so update sends exactly the same
 // shape as create; anything create sends conditionally must be sent
 // conditionally on update too, or an edit would silently clear it.
+// validateRuleTypeFields enforces the SHAPE rules that decide which
+// fields belong in the body at all: a condition rule carries a
+// condition, a staleness rule carries a max_age, and neither carries
+// the other's field. Getting this wrong would send ts-store a body it
+// rejects, so we catch it here with a message naming our own field.
+//
+// Deliberately NOT mirrored: whether max_age parses, whether it is
+// positive, and the restart_policy pairing. Those are VALUE rules —
+// ts-store already validates them and returns a well-worded 400
+// ("invalid max_age \"5x\": ..."), and a hand-maintained copy is
+// exactly the kind of duplicated policy that drifts (#242 part 2).
+func validateRuleTypeFields(req *CreateAlertRequest) error {
+	switch effectiveRuleType(req.RuleType) {
+	case RuleTypeCondition:
+		if strings.TrimSpace(req.Condition) == "" {
+			return fmt.Errorf("%w: condition is required for a condition rule", ErrAlertValidation)
+		}
+		if req.MaxAge != "" {
+			return fmt.Errorf("%w: max_age is only valid when rule_type=%q", ErrAlertValidation, RuleTypeStaleness)
+		}
+	case RuleTypeStaleness:
+		if strings.TrimSpace(req.MaxAge) == "" {
+			return fmt.Errorf("%w: max_age is required when rule_type=%q", ErrAlertValidation, RuleTypeStaleness)
+		}
+		if req.Condition != "" {
+			return fmt.Errorf("%w: condition is not valid when rule_type=%q — a staleness rule fires on absent data, which has no fields to compare", ErrAlertValidation, RuleTypeStaleness)
+		}
+	default:
+		return fmt.Errorf("%w: rule_type must be %q or %q (got %q)", ErrAlertValidation, RuleTypeCondition, RuleTypeStaleness, req.RuleType)
+	}
+	return nil
+}
+
 func commonAlertBody(req *CreateAlertRequest) map[string]interface{} {
 	body := map[string]interface{}{
-		"type":      req.Type,
-		"name":      req.RuleName,
-		"condition": req.Condition,
+		"type": req.Type,
+		"name": req.RuleName,
+	}
+	// Only ONE of condition/max_age is ever sent: ts-store rejects the
+	// other outright for each rule type. Note `condition` used to be set
+	// unconditionally here, which would have sent "" for a staleness
+	// rule and been refused.
+	if rt := effectiveRuleType(req.RuleType); rt == RuleTypeStaleness {
+		body["rule_type"] = RuleTypeStaleness
+		body["max_age"] = req.MaxAge
+	} else if req.Condition != "" {
+		// rule_type is left off for condition rules so bodies we send
+		// stay byte-identical to pre-#134 ones on the common path.
+		body["condition"] = req.Condition
 	}
 	if req.Cooldown != "" {
 		body["cooldown"] = req.Cooldown
@@ -863,6 +951,11 @@ func (s *TSStoreAlertRulesService) CreateAlert(ctx context.Context, req *CreateA
 	}
 	if conn.Type != models.ConnectionTypeTSStore || conn.Config.TSStore == nil {
 		return nil, fmt.Errorf("connection %s is not a tsstore connection", req.ConnectionID)
+	}
+	// Shape-check before any side effect, same reasoning as the store
+	// resolution below: the webhook branch mints and persists a secret.
+	if err := validateRuleTypeFields(req); err != nil {
+		return nil, err
 	}
 	// Resolve the target store up front — before any side effect (the
 	// webhook branch mints + persists a secret), so an endpoint-scoped
@@ -1049,6 +1142,9 @@ func (s *TSStoreAlertRulesService) UpdateAlert(ctx context.Context, alertID stri
 	if conn.Type != models.ConnectionTypeTSStore || conn.Config.TSStore == nil {
 		return fmt.Errorf("%w: connection %s is not a tsstore connection", ErrAlertValidation, req.ConnectionID)
 	}
+	if err := validateRuleTypeFields(req); err != nil {
+		return err
+	}
 	cfg := conn.Config.TSStore
 	effStore, err := resolveAlertStore(cfg, req.StoreName)
 	if err != nil {
@@ -1081,6 +1177,13 @@ func (s *TSStoreAlertRulesService) UpdateAlert(ctx context.Context, alertID stri
 		return fmt.Errorf("decode existing alert: %w", err)
 	}
 
+	// NOTE: rule_type (condition ↔ staleness) is deliberately NOT
+	// guarded here. Unlike transport, both rule types live in the same
+	// per-transport list, and ts-store's UpdateAlert lets AlertCommon
+	// .Validate() accept a switch as long as the fields are consistent
+	// (verified against pkg/store/alert_common.go). Our own
+	// validateRuleTypeFields above already guarantees that consistency.
+	//
 	// ts-store rejects a transport swap (the persisted lists are
 	// per-type). Fail here with a clearer message than the upstream 400.
 	if stored.Type != "" && req.Type != "" && stored.Type != req.Type {

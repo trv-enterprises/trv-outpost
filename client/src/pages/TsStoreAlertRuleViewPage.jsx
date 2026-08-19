@@ -108,6 +108,12 @@ function TsStoreAlertRuleViewPage() {
   const type = detail?.type || '';
   const ruleName = detail?.rule_name || sink?.name || '';
   const condition = sink?.condition || '';
+  // ts-store omits rule_type on rules predating #134, so absent means
+  // condition. A staleness rule has no condition at all — showing an
+  // empty "Condition" box under helper text that says "evaluated
+  // against each new record" would actively misdescribe it.
+  const ruleType = sink?.rule_type || detail?.rule_type || 'condition';
+  const maxAge = sink?.max_age || '';
   const cooldown = sink?.cooldown || '';
   const restartPolicy = sink?.restart_policy || 'now';
   const maxReplay = sink?.max_replay || '';
@@ -260,16 +266,28 @@ function TsStoreAlertRuleViewPage() {
               </FormGroup>
             )}
 
-            <FormGroup legendText="Condition">
-              <TextArea
-                id="view-rule-condition"
-                labelText=""
-                value={condition}
-                readOnly
-                rows={3}
-                helperText="ts-store expression evaluated against each new record."
-              />
-            </FormGroup>
+            {ruleType === 'staleness' ? (
+              <FormGroup legendText="Fires when">
+                <TextInput
+                  id="view-rule-max-age"
+                  labelText="Max age"
+                  value={maxAge}
+                  readOnly
+                  helperText="Fires when the store goes this long without a new record. Per store, not per series — it catches a collector that stopped writing. Recovery emits no 'resolved' event; it simply stops firing."
+                />
+              </FormGroup>
+            ) : (
+              <FormGroup legendText="Condition">
+                <TextArea
+                  id="view-rule-condition"
+                  labelText=""
+                  value={condition}
+                  readOnly
+                  rows={3}
+                  helperText="ts-store expression evaluated against each new record."
+                />
+              </FormGroup>
+            )}
 
             <FormGroup legendText="Policy">
               <TextInput
@@ -279,6 +297,11 @@ function TsStoreAlertRuleViewPage() {
                 readOnly
                 helperText={cooldown ? 'Minimum time between consecutive fires.' : 'No cooldown — every match fires.'}
               />
+              {/* Restart behavior is meaningless for a staleness rule:
+                  it is clock-driven, has no cursor, and ts-store rejects
+                  restart_policy=resume for it. Showing the control would
+                  imply a choice that doesn't exist. */}
+              {ruleType !== 'staleness' && (
               <div className="restart-policy-row">
                 <RadioButtonGroup
                   name="view-rule-restart-policy"
@@ -301,6 +324,7 @@ function TsStoreAlertRuleViewPage() {
                   />
                 )}
               </div>
+              )}
             </FormGroup>
 
             <FormGroup legendText="Target dashboard">

@@ -4276,6 +4276,10 @@ definitions:
   service.CreateAlertRequest:
     properties:
       condition:
+        description: |-
+          Condition is required for condition rules and REJECTED for
+          staleness ones — hence no binding:"required" here; the check is
+          conditional on RuleType (see validateRuleTypeFields).
         type: string
       connection_id:
         description: TSStore connection (rule owner)
@@ -4296,6 +4300,13 @@ definitions:
           fired, or a text/host value). Requires DashboardID. Carried through
           ts-store's external_ref alongside dashboard_id (#125).
         type: object
+      max_age:
+        description: |-
+          MaxAge is how long the store may go without a record before a
+          staleness rule fires ("5m"). Required for staleness, rejected
+          otherwise. No default by design — a 60s collector and an
+          event-driven source can't share one.
+        type: string
       max_replay:
         description: e.g. "1h"; only valid when restart_policy=="resume"
         type: string
@@ -4310,6 +4321,12 @@ definitions:
         description: '"now" (default) or "resume"'
         type: string
       rule_name:
+        type: string
+      rule_type:
+        description: |-
+          RuleType selects how the rule fires: "condition" (default, and the
+          only kind before ts-store#134) or "staleness". Empty means
+          condition, so existing clients are unaffected.
         type: string
       sink_connection_id:
         description: |-
@@ -4342,7 +4359,6 @@ definitions:
       webhook_url_override:
         type: string
     required:
-    - condition
     - connection_id
     - rule_name
     - type
@@ -4429,10 +4445,19 @@ definitions:
         type: object
       external_ref:
         type: string
+      max_age:
+        type: string
       namespace:
         type: string
       rule_name:
         description: Rule-level fields straight from ts-store.
+        type: string
+      rule_type:
+        description: |-
+          RuleType is always populated on the wire (never ""), so clients
+          can switch on it without repeating the empty-means-condition
+          default. Condition and MaxAge are mutually exclusive: a condition
+          rule has the former, a staleness rule the latter.
         type: string
       state:
         description: |-

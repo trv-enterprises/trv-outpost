@@ -10,6 +10,21 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Staleness alert rules** (#242). A rule can now fire on the *absence*
+  of data instead of on a matching record: give it a max age (`90s`,
+  `5m`, `2h`) and it fires when the store has gone that long without
+  receiving anything — catching a collector that died, which no
+  condition can express. The editor swaps the Condition field for Max
+  age when the type is selected, so the combination ts-store rejects
+  (both fields, or neither) can't be entered. Staleness is per store,
+  not per series; a store that never received data never fires; and
+  recovery is silent rather than emitting a "resolved" event.
+- Alert lists, the detail view, the clone picker and search are all
+  rule-type aware — a staleness rule shows `no data for 5m` where a
+  condition rule shows its expression, and is searchable by its max age.
+  Rules created before ts-store#134 carry no rule type and continue to
+  render exactly as before.
+
 - **Alert rules can be edited in place.** The pencil on an alert row
   opens the rule wizard prefilled from ts-store, and saving updates the
   rule via ts-store's new `PUT /api/stores/:store/alerts/:id`
