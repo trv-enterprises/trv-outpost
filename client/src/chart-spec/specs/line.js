@@ -418,8 +418,17 @@ function buildThresholds(thresholds, mode) {
     // Build pieces between thresholds. Each piece's color comes from
     // the threshold that defines its upper bound; the segment above
     // the last threshold uses that threshold's color too.
+    //
+    // The lowest piece MUST carry a FINITE lower bound. ECharts crashes
+    // with "can't access property 'coord', m[0] is undefined" when a
+    // piecewise entry is open-ended below — `gt: -Infinity`, or an
+    // `lte`/`max` with no lower bound at all. It fails on the first
+    // render, so a chart that gained a threshold simply never draws.
+    // Verified against echarts 6.1.0: `gt: -Infinity` throws while a
+    // finite `gt` renders, including across a streaming data update.
+    const OPEN_LOW = -Number.MAX_SAFE_INTEGER;
     const pieces = [];
-    let lower = -Infinity;
+    let lower = OPEN_LOW;
     sorted.forEach((t) => {
       pieces.push({ gt: lower, lte: Number(t.value), color: t.color || '#888' });
       lower = Number(t.value);
