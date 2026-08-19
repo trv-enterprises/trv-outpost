@@ -380,21 +380,35 @@ function buildThresholds(thresholds, mode) {
   if (!Array.isArray(thresholds) || thresholds.length === 0) {
     return { markLine: undefined, visualMap: undefined, labelGutter: 0 };
   }
-  const sorted = [...thresholds]
-    .filter((t) => t && Number.isFinite(Number(t.value)))
-    .sort((a, b) => Number(a.value) - Number(b.value));
-  if (sorted.length === 0) return { markLine: undefined, visualMap: undefined, labelGutter: 0 };
+  const usable = thresholds.filter((t) => t && Number.isFinite(Number(t.value)));
+  if (usable.length === 0) return { markLine: undefined, visualMap: undefined, labelGutter: 0 };
 
+  // BAND MODEL (Grafana's, and the one the editor presents).
+  //
+  // The list is [base, t1, t2, …] sorted ascending. Entry 0 is the BASE:
+  // its color paints everything below t1, and its `value` is meaningless
+  // (the editor renders it as an uneditable "Base" row for exactly that
+  // reason). Every later entry (Vi, Ci) means "from Vi upward, use Ci" —
+  // for both the data line and the boundary line drawn AT Vi.
+  //
+  // The boundary line at Vi belongs to the band it FLOORS, not the one it
+  // caps. Getting that backwards was the original bug: each band took the
+  // color of the threshold that ENDED it, so with base=green/24=yellow/
+  // 30=red the 0-24 band rendered yellow and 24-30 rendered red — every
+  // band shifted one entry, and a stray line was drawn at the base value.
+  const sorted = [usable[0], ...usable.slice(1).sort((a, b) => Number(a.value) - Number(b.value))];
   const renderMode = mode || 'line';
   const out = { markLine: undefined, visualMap: undefined, labelGutter: 0 };
+  // Boundary lines exist only for real thresholds; the base has none.
+  const boundaries = sorted.slice(1);
 
-  if (renderMode === 'line' || renderMode === 'both') {
+  if ((renderMode === 'line' || renderMode === 'both') && boundaries.length > 0) {
     // Threshold labels render at the line's END (right edge of the plot).
     // ECharts draws the label just past the line's right end, OUTSIDE the
     // grid, so without right padding it gets clipped by the panel edge.
     // We measure the widest label here and report it as `labelGutter` so
     // buildOption can widen grid.right to make room for the largest one.
-    const labels = sorted.map((t) => (t.label ? String(t.label) : '')).filter(Boolean);
+    const labels = boundaries.map((t) => (t.label ? String(t.label) : '')).filter(Boolean);
     if (labels.length > 0) {
       // ECharts markLine label default font is ~12px sans-serif. Estimate
       // ~7px/char + ~8px for the leading gap between the line end and text.
@@ -404,7 +418,7 @@ function buildThresholds(thresholds, mode) {
     out.markLine = {
       symbol: 'none',
       silent: true,
-      data: sorted.map((t) => ({
+      data: boundaries.map((t) => ({
         yAxis: Number(t.value),
         lineStyle: { color: t.color || '#888', type: 'dashed', width: 1 },
         label: t.label
@@ -415,25 +429,27 @@ function buildThresholds(thresholds, mode) {
   }
 
   if (renderMode === 'color_segments' || renderMode === 'both') {
-    // Build pieces between thresholds. Each piece's color comes from
-    // the threshold that defines its upper bound; the segment above
-    // the last threshold uses that threshold's color too.
+    // Half-open intervals: (gt, lte]. Each band takes the color of the
+    // threshold that STARTS it — pieces[0] is the base band, capped by the
+    // first real threshold.
     //
     // The lowest piece MUST carry a FINITE lower bound. ECharts crashes
     // with "can't access property 'coord', m[0] is undefined" when a
     // piecewise entry is open-ended below — `gt: -Infinity`, or an
     // `lte`/`max` with no lower bound at all. It fails on the first
-    // render, so a chart that gained a threshold simply never draws.
-    // Verified against echarts 6.1.0: `gt: -Infinity` throws while a
-    // finite `gt` renders, including across a streaming data update.
+    // render, so a chart that gained a threshold simply never draws
+    // (#271). Verified against echarts 6.1.0.
     const OPEN_LOW = -Number.MAX_SAFE_INTEGER;
     const pieces = [];
-    let lower = OPEN_LOW;
-    sorted.forEach((t) => {
-      pieces.push({ gt: lower, lte: Number(t.value), color: t.color || '#888' });
-      lower = Number(t.value);
+    const basePiece = { gt: OPEN_LOW, color: sorted[0].color || '#888' };
+    if (boundaries.length > 0) basePiece.lte = Number(boundaries[0].value);
+    pieces.push(basePiece);
+    boundaries.forEach((t, i) => {
+      const piece = { gt: Number(t.value), color: t.color || '#888' };
+      const next = boundaries[i + 1];
+      if (next) piece.lte = Number(next.value);
+      pieces.push(piece);
     });
-    pieces.push({ gt: lower, color: sorted[sorted.length - 1].color || '#888' });
     out.visualMap = {
       show: false,
       type: 'piecewise',
