@@ -2,6 +2,8 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
+import { positionTooltip } from '../chart-spec/tooltip-position';
+
 /**
  * Carbon Design System ECharts Theme
  *
@@ -381,6 +383,11 @@ export const carbonLightTheme = {
     // panel's overflow:hidden. Without this, hovering near a panel edge
     // hides the tooltip behind neighbouring panels.
     appendToBody: true,
+    // Placement is OURS, not ECharts' (see chart-spec/tooltip-position.js).
+    // Its built-in placement only flips right→left and never falls back to
+    // above/below, so a tooltip wider than the space on either side of the
+    // cursor overflowed the panel and clipped the series names.
+    position: positionTooltip,
     // NOTE: do NOT add `confine: true` here. confine and appendToBody are
     // mutually exclusive in ECharts. With appendToBody the tooltip's
     // coordinates are page-relative (TooltipHTMLContent makes its style
@@ -795,6 +802,11 @@ export const carbonDarkTheme = {
     // panel's overflow:hidden. Without this, hovering near a panel edge
     // hides the tooltip behind neighbouring panels.
     appendToBody: true,
+    // Placement is OURS, not ECharts' (see chart-spec/tooltip-position.js).
+    // Its built-in placement only flips right→left and never falls back to
+    // above/below, so a tooltip wider than the space on either side of the
+    // cursor overflowed the panel and clipped the series names.
+    position: positionTooltip,
     // NOTE: do NOT add `confine: true` here. confine and appendToBody are
     // mutually exclusive in ECharts. With appendToBody the tooltip's
     // coordinates are page-relative (TooltipHTMLContent makes its style
