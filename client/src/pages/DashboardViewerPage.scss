@@ -233,6 +233,40 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
       row-gap: spacing.$spacing-02;
     }
 
+    // Phone width. Fit mode renders this DESKTOP toolbar on a phone, where the
+    // title and the range/step controls compete for one line: the Range
+    // dropdown paints OVER the dashboard name and the Step dropdown clips at
+    // the right edge. Let the left zone stack instead of sharing a baseline
+    // that cannot fit, and let the range controls size to the row rather than
+    // holding their fixed 12rem/9rem widths.
+    //
+    // The right-hand action group is deliberately untouched: it is
+    // `flex-wrap: nowrap` so the cluster stays atomic, and measurement at 390px
+    // confirms it already fits (x 226-378 in a 390px viewport) — including the
+    // fit-mode menu that returns to the stacked mobile layout.
+    @media (max-width: 600px) {
+      .toolbar-left {
+        flex-wrap: wrap;
+        row-gap: spacing.$spacing-02;
+
+        .dashboard-info {
+          flex-wrap: wrap;
+          row-gap: spacing.$spacing-02;
+        }
+      }
+
+      .dashboard-variable-picker {
+        margin-left: 0;
+
+        .cds--dropdown__wrapper,
+        .cds--list-box__wrapper,
+        .cds--text-input__field-wrapper {
+          width: auto;
+          min-width: 7rem;
+        }
+      }
+    }
+
     .toolbar-left {
       display: flex;
       align-items: center;
