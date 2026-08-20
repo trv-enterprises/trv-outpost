@@ -203,6 +203,9 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
     display: flex;
     align-items: center;
     justify-content: space-between;
+    // Positioning context for the absolutely-centered dashboard name
+    // (.toolbar-center) — see the note there.
+    position: relative;
     padding: 0 spacing.$spacing-04;
     background-color: #262626;
     border-bottom: 1px solid #393939;
@@ -553,6 +556,47 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
       align-items: center;
       gap: spacing.$spacing-03;
       flex-shrink: 0;
+
+      // The view-mode dashboard NAME lives here and must center on the
+      // TOOLBAR, not on whatever gap the side groups happen to leave.
+      //
+      // Packing it between two flex siblings does NOT center it: toolbar-left
+      // (nav cluster + variable pickers) is far wider than toolbar-right, so
+      // a packed center group lands wherever the left group ends — measured
+      // 254px right of true centre, overlapping the refresh pill. Take it out
+      // of the flow and pin it to the toolbar's midpoint instead.
+      //
+      // pointer-events:none on the container (restored on its children) keeps
+      // the overlay from swallowing clicks on controls it passes over.
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 40%;
+      min-width: 0;
+      pointer-events: none;
+      justify-content: center;
+
+      > * { pointer-events: auto; }
+
+      .cds--tooltip,
+      .cds--tooltip-trigger__wrapper {
+        display: flex;
+        min-width: 0;
+        flex: 0 1 auto;
+      }
+
+      .dashboard-title {
+        color: #f4f4f4;
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        // A floor so the name never collapses to a sliver when the side
+        // groups are wide; below this the toolbar wraps instead.
+        min-width: 6ch;
+      }
 
       .cds--tag {
         display: flex;

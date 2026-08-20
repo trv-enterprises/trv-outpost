@@ -381,6 +381,12 @@ export const carbonLightTheme = {
     // panel's overflow:hidden. Without this, hovering near a panel edge
     // hides the tooltip behind neighbouring panels.
     appendToBody: true,
+    // ...but appendToBody alone only frees it from the PANEL; nothing then
+    // keeps it inside the VIEWPORT. Hovering a series near the left edge put
+    // the box partly off-screen, truncating the series names (a container
+    // called "dashboard-caddy-1" read as "y-1"). `confine` clamps the tooltip
+    // to the containing element so it flips/slides back into view instead.
+    confine: true,
     // Light theme → LIGHT surface, dark text. (These values were swapped with
     // the dark theme's, so a dark dashboard drew a white tooltip with
     // near-black text.)
@@ -781,6 +787,12 @@ export const carbonDarkTheme = {
     // panel's overflow:hidden. Without this, hovering near a panel edge
     // hides the tooltip behind neighbouring panels.
     appendToBody: true,
+    // ...but appendToBody alone only frees it from the PANEL; nothing then
+    // keeps it inside the VIEWPORT. Hovering a series near the left edge put
+    // the box partly off-screen, truncating the series names (a container
+    // called "dashboard-caddy-1" read as "y-1"). `confine` clamps the tooltip
+    // to the containing element so it flips/slides back into view instead.
+    confine: true,
     // Dark theme → DARK surface, light text. (These values were swapped with
     // the light theme's, which is what put a white tooltip on the dark
     // dashboard.)

@@ -48,6 +48,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Home,
+  Dashboard as DashboardIcon,
   Download,
   Notification,
   Code,
@@ -4192,19 +4193,71 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       {/* Header toolbar */}
       <div className="viewer-toolbar">
         <div className="toolbar-left">
+          {/* Navigation cluster: [prev] [home] [to list] [next].
+              These four are ONE conceptual group — "where am I in the set of
+              dashboards, and how do I get out" — so they live together at the
+              start of the row rather than being split across the toolbar.
+
+              The old standalone ArrowLeft ("Back to dashboards") sat here on
+              its own and read as a second, competing back affordance next to
+              the ChevronLeft "previous dashboard": two left-pointing arrows
+              side by side that do different things. Return-to-list is now the
+              Dashboard glyph — the same icon the nav uses for the dashboards
+              section — so nothing in the group points left except "previous".
+
+              Prev/next only render when there IS a set to move through;
+              to-list is always available. */}
           {!isFullscreen && !isEditMode && (
-            <IconButton
-              kind="ghost"
-              label="Back to dashboards"
-              // bottom-left (not bottom): this button hugs the viewport's left
-              // edge, so a centered tooltip overflows past it and clips ("k to
-              // dashboards"). bottom-left anchors the tooltip to the button's
-              // start edge so it extends rightward into view.
-              align="bottom-left"
-              onClick={handleBack}
-            >
-              <ArrowLeft size={20} />
-            </IconButton>
+            <div className="dashboard-nav-buttons">
+              {!fromDesign && dashboardList.length > 1 && (
+                <IconButton
+                  kind="ghost"
+                  size="sm"
+                  label={`Previous dashboard  ${ALT_KEY_LABEL} ←`}
+                  // bottom-left: this group hugs the viewport's left edge, so a
+                  // centered tooltip clips. Anchor it to the start edge so it
+                  // extends rightward into view.
+                  align="bottom-left"
+                  onClick={goToPrevDashboard}
+                  disabled={!canGoPrev}
+                >
+                  <ChevronLeft size={20} />
+                </IconButton>
+              )}
+              {!fromDesign && dashboardList.length > 1 && (
+                <IconButton
+                  kind="ghost"
+                  size="sm"
+                  label={isDefaultDashboard ? 'This is the default dashboard' : 'Go to default dashboard'}
+                  align="bottom"
+                  onClick={goToDefaultDashboard}
+                  disabled={isDefaultDashboard || !defaultDashboardId}
+                >
+                  <Home size={16} />
+                </IconButton>
+              )}
+              <IconButton
+                kind="ghost"
+                size="sm"
+                label="Back to dashboards"
+                align="bottom"
+                onClick={handleBack}
+              >
+                <DashboardIcon size={20} />
+              </IconButton>
+              {!fromDesign && dashboardList.length > 1 && (
+                <IconButton
+                  kind="ghost"
+                  size="sm"
+                  label={`Next dashboard  ${ALT_KEY_LABEL} →`}
+                  align="bottom"
+                  onClick={goToNextDashboard}
+                  disabled={!canGoNext}
+                >
+                  <ChevronRight size={20} />
+                </IconButton>
+              )}
+            </div>
           )}
           {/* Edit (design) mode gets a back arrow in front of the name too,
               mirroring view mode's arrow. It behaves exactly like Cancel —
@@ -4244,20 +4297,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                   <NameErrorBadge message={nameError} />
                 )}
               </div>
-            ) : (
-              <Tooltip
-                label={dashboard?.name || ''}
-                align="bottom-left"
-                enterDelayMs={2000}
-                leaveDelayMs={100}
-              >
-                {/* The title can ellipsize (it yields space to the range
-                    picker before the toolbar wraps), so the tooltip surfaces
-                    the full name on hover. 2s enter delay — the 5s default
-                    feels far too slow. */}
-                <h1 className="dashboard-title" tabIndex={0}>{dashboard?.name}</h1>
-              </Tooltip>
-            )}
+            ) : null}
             {/* Variables editor trigger — hugs the name in edit mode. Styled
                 like the Cancel button (secondary) for consistency with the
                 edit-mode action cluster + the Settings gear. */}
@@ -4320,6 +4360,24 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         </div>
 
         <div className="toolbar-center">
+          {/* View-mode dashboard name. Lives in the CENTER group so it centers
+              on the toolbar itself, independent of how wide the left group
+              (nav + variables) or the right group (actions) happen to be.
+              Edit mode keeps its editable name input over in toolbar-left,
+              beside the Cancel arrow it belongs with. */}
+          {!isEditMode && dashboard?.name && (
+            <Tooltip
+              label={dashboard?.name || ''}
+              align="bottom"
+              enterDelayMs={2000}
+              leaveDelayMs={100}
+            >
+              {/* The title can ellipsize when the toolbar is tight, so the
+                  tooltip surfaces the full name on hover. 2s enter delay —
+                  the 5s default feels far too slow. */}
+              <h1 className="dashboard-title" tabIndex={0}>{dashboard?.name}</h1>
+            </Tooltip>
+          )}
           {isEditMode && dimensions.length > 0 && (
             <div className="dimension-selector">
               <Select
@@ -4547,47 +4605,6 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             </>
           ) : (
             <>
-              {/* Dashboard nav (prev / home / next) sits just before the
-                  right-side control group, separated by a vertical divider.
-                  Moved out of toolbar-center to free up the center for the
-                  dashboard name + variable pickers. */}
-              {!fromDesign && dashboardList.length > 1 && (
-                <>
-                  <div className="dashboard-nav-buttons">
-                    <IconButton
-                      kind="ghost"
-                      size="sm"
-                      label={`Previous dashboard  ${ALT_KEY_LABEL} ←`}
-                      align="bottom"
-                      onClick={goToPrevDashboard}
-                      disabled={!canGoPrev}
-                    >
-                      <ChevronLeft size={20} />
-                    </IconButton>
-                    <IconButton
-                      kind="ghost"
-                      size="sm"
-                      label={isDefaultDashboard ? 'This is the default dashboard' : 'Go to default dashboard'}
-                      align="bottom"
-                      onClick={goToDefaultDashboard}
-                      disabled={isDefaultDashboard || !defaultDashboardId}
-                    >
-                      <Home size={16} />
-                    </IconButton>
-                    <IconButton
-                      kind="ghost"
-                      size="sm"
-                      label={`Next dashboard  ${ALT_KEY_LABEL} →`}
-                      align="bottom"
-                      onClick={goToNextDashboard}
-                      disabled={!canGoNext}
-                    >
-                      <ChevronRight size={20} />
-                    </IconButton>
-                  </div>
-                  <span className="toolbar-divider" aria-hidden="true" />
-                </>
-              )}
               {/* Refresh section, compact: [Data refresh pill][refresh icon].
                   The pill's tooltip shows a live "Next refresh in: Ns"
                   countdown (replacing the old always-on "Last refresh" text). */}
