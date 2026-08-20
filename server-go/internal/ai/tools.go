@@ -36,7 +36,7 @@ func GetAnthropicTools(cat *registry.Catalog) []anthropic.ToolUnionParam {
 			},
 		},
 		{
-			Name:        "update_control_config",
+			Name: "update_control_config",
 			Description: anthropic.String(`Configure a control component. Sets the control type, connection, target device, command configuration, and UI settings.
 
 Control types and their UI config:
@@ -55,13 +55,13 @@ Control types and their UI config:
 						"description": "Type of control",
 						"enum":        controlEnum,
 					},
-					"connection_id": map[string]interface{}{"type": "string", "description": "ID of the connection to send commands through (e.g., MQTT, WebSocket)"},
-					"target": map[string]interface{}{"type": "string", "description": "Device or endpoint identifier for command targeting"},
-					"device_type_id": map[string]interface{}{"type": "string", "description": "Reference to a device type for template-based command generation"},
-					"command_action": map[string]interface{}{"type": "string", "description": "Command action name (e.g., 'set_power', 'set_level', 'send')"},
-					"command_target": map[string]interface{}{"type": "string", "description": "Command target identifier"},
+					"connection_id":    map[string]interface{}{"type": "string", "description": "ID of the connection to send commands through (e.g., MQTT, WebSocket)"},
+					"target":           map[string]interface{}{"type": "string", "description": "Device or endpoint identifier for command targeting"},
+					"device_type_id":   map[string]interface{}{"type": "string", "description": "Reference to a device type for template-based command generation"},
+					"command_action":   map[string]interface{}{"type": "string", "description": "Command action name (e.g., 'set_power', 'set_level', 'send')"},
+					"command_target":   map[string]interface{}{"type": "string", "description": "Command target identifier"},
 					"payload_template": map[string]interface{}{"type": "object", "description": "Payload template with {{value}} placeholder for dynamic values"},
-					"ui_config": map[string]interface{}{"type": "object", "description": "Type-specific UI configuration (label, min, max, step, kind, etc.)"},
+					"ui_config":        map[string]interface{}{"type": "object", "description": "Type-specific UI configuration (label, min, max, step, kind, etc.)"},
 				},
 				Required: []string{"control_type"},
 			},
@@ -91,16 +91,21 @@ Control types and their UI config:
 			Description: anthropic.String("Configure how data maps to chart axes and series.\n\nNo-op when use_custom_code=true: the chart renders from component_code and ignores data_mapping. Check get_component_state first; if the component is in custom-code mode, edit component_code directly via set_custom_code."),
 			InputSchema: anthropic.ToolInputSchemaParam{
 				Properties: map[string]interface{}{
-					"connection_id":  map[string]interface{}{"type": "string", "description": "ID of the connection to use"},
-					"x_axis":         map[string]interface{}{"type": "string", "description": "Column for X axis"},
-					"x_axis_label":   map[string]interface{}{"type": "string", "description": "Label for X axis"},
-					"x_axis_format":  map[string]interface{}{"type": "string", "description": "Format preset for X axis timestamp values. Pick from the listed enum — invented names like 'time_12_seconds' silently fall through to a date+time render.", "enum": []string{"chart", "chart_time", "chart_time_seconds", "chart_date", "chart_datetime", "chart_datetime_seconds"}},
-					"y_axis":         map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Columns for Y axis"},
-					"y_axis_label":   map[string]interface{}{"type": "string", "description": "AXIS label — rendered vertically along the Y axis. Single-axis charts only: dual-axis charts render NO axis labels (the legend and axis colors identify each side), so this is ignored there. NOT a series/legend label — do not put a series name here; use y_axis_labels for those."},
-					"y_axis_labels":  map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Per-SERIES labels, index-aligned to y_axis — shown in the legend. These name the value-sets, not the axis; the axis label is y_axis_label (single-axis only)."},
-					"y_axis_colors":  map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Per-series color override, index-aligned to y_axis. Each entry is a Carbon palette NUMBER (\"1\"-\"14\"), a Carbon NAME (e.g. \"purple70\", \"cyan50\"), a hex (\"#6929c4\"), or \"\" for auto. Use to give a series a specific color (line/area/bar) — e.g. vary line color across charts instead of all-blue. NOT for pivot charts (series column set): those are colored automatically. Omit to keep the default palette."},
-					"group_by":       map[string]interface{}{"type": "string", "description": "Column to group data by"},
+					"connection_id":       map[string]interface{}{"type": "string", "description": "ID of the connection to use"},
+					"x_axis":              map[string]interface{}{"type": "string", "description": "Column for X axis"},
+					"x_axis_label":        map[string]interface{}{"type": "string", "description": "Label for X axis"},
+					"x_axis_format":       map[string]interface{}{"type": "string", "description": "Format preset for X axis timestamp values. Pick from the listed enum — invented names like 'time_12_seconds' silently fall through to a date+time render.", "enum": []string{"chart", "chart_time", "chart_time_seconds", "chart_date", "chart_datetime", "chart_datetime_seconds"}},
+					"y_axis":              map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Columns for Y axis"},
+					"y_axis_label":        map[string]interface{}{"type": "string", "description": "AXIS label — rendered vertically along the Y axis. Single-axis charts only: dual-axis charts render NO axis labels (the legend and axis colors identify each side), so this is ignored there. NOT a series/legend label — do not put a series name here; use y_axis_labels for those."},
+					"y_axis_labels":       map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Per-SERIES labels, index-aligned to y_axis — shown in the legend. These name the value-sets, not the axis; the axis label is y_axis_label (single-axis only)."},
+					"y_axis_colors":       map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Per-series color override, index-aligned to y_axis. Each entry is a Carbon palette NUMBER (\"1\"-\"14\"), a Carbon NAME (e.g. \"purple70\", \"cyan50\"), a hex (\"#6929c4\"), or \"\" for auto. Use to give a series a specific color (line/area/bar) — e.g. vary line color across charts instead of all-blue. NOT for pivot charts (series column set): those are colored automatically. Omit to keep the default palette."},
+					"group_by":            map[string]interface{}{"type": "string", "description": "Column to group data by"},
 					"accumulator_columns": map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Line/area only. PER-COLUMN delta transform: list the y_axis column NAMES whose values are a monotonically-increasing counter (odometer, packet/request total, kWh meter) — each listed column plots its DELTA (value[i]-value[i-1]) instead of the raw ramp, while unlisted columns stay raw. Prefer this declarative flag over custom code or a SQL LAG()/Prometheus rate(). The first point is a gap. Omit/empty = no delta. (A chart-wide accumulator_mode:true is also accepted and means all y columns.)"},
+					"y_axis_conversions": map[string]interface{}{
+						"type":                 "object",
+						"description":          "Line/area only. PER-SERIES unit conversion, keyed by y_axis column NAME. Converts that series' values BEFORE plotting, so the axis, thresholds and tooltip all read the converted unit. Use this instead of unit math in the query, custom code, or asking for a second stored column — \"show the Celsius column in Fahrenheit\" is exactly this tool. Value per column is {\"dimension\",\"from\",\"to\"} using: temperature (c/f/k), pressure (pa/hpa/kpa/bar/psi/inhg), distance (mm/cm/m/km/in/ft/mi), mass (g/kg/lb/oz), speed (mps/kph/mph/kn). Example: {\"temp_c\": {\"dimension\":\"temperature\",\"from\":\"c\",\"to\":\"f\"}}. For arithmetic the tables do not cover use {\"dimension\":\"custom\",\"scale\":100,\"offset\":0,\"symbol\":\"%\"} (value*scale+offset) — e.g. a 0-1 ratio shown as a percentage. Math across TWO columns (a-b, a/b) is NOT supported here. Omit to leave conversions unchanged; pass {} to clear them all.",
+						"additionalProperties": map[string]interface{}{"type": "object"},
+					},
 					"accumulator_reset_policy": map[string]interface{}{"type": "string", "description": "How to handle a counter reset (a negative delta) for accumulator columns. 'drop_negative' (default): gap, breaking the line at the reset. 'clamp_zero': emit 0. 'keep_negative': surface the raw negative delta. Ignored when no column is accumulating.", "enum": []string{"drop_negative", "clamp_zero", "keep_negative"}},
 					"band_columns": map[string]interface{}{
 						"type":        "object",
@@ -397,29 +402,29 @@ What chart_type fits which data is YOUR judgment call (general visualization kno
 
 // ToolName constants for easier reference
 const (
-	ToolUpdateComponentType   = "update_component_type"
-	ToolUpdateControlConfig   = "update_control_config"
-	ToolUpdateComponentConfig = "update_component_config"
-	ToolUpdateDataMapping     = "update_data_mapping"
-	ToolUpdateQueryConfig     = "update_query_config"
-	ToolUpdateFilters         = "update_filters"
-	ToolUpdateAggregation     = "update_aggregation"
-	ToolUpdateSlidingWindow   = "update_sliding_window"
-	ToolUpdateTimeBucket      = "update_time_bucket"
-	ToolSetCustomCode         = "set_custom_code"
-	ToolUpdateChartOptions    = "update_chart_options"
-	ToolQueryConnection       = "query_connection"
-	ToolListConnections       = "list_connections"
-	ToolGetSchema             = "get_schema"
-	ToolGetConnectionSchema   = "get_datasource_schema"   // Deprecated
-	ToolGetPrometheusSchema   = "get_prometheus_schema"   // Deprecated
-	ToolGetEdgeLakeSchema     = "get_edgelake_schema"     // Deprecated
-	ToolListDeviceTypes       = "list_device_types"
-	ToolPreviewData           = "preview_data"
-	ToolGetComponentState     = "get_component_state"
-	ToolGetComponentTemplate  = "get_component_template"
+	ToolUpdateComponentType       = "update_component_type"
+	ToolUpdateControlConfig       = "update_control_config"
+	ToolUpdateComponentConfig     = "update_component_config"
+	ToolUpdateDataMapping         = "update_data_mapping"
+	ToolUpdateQueryConfig         = "update_query_config"
+	ToolUpdateFilters             = "update_filters"
+	ToolUpdateAggregation         = "update_aggregation"
+	ToolUpdateSlidingWindow       = "update_sliding_window"
+	ToolUpdateTimeBucket          = "update_time_bucket"
+	ToolSetCustomCode             = "set_custom_code"
+	ToolUpdateChartOptions        = "update_chart_options"
+	ToolQueryConnection           = "query_connection"
+	ToolListConnections           = "list_connections"
+	ToolGetSchema                 = "get_schema"
+	ToolGetConnectionSchema       = "get_datasource_schema" // Deprecated
+	ToolGetPrometheusSchema       = "get_prometheus_schema" // Deprecated
+	ToolGetEdgeLakeSchema         = "get_edgelake_schema"   // Deprecated
+	ToolListDeviceTypes           = "list_device_types"
+	ToolPreviewData               = "preview_data"
+	ToolGetComponentState         = "get_component_state"
+	ToolGetComponentTemplate      = "get_component_template"
 	ToolGetConnectionTypeGuidance = "get_connection_type_guidance"
-	ToolSuggestMissing        = "suggest_missing_tools" // Deprecated
+	ToolSuggestMissing            = "suggest_missing_tools" // Deprecated
 )
 
 // controlTypeEnum returns the control_type enum derived from the catalog,

@@ -469,7 +469,7 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 		XAxis        *string             `json:"x_axis,omitempty"`
 		XAxisLabel   *string             `json:"x_axis_label,omitempty"`
 		XAxisFormat  *string             `json:"x_axis_format,omitempty"`
-		YAxis        json.RawMessage     `json:"y_axis,omitempty"` // normalized via models.NormalizeYAxisColumns (tolerates [{"column":...}] / bare string)
+		YAxis        json.RawMessage     `json:"y_axis,omitempty"`        // normalized via models.NormalizeYAxisColumns (tolerates [{"column":...}] / bare string)
 		YAxisLabel   *string             `json:"y_axis_label,omitempty"`  // axis label (rendered along the axis; single-axis only)
 		YAxisLabels  *[]string           `json:"y_axis_labels,omitempty"` // per-series legend labels
 		YAxisColors  *[]string           `json:"y_axis_colors,omitempty"` // per-column color override (index|name|hex)
@@ -479,9 +479,13 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 		// delta (ergonomic — no index alignment to get wrong); we convert to the
 		// model's index-aligned []bool against the chart's y_axis. accumulator_mode
 		// (legacy chart-wide bool) is still accepted = "all y columns".
-		AccumulatorColumns     *[]string `json:"accumulator_columns,omitempty"`
-		AccumulatorMode        *bool     `json:"accumulator_mode,omitempty"`
-		AccumulatorResetPolicy *string   `json:"accumulator_reset_policy,omitempty"`
+		AccumulatorColumns *[]string `json:"accumulator_columns,omitempty"`
+		// Per-series unit conversion (#265). The agent addresses series by
+		// column NAME (same ergonomics as AccumulatorColumns); the model
+		// stores a positional array, so this is translated below.
+		YAxisConversions       *map[string]map[string]interface{} `json:"y_axis_conversions,omitempty"`
+		AccumulatorMode        *bool                              `json:"accumulator_mode,omitempty"`
+		AccumulatorResetPolicy *string                            `json:"accumulator_reset_policy,omitempty"`
 	}
 	if err := json.Unmarshal(input, &params); err != nil {
 		return &ToolResult{Success: false, Error: "invalid input: " + err.Error()}, nil
@@ -591,6 +595,17 @@ func (e *ToolExecutor) executeUpdateDataMapping(ctx context.Context, chartID str
 	}
 	if params.AccumulatorResetPolicy != nil {
 		chart.DataMapping.AccumulatorResetPolicy = *params.AccumulatorResetPolicy
+	}
+
+	// Per-series unit conversion (#265). Convert the agent's column-keyed map
+	// into the model's index-aligned array against the current y_axis. An empty
+	// map clears every conversion; a column not present in the map keeps no
+	// conversion, so the map is the complete desired state (same semantics as
+	// AccumulatorColumns). Descriptors pass through uninterpreted — the unit
+	// tables live client-side in chart-spec/units.js, so a new dimension needs
+	// no server change. An entry naming an unknown column is simply not matched.
+	if params.YAxisConversions != nil {
+		chart.DataMapping.YAxisConversions = conversionsByColumn(*params.YAxisConversions, chart.DataMapping.YAxis)
 	}
 
 	if err := e.componentRepo.Update(ctx, chartID, chartVersion, chart); err != nil {
@@ -1838,4 +1853,32 @@ func normalizeColumnType(dbType string) string {
 
 	// Default to string for text, varchar, char, etc.
 	return "string"
+}
+
+// conversionsByColumn translates the agent's column-keyed unit-conversion map
+// into the model's positional array, index-aligned to yAxis (#265).
+//
+// The agent addresses series by column NAME because that is what it actually
+// knows; the renderer needs a parallel array. The map is the COMPLETE desired
+// state — a column absent from it ends up with no conversion — which matches
+// how accumulator_columns behaves, so "set only this one" and "clear that one"
+// are the same call shape.
+//
+// Returns nil when nothing converts, so the field stays omitted from the
+// stored record rather than persisting an array of nulls. Descriptors pass
+// through uninterpreted: the unit tables live client-side in
+// chart-spec/units.js, so a new dimension needs no server change.
+func conversionsByColumn(want map[string]map[string]interface{}, yAxis []string) []map[string]interface{} {
+	convs := make([]map[string]interface{}, len(yAxis))
+	any := false
+	for i, y := range yAxis {
+		if c, ok := want[y]; ok && len(c) > 0 {
+			convs[i] = c
+			any = true
+		}
+	}
+	if !any {
+		return nil
+	}
+	return convs
 }

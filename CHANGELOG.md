@@ -30,8 +30,11 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   same column can display different units. The button shows the target unit
   itself (`°F`, `psi`) rather than a generic icon, so a converted series is
   visible at a glance without opening anything, and no row is added to the
-  series list. Round-trips through the AI surfaces as
-  `data_mapping.y_axis_conversions`.
+  series list.
+
+  Both AI surfaces can set it, so "show the kitchen temperature in Fahrenheit"
+  configures the chart instead of rewriting the query or falling back to
+  custom code. Stored as `data_mapping.y_axis_conversions`.
 
 ### Fixed
 

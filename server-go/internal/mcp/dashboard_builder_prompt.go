@@ -79,6 +79,21 @@ create a dashboard whose panels reference those components.
   WORSE time axis (undated, cramped ticks). For a plain time-series, native
   ` + "`" + `line` + "`" + `/` + "`" + `area` + "`" + ` beats ` + "`" + `use_custom_code` + "`" + ` on both axes; reach for custom code
   only when the chart shape itself is unsupported, not to format units.
+- **Different unit than stored? Convert on the series, not in the query.**
+  ` + "`" + `data_mapping.y_axis_conversions` + "`" + ` is a parallel array index-aligned to
+  ` + "`" + `y_axis` + "`" + `; an entry converts that series before it is plotted, so the
+  axis, thresholds and tooltip all read the converted unit. A Celsius column
+  displayed in Fahrenheit is
+  ` + "`" + `[{"dimension":"temperature","from":"c","to":"f"}]` + "`" + ` — NOT arithmetic
+  in the query, NOT custom code, and NOT a second stored column. Dimensions:
+  temperature (c/f/k), pressure (pa/hpa/kpa/bar/psi/inhg), distance
+  (mm/cm/m/km/in/ft/mi), mass (g/kg/lb/oz), speed (mps/kph/mph/kn). For
+  arithmetic those don't cover use
+  ` + "`" + `{"dimension":"custom","scale":100,"offset":0,"symbol":"%"}` + "`" + `
+  (value*scale+offset), e.g. a 0-1 ratio shown as a percentage. Line/area
+  only, single-column only — two-column math (a-b, a/b) still needs the query.
+  Distinct from the value tile's ` + "`" + `valueSourceUnit` + "`" + `, which declares the
+  MAGNITUDE a number is already stored in (KB/MB/GB) for correct abbreviation.
 - **Color**: prefer Carbon Design System colors. When in doubt, use
   semantic tokens — don't hard-code hex values in component config.
 - **One component per chart** — don't create a single "monster"

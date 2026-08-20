@@ -63,11 +63,15 @@ On **line** and **area** charts each series row in **Series** has a small
 shows the target unit itself (`°F`, `psi`), so you can see at a glance which
 series are converted without opening anything.
 
-Click it to pick:
+Click it to open **Series transforms** and pick:
 
 - **Quantity** — temperature, pressure, distance, mass, or speed
 - **Stored as** — what the column already holds
 - **Display as** — what the chart should show
+
+**Apply** stays disabled until the choice actually changes something, so you
+can't save a conversion that does nothing (Celsius → Celsius). **Clear**
+removes it.
 
 The conversion is applied to the values *before* they are plotted, so the
 axis, any thresholds, and the tooltip all read the converted unit. A
@@ -76,7 +80,12 @@ every converted series on a chart shares one target unit, the tooltip picks
 that unit up automatically unless you've set your own unit text.
 
 The conversion belongs to the component, not the connection — two components
-reading the same column can display different units.
+reading the same column can display different units. On a **pivot** chart (a series
+column splits one column into several lines) the conversion applies to every
+resulting series, since they all come from the same column.
+
+You can also just ask the assistant — "show the kitchen temperature in
+Fahrenheit" sets this for you rather than rewriting the query.
 
 **Custom (scale + offset)** covers arithmetic the built-in tables don't:
 the value is multiplied by **Multiply by** and then **Then add** is applied
