@@ -381,11 +381,14 @@ export const carbonLightTheme = {
     // panel's overflow:hidden. Without this, hovering near a panel edge
     // hides the tooltip behind neighbouring panels.
     appendToBody: true,
-    backgroundColor: 'rgba(22, 22, 22, 0.9)',
-    borderColor: carbonColors.gray70,
+    // Light theme → LIGHT surface, dark text. (These values were swapped with
+    // the dark theme's, so a dark dashboard drew a white tooltip with
+    // near-black text.)
+    backgroundColor: 'rgba(244, 244, 244, 0.95)',
+    borderColor: carbonColors.gray30,
     borderWidth: 1,
     textStyle: {
-      color: carbonColors.white,
+      color: carbonColors.gray100,
     },
     axisPointer: {
       lineStyle: {
@@ -778,11 +781,14 @@ export const carbonDarkTheme = {
     // panel's overflow:hidden. Without this, hovering near a panel edge
     // hides the tooltip behind neighbouring panels.
     appendToBody: true,
-    backgroundColor: 'rgba(244, 244, 244, 0.95)',
-    borderColor: carbonColors.gray30,
+    // Dark theme → DARK surface, light text. (These values were swapped with
+    // the light theme's, which is what put a white tooltip on the dark
+    // dashboard.)
+    backgroundColor: 'rgba(22, 22, 22, 0.9)',
+    borderColor: carbonColors.gray70,
     borderWidth: 1,
     textStyle: {
-      color: carbonColors.gray100,
+      color: carbonColors.white,
     },
     axisPointer: {
       lineStyle: {

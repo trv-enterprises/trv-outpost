@@ -4,6 +4,12 @@
 
 import { useRef } from 'react';
 import ReactECharts from 'echarts-for-react';
+// Side-effect import: registers 'carbon-dark'/'carbon-light' with ECharts.
+// Without it the theme={carbon-dark} below silently resolves to ECharts'
+// built-in LIGHT theme — a light tooltip on a dark dashboard, and no
+// tooltip.appendToBody (so tooltips get clipped by the panel and pushed
+// off-screen). See theme/registerEchartsThemes.js.
+import '../theme/registerEchartsThemes';
 import ChartTitleBand from './ChartTitleBand';
 
 /**
