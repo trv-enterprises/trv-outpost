@@ -11103,6 +11103,10 @@
                     "description": "DefaultPreset is the preset applied on first load when no URL/saved value.\nEmpty → no default (picker shows unset; token components show the\n\"select a range\" empty-state).",
                     "type": "string"
                 },
+                "min_step": {
+                    "description": "MinStep is the manual granularity FLOOR for the step dropdown (#277): a\nduration token like \"1m\". Steps FINER than this are not offered, because\nasking for a resolution the data doesn't have draws interpolated or empty\nbuckets between real points — which reads as missing data rather than as\nan impossible request.\n\nThe floor is normally INFERRED: ts-store reports a rollup store's window\nin its store listing, so a 1m-rollup dashboard floors itself with no\nauthor action. This field is the override for sources whose cadence is\nnot discoverable — a Prometheus scrape interval, or a raw ts-store\nstore's collection rate — and it WINS over inference when set, since an\nauthor who types one knows something the metadata doesn't.\n\nEmpty → inference only. The client owns the comparison (see\nresolveMinStepMs in client/src/utils/rangePresets.js); the server just\nround-trips the token.",
+                    "type": "string"
+                },
                 "presets": {
                     "description": "Presets offered in the header dropdown — relative windows resolved to\nabsolute instants at apply time. Empty → a sensible default set. Stored as\nduration-ish tokens the CLIENT understands (\"1h\",\"6h\",\"24h\",\"7d\",\"30d\").",
                     "type": "array",

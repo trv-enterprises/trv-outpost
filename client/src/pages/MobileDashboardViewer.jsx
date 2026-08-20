@@ -115,7 +115,7 @@ function MobileDashboardViewer({ canControl = false }) {
   const [variablesOpen, setVariablesOpen] = useState(false);
 
   // Prometheus detection for the range picker's step field (shared with desktop).
-  const { rangeConnType, rangeSupportsStep, rangeHasConsumer } = useRangeConnectionTypes({
+  const { rangeConnType, rangeSupportsStep, rangeHasConsumer, rangeMinStepMs } = useRangeConnectionTypes({
     rangeVariable: dashRangeVariable,
     panels: dashboard?.panels || [],
     chartsMap,
@@ -350,6 +350,7 @@ function MobileDashboardViewer({ canControl = false }) {
                 value={dashRangeValue}
                 onChange={setDashRangeValue}
                 showStep={rangeSupportsStep}
+                minStepMs={rangeMinStepMs}
                 stepType={rangeConnType}
               />
             )}

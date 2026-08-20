@@ -492,6 +492,10 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const [editableRangeLabel, setEditableRangeLabel] = useState('');
   const [editableRangePresets, setEditableRangePresets] = useState([]);
   const [editableRangeDefaultPreset, setEditableRangeDefaultPreset] = useState('');
+  // Manual step-granularity floor (#277). Overrides the floor inferred from a
+  // ts-store rollup's window; the escape hatch for sources whose cadence isn't
+  // discoverable (Prometheus scrape interval, a raw store's collection rate).
+  const [editableRangeMinStep, setEditableRangeMinStep] = useState('');
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [varsModalOpen, setVarsModalOpen] = useState(false);
   // Draft buffers for the Settings and Vars modals. Inputs edit the draft, NOT
@@ -571,6 +575,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         rangeLabel: editableRangeLabel,
         rangePresets: editableRangePresets,
         rangeDefaultPreset: editableRangeDefaultPreset,
+        rangeMinStep: editableRangeMinStep,
       });
       setVarsPanel(0); // always open on the Connection / Filter panel
     }
@@ -885,7 +890,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
 
   // Range-scoped connection-type classification (Prometheus step field +
   // mixed-type guard) is shared with the mobile viewer via this hook.
-  const { rangeConnType, rangeSupportsStep, rangeHasConsumer } = useRangeConnectionTypes({
+  const { rangeConnType, rangeSupportsStep, rangeHasConsumer, rangeMinStepMs } = useRangeConnectionTypes({
     rangeVariable: dashRangeVariable,
     panels,
     chartsMap,
@@ -2041,6 +2046,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       setEditableRangeLabel(vr?.label || '');
       setEditableRangePresets(vr?.range?.presets || []);
       setEditableRangeDefaultPreset(vr?.range?.default_preset || '');
+      setEditableRangeMinStep(vr?.range?.min_step || '');
     }
     setEditHasChanges(false);
     setZoom(100);
@@ -2464,6 +2470,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           range: {
             presets: editableRangePresets || [],
             default_preset: (editableRangeDefaultPreset || '').trim(),
+            // Omitted when blank so the inferred floor stays in charge — an
+            // empty string would read as "a floor was set" downstream.
+            ...((editableRangeMinStep || '').trim() ? { min_step: editableRangeMinStep.trim() } : {}),
           },
         });
       }
@@ -4303,6 +4312,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                 value={dashRangeValue}
                 onChange={setDashRangeValue}
                 showStep={rangeSupportsStep}
+                minStepMs={rangeMinStepMs}
                 stepType={rangeConnType}
               />
             )}
@@ -5127,6 +5137,7 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
             setEditableRangeLabel(varsDraft.rangeLabel);
             setEditableRangePresets(varsDraft.rangePresets);
             setEditableRangeDefaultPreset(varsDraft.rangeDefaultPreset);
+            setEditableRangeMinStep(varsDraft.rangeMinStep);
             setEditHasChanges(true);
           }
           setVarsModalOpen(false);
@@ -5338,6 +5349,14 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                           onChange={(e) => setVarsDraft((d) => ({ ...d, rangeDefaultPreset: e.target.value }))}
                           placeholder="e.g. 24h"
                           helperText="Applied on first load when no shared URL / saved window."
+                        />
+                        <TextInput
+                          id="settings-range-min-step"
+                          labelText="Minimum step (optional)"
+                          value={varsDraft?.rangeMinStep ?? ''}
+                          onChange={(e) => setVarsDraft((d) => ({ ...d, rangeMinStep: e.target.value }))}
+                          placeholder="e.g. 1m"
+                          helperText="Hides step choices finer than the data. Auto-detected for ts-store rollups; set this for other sources."
                         />
                       </div>
                       <TagInput

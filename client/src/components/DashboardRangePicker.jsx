@@ -13,6 +13,9 @@ import {
   clampStep,
   maxPointsForType,
   stepsForWindow,
+  STEP_PRESETS,
+  presetDurationMs,
+  secondsToDurationToken,
 } from '../utils/rangePresets';
 
 /**
@@ -36,6 +39,11 @@ import {
  * @param {boolean}  props.showStep   show the step dropdown
  * @param {string}   props.stepType   connection type driving the step budget
  *                                    ('prometheus' | 'tsstore')
+ * @param {number}   props.minStepMs  granularity FLOOR in ms — steps finer than
+ *                                    the data itself are not offered (#277).
+ *                                    Resolved by the caller as the max of every
+ *                                    range-scoped panel's rollup window, unless
+ *                                    the variable declares a manual min_step.
  */
 const CUSTOM = '__custom__';
 
@@ -62,7 +70,7 @@ function partsToIso(date, time) {
   return d.toISOString();
 }
 
-export default function DashboardRangePicker({ variable, value, onChange, showStep = false, stepType = null }) {
+export default function DashboardRangePicker({ variable, value, onChange, showStep = false, stepType = null, minStepMs = 0 }) {
   const label = variable?.label || 'Range';
   const cfg = variable?.range || {};
   const presets = Array.isArray(cfg.presets) && cfg.presets.length ? cfg.presets : DEFAULT_RANGE_PRESETS;
@@ -122,9 +130,24 @@ export default function DashboardRangePicker({ variable, value, onChange, showSt
   // hides sub-minute steps on wide ranges (see stepsForWindow). Falls back to
   // the full list when the window isn't resolvable yet.
   const stepItems = useMemo(
-    () => stepsForWindow(windowMs, maxPoints),
-    [windowMs, maxPoints]
+    () => stepsForWindow(windowMs, maxPoints, minStepMs),
+    [windowMs, maxPoints, minStepMs]
   );
+
+  // Explain a FLOORED dropdown inline rather than only on hover. Steps finer
+  // than the data's own granularity are absent, and without a note that reads
+  // as a missing feature ("why can't I pick 15s?") — the same confusion the
+  // clamp tooltip exists to prevent at the other end of the range.
+  const floorNote = useMemo(() => {
+    if (!showStep || !minStepMs || minStepMs <= 0) return '';
+    const finest = STEP_PRESETS.find((sp) => {
+      const ms = presetDurationMs(sp);
+      return ms && ms < minStepMs;
+    });
+    // Nothing was actually hidden (floor is at or below the finest preset).
+    if (!finest) return '';
+    return `Limited by ${secondsToDurationToken(Math.round(minStepMs / 1000))} data granularity`;
+  }, [showStep, minStepMs]);
 
   // Widening the range can make the ACTIVE step (e.g. 15s) no longer offerable
   // (15s on 24h isn't readable). Snap the stored step up to the finest still-
@@ -271,6 +294,7 @@ export default function DashboardRangePicker({ variable, value, onChange, showSt
             itemToString={(item) => (item == null ? '' : String(item))}
             selectedItem={stepItems.includes(step) ? step : (stepItems[0] || null)}
             onChange={({ selectedItem: it }) => handleStep(it)}
+            helperText={floorNote || undefined}
           />
           {stepClamped && (
             <Tooltip
