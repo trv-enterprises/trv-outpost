@@ -11,6 +11,7 @@ import ReactECharts from 'echarts-for-react';
 // off-screen). See theme/registerEchartsThemes.js.
 import '../theme/registerEchartsThemes';
 import ChartTitleBand from './ChartTitleBand';
+import { registerTooltipOwner, claimTooltip, releaseTooltip, hideAllTooltips } from './tooltip-broker';
 
 /**
  * Generic chart shell — the React/DOM layer shared by every spec-driven
@@ -75,13 +76,31 @@ export default function ChartShell({ config, dataCtx, option, onEvents, misconfi
     echartsRef.current?.getEchartsInstance?.()?.dispatchAction?.({ type: 'hideTip' });
   }, []);
 
+  // Join the one-tooltip-at-a-time broker. Per-chart pointerleave (below)
+  // handles the ordinary case, but it RACES: if the next chart's tooltip
+  // renders before this chart's leave handler runs, both are briefly up, and
+  // a fast move between panels can skip the leave entirely. The broker makes
+  // it explicit — whichever chart shows a tooltip tells every other chart to
+  // hide. Unregister on unmount so a hider never outlives its instance.
+  useEffect(() => registerTooltipOwner(hideTip), [hideTip]);
+
   // Scroll listener: unconditional, so it survives the loading/error early
   // returns (this component renders a placeholder before the chart exists).
   // Capture phase because the dashboard grid — not the window — is what
   // scrolls, and scroll events from an inner scroller do NOT bubble.
+  // hideAllTooltips (not just ours): one scroll should clear the page.
   useEffect(() => {
-    window.addEventListener('scroll', hideTip, true);
-    return () => window.removeEventListener('scroll', hideTip, true);
+    window.addEventListener('scroll', hideAllTooltips, true);
+    return () => window.removeEventListener('scroll', hideAllTooltips, true);
+  }, []);
+
+  // Claim the tooltip on entry/movement — this is what actually dismisses the
+  // PREVIOUS chart's box, and it does not depend on the old chart having seen
+  // a leave event.
+  const claim = useCallback(() => claimTooltip(hideTip), [hideTip]);
+  const leave = useCallback(() => {
+    releaseTooltip(hideTip);
+    hideTip();
   }, [hideTip]);
 
   // ECharts' own "pointer left the instance" event, kept as a belt-and-braces
@@ -156,7 +175,9 @@ export default function ChartShell({ config, dataCtx, option, onEvents, misconfi
     // onPointerLeave (a React prop, not a ref+effect) so it binds to whatever
     // is rendered without depending on ref timing across the early returns.
     <div
-      onPointerLeave={hideTip}
+      onPointerEnter={claim}
+      onPointerMove={claim}
+      onPointerLeave={leave}
       style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}
     >
       <ChartTitleBand text={chartName} />
