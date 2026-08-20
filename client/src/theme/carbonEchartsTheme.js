@@ -381,12 +381,20 @@ export const carbonLightTheme = {
     // panel's overflow:hidden. Without this, hovering near a panel edge
     // hides the tooltip behind neighbouring panels.
     appendToBody: true,
-    // ...but appendToBody alone only frees it from the PANEL; nothing then
-    // keeps it inside the VIEWPORT. Hovering a series near the left edge put
-    // the box partly off-screen, truncating the series names (a container
-    // called "dashboard-caddy-1" read as "y-1"). `confine` clamps the tooltip
-    // to the containing element so it flips/slides back into view instead.
-    confine: true,
+    // NOTE: do NOT add `confine: true` here. confine and appendToBody are
+    // mutually exclusive in ECharts. With appendToBody the tooltip's
+    // coordinates are page-relative (TooltipHTMLContent makes its style
+    // coords against document.body), but confineTooltipPosition() clamps
+    // against `api.getWidth()/getHeight()` — the CHART's box, not the page's.
+    // Setting both pins the tooltip near the top-left of the page and breaks
+    // dismissal: it stops tracking the pointer, so the chart never gets the
+    // leave that would hide it, and it hangs over the UI blocking clicks.
+    //
+    // Keeping the tooltip inside the viewport is handled by ECharts' own
+    // refixTooltipPosition() (the `else` branch above confine), which already
+    // nudges the box back on-screen near an edge. That is what fixed the
+    // truncated series names — the tooltip escaping the PANEL was the actual
+    // bug, and appendToBody alone does that.
     // Light theme → LIGHT surface, dark text. (These values were swapped with
     // the dark theme's, so a dark dashboard drew a white tooltip with
     // near-black text.)
@@ -787,12 +795,20 @@ export const carbonDarkTheme = {
     // panel's overflow:hidden. Without this, hovering near a panel edge
     // hides the tooltip behind neighbouring panels.
     appendToBody: true,
-    // ...but appendToBody alone only frees it from the PANEL; nothing then
-    // keeps it inside the VIEWPORT. Hovering a series near the left edge put
-    // the box partly off-screen, truncating the series names (a container
-    // called "dashboard-caddy-1" read as "y-1"). `confine` clamps the tooltip
-    // to the containing element so it flips/slides back into view instead.
-    confine: true,
+    // NOTE: do NOT add `confine: true` here. confine and appendToBody are
+    // mutually exclusive in ECharts. With appendToBody the tooltip's
+    // coordinates are page-relative (TooltipHTMLContent makes its style
+    // coords against document.body), but confineTooltipPosition() clamps
+    // against `api.getWidth()/getHeight()` — the CHART's box, not the page's.
+    // Setting both pins the tooltip near the top-left of the page and breaks
+    // dismissal: it stops tracking the pointer, so the chart never gets the
+    // leave that would hide it, and it hangs over the UI blocking clicks.
+    //
+    // Keeping the tooltip inside the viewport is handled by ECharts' own
+    // refixTooltipPosition() (the `else` branch above confine), which already
+    // nudges the box back on-screen near an edge. That is what fixed the
+    // truncated series names — the tooltip escaping the PANEL was the actual
+    // bug, and appendToBody alone does that.
     // Dark theme → DARK surface, light text. (These values were swapped with
     // the light theme's, which is what put a white tooltip on the dark
     // dashboard.)

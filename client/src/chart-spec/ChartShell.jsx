@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import ReactECharts from 'echarts-for-react';
 // Side-effect import: registers 'carbon-dark'/'carbon-light' with ECharts.
 // Without it the theme={carbon-dark} below silently resolves to ECharts'
@@ -45,6 +45,30 @@ export default function ChartShell({ config, dataCtx, option, onEvents, misconfi
   // zoom/pan across data updates — see the dataZoom handling at the
   // ReactECharts render below.
   const chartPaintedRef = useRef(false);
+  const echartsRef = useRef(null);
+
+  // Dismiss the tooltip when the pointer leaves the chart entirely (#tooltip).
+  //
+  // ECharts only calls its internal _hide() from a MOUSEMOVE INSIDE the chart
+  // that lands on nothing. Move the cursor clean off the chart — to another
+  // panel, or to the toolbar — and no such event ever fires, so the tooltip
+  // just stays up. `appendToBody` (which we need, so the tooltip isn't clipped
+  // by the panel's overflow:hidden) makes it worse: the box lives in
+  // document.body, floating over the rest of the UI with nothing to dismiss it.
+  //
+  // `globalout` is ECharts' own "pointer left the instance" event; on it we
+  // dispatch hideTip. Merged with (not replacing) any caller-supplied
+  // handlers, and the caller's own globalout still runs.
+  const mergedEvents = useMemo(() => ({
+    ...(onEvents || {}),
+    globalout: (params, instance) => {
+      const ec = instance || echartsRef.current?.getEchartsInstance?.();
+      // dispatchAction is a no-op when no tip is showing, so this is safe to
+      // fire unconditionally.
+      ec?.dispatchAction?.({ type: 'hideTip' });
+      onEvents?.globalout?.(params, instance);
+    },
+  }), [onEvents]);
 
   if (dataCtx?.loading) {
     return (
@@ -108,10 +132,11 @@ export default function ChartShell({ config, dataCtx, option, onEvents, misconfi
       <ChartTitleBand text={chartName} />
       <div style={{ flex: 1, minHeight: 0 }}>
         <ReactECharts
+          ref={echartsRef}
           option={renderOption}
           style={{ height: '100%', width: '100%' }}
           theme="carbon-dark"
-          onEvents={onEvents}
+          onEvents={mergedEvents}
         />
       </div>
     </div>
