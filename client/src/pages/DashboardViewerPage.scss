@@ -425,6 +425,21 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
               white-space: nowrap;
               padding-bottom: 0.25rem;
             }
+
+            // Granularity floor (#277) — steps finer than the data aren't
+            // offered. Rendered INLINE beside the dropdown, not as Carbon
+            // helperText: helper text is a block BELOW the control, which grows
+            // the item's height and breaks this header row's flex-end baseline
+            // (the range picker visibly dropped out of alignment). Secondary
+            // text, not amber — a floor is informational, whereas the clamp
+            // note above means "your pick was overridden".
+            .dashboard-range-step-floor {
+              color: var(--cds-text-secondary);
+              font-size: 0.75rem;
+              white-space: nowrap;
+              padding-bottom: 0.25rem;
+              cursor: default;
+            }
           }
 
           // Range "Custom…" absolute editor: from-date / from-time / to-date /

@@ -23,8 +23,8 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   **Minimum step** field on the range variable sets the floor by hand, and
   always wins over detection. When several panels contribute, the coarsest
   floor applies, since anything finer would draw one real series beside one
-  interpolated one. The dropdown notes when it's limited, so the missing
-  choices don't read as a bug.
+  interpolated one. A compact `≥ 1m` marker beside the dropdown (with the
+  reason on hover) keeps the missing choices from reading as a bug.
 
 
 - **Per-series unit conversion on line and area charts** (#265). A stored

@@ -138,7 +138,7 @@ export default function DashboardRangePicker({ variable, value, onChange, showSt
   // than the data's own granularity are absent, and without a note that reads
   // as a missing feature ("why can't I pick 15s?") — the same confusion the
   // clamp tooltip exists to prevent at the other end of the range.
-  const floorNote = useMemo(() => {
+  const floorToken = useMemo(() => {
     if (!showStep || !minStepMs || minStepMs <= 0) return '';
     const finest = STEP_PRESETS.find((sp) => {
       const ms = presetDurationMs(sp);
@@ -146,7 +146,7 @@ export default function DashboardRangePicker({ variable, value, onChange, showSt
     });
     // Nothing was actually hidden (floor is at or below the finest preset).
     if (!finest) return '';
-    return `Limited by ${secondsToDurationToken(Math.round(minStepMs / 1000))} data granularity`;
+    return secondsToDurationToken(Math.round(minStepMs / 1000));
   }, [showStep, minStepMs]);
 
   // Widening the range can make the ACTIVE step (e.g. 15s) no longer offerable
@@ -294,8 +294,17 @@ export default function DashboardRangePicker({ variable, value, onChange, showSt
             itemToString={(item) => (item == null ? '' : String(item))}
             selectedItem={stepItems.includes(step) ? step : (stepItems[0] || null)}
             onChange={({ selectedItem: it }) => handleStep(it)}
-            helperText={floorNote || undefined}
           />
+          {floorToken && (
+            <Tooltip
+              align="bottom"
+              label={`Steps finer than ${floorToken} are not offered: the data's own granularity is ${floorToken}, so a finer step would draw interpolated or empty buckets between real points.`}
+            >
+              <span className="dashboard-range-step-floor" tabIndex={0}>
+                ≥ {floorToken}
+              </span>
+            </Tooltip>
+          )}
           {stepClamped && (
             <Tooltip
               align="bottom"
