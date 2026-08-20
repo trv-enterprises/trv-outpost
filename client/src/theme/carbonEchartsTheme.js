@@ -383,6 +383,18 @@ export const carbonLightTheme = {
     // panel's overflow:hidden. Without this, hovering near a panel edge
     // hides the tooltip behind neighbouring panels.
     appendToBody: true,
+    // No show/hide animation. ECharts defaults to transitionDuration 0.4 with
+    // displayTransition on, which (a) animates the box SLIDING from wherever
+    // it last was — so moving between charts drags the tooltip across the
+    // screen — and (b) hides via `visibility:hidden; opacity:0` rather than
+    // `display:none`, so the box lingers mid-fade. Each chart owns its OWN
+    // tooltip div appended to <body> (appendToBody), so on a multi-panel
+    // dashboard several of these overlap and the lingering one reads as "the
+    // tooltip won't let go of the first chart I touched".
+    //
+    // 0 makes hide immediate (`display:none`, see TooltipHTMLContent.hide)
+    // and show instant at the computed position.
+    transitionDuration: 0,
     // Placement is OURS, not ECharts' (see chart-spec/tooltip-position.js).
     // Its built-in placement only flips right→left and never falls back to
     // above/below, so a tooltip wider than the space on either side of the
@@ -802,6 +814,18 @@ export const carbonDarkTheme = {
     // panel's overflow:hidden. Without this, hovering near a panel edge
     // hides the tooltip behind neighbouring panels.
     appendToBody: true,
+    // No show/hide animation. ECharts defaults to transitionDuration 0.4 with
+    // displayTransition on, which (a) animates the box SLIDING from wherever
+    // it last was — so moving between charts drags the tooltip across the
+    // screen — and (b) hides via `visibility:hidden; opacity:0` rather than
+    // `display:none`, so the box lingers mid-fade. Each chart owns its OWN
+    // tooltip div appended to <body> (appendToBody), so on a multi-panel
+    // dashboard several of these overlap and the lingering one reads as "the
+    // tooltip won't let go of the first chart I touched".
+    //
+    // 0 makes hide immediate (`display:none`, see TooltipHTMLContent.hide)
+    // and show instant at the computed position.
+    transitionDuration: 0,
     // Placement is OURS, not ECharts' (see chart-spec/tooltip-position.js).
     // Its built-in placement only flips right→left and never falls back to
     // above/below, so a tooltip wider than the space on either side of the

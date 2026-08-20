@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import ReactECharts from 'echarts-for-react';
 // Side-effect import: registers 'carbon-dark'/'carbon-light' with ECharts.
 // Without it the theme={carbon-dark} below silently resolves to ECharts'
@@ -47,28 +47,53 @@ export default function ChartShell({ config, dataCtx, option, onEvents, misconfi
   const chartPaintedRef = useRef(false);
   const echartsRef = useRef(null);
 
-  // Dismiss the tooltip when the pointer leaves the chart entirely (#tooltip).
+  // Dismiss the tooltip. ECharts alone does not, in three situations that
+  // all show up on a multi-panel dashboard:
   //
-  // ECharts only calls its internal _hide() from a MOUSEMOVE INSIDE the chart
-  // that lands on nothing. Move the cursor clean off the chart — to another
-  // panel, or to the toolbar — and no such event ever fires, so the tooltip
-  // just stays up. `appendToBody` (which we need, so the tooltip isn't clipped
-  // by the panel's overflow:hidden) makes it worse: the box lives in
-  // document.body, floating over the rest of the UI with nothing to dismiss it.
+  //  1. POINTER LEAVES THE CHART. ECharts only calls its internal _hide()
+  //     from a mousemove INSIDE the chart that lands on nothing. Move the
+  //     cursor clean off — to another panel, or the toolbar — and no such
+  //     event fires. Its own `globalout` covers this, but only when zrender
+  //     actually sees the canvas mouseout, which is not reliable once the
+  //     tooltip div (appendToBody) is sitting over the page.
+  //  2. THE POINTER MOVES TO ANOTHER CHART. Each chart owns its OWN tooltip
+  //     div appended to <body>, so nothing coordinates them: the first
+  //     chart's box can stay up while a second chart shows its own.
+  //  3. SCROLL. No mouse event is generated at all, so the tooltip stays
+  //     pinned to a screen position while the chart it belongs to scrolls
+  //     away underneath it.
   //
-  // `globalout` is ECharts' own "pointer left the instance" event; on it we
-  // dispatch hideTip. Merged with (not replacing) any caller-supplied
-  // handlers, and the caller's own globalout still runs.
+  // appendToBody is what makes all three visible (the box floats over the
+  // whole page rather than being clipped to its panel) — but we need it, or
+  // the tooltip is clipped by the panel's overflow:hidden.
+  //
+  // So dismiss from the DOM, where every one of these IS observable:
+  // pointerleave on our own wrapper for (1) and (2), and a capturing scroll
+  // listener for (3). hideTip is a no-op when nothing is showing, so firing
+  // it unconditionally is safe.
+  const hideTip = useCallback(() => {
+    echartsRef.current?.getEchartsInstance?.()?.dispatchAction?.({ type: 'hideTip' });
+  }, []);
+
+  // Scroll listener: unconditional, so it survives the loading/error early
+  // returns (this component renders a placeholder before the chart exists).
+  // Capture phase because the dashboard grid — not the window — is what
+  // scrolls, and scroll events from an inner scroller do NOT bubble.
+  useEffect(() => {
+    window.addEventListener('scroll', hideTip, true);
+    return () => window.removeEventListener('scroll', hideTip, true);
+  }, [hideTip]);
+
+  // ECharts' own "pointer left the instance" event, kept as a belt-and-braces
+  // partner to the DOM listeners above. Merged with (not replacing) any
+  // caller-supplied handlers, and the caller's own globalout still runs.
   const mergedEvents = useMemo(() => ({
     ...(onEvents || {}),
     globalout: (params, instance) => {
-      const ec = instance || echartsRef.current?.getEchartsInstance?.();
-      // dispatchAction is a no-op when no tip is showing, so this is safe to
-      // fire unconditionally.
-      ec?.dispatchAction?.({ type: 'hideTip' });
+      hideTip();
       onEvents?.globalout?.(params, instance);
     },
-  }), [onEvents]);
+  }), [onEvents, hideTip]);
 
   if (dataCtx?.loading) {
     return (
@@ -128,7 +153,12 @@ export default function ChartShell({ config, dataCtx, option, onEvents, misconfi
   chartPaintedRef.current = true;
 
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+    // onPointerLeave (a React prop, not a ref+effect) so it binds to whatever
+    // is rendered without depending on ref timing across the early returns.
+    <div
+      onPointerLeave={hideTip}
+      style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}
+    >
       <ChartTitleBand text={chartName} />
       <div style={{ flex: 1, minHeight: 0 }}>
         <ReactECharts
