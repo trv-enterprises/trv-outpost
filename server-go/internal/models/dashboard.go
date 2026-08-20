@@ -304,6 +304,21 @@ type ChartDataMapping struct {
 	AccumulatorColumns     []bool `json:"accumulator_columns,omitempty" bson:"accumulator_columns,omitempty"`
 	AccumulatorMode        bool   `json:"accumulator_mode,omitempty" bson:"accumulator_mode,omitempty"`
 	AccumulatorResetPolicy string `json:"accumulator_reset_policy,omitempty" bson:"accumulator_reset_policy,omitempty"`
+
+	// YAxisConversions is the PER-COLUMN unit conversion (#265): a parallel
+	// array index-aligned to YAxis (like YAxisColors/AccumulatorColumns). A
+	// non-null entry converts that series' values BEFORE they are plotted, so
+	// the axis, thresholds and tooltip all read the converted unit — e.g. a
+	// column stored in Celsius displayed as Fahrenheit.
+	//
+	// Each entry is either a registry conversion {dimension, from, to} (e.g.
+	// {"dimension":"temperature","from":"c","to":"f"}) or the custom affine
+	// form {dimension:"custom", scale, offset, symbol?}. The unit tables and
+	// all conversion math live client-side in client/src/chart-spec/units.js;
+	// the server stores and round-trips the descriptor without interpreting
+	// it, which is why this is a free-form map rather than a typed struct —
+	// adding a dimension must not require a server change.
+	YAxisConversions []map[string]interface{} `json:"y_axis_conversions,omitempty" bson:"y_axis_conversions,omitempty"`
 }
 
 // NormalizeYAxisColumns coerces the several shapes an LLM client commonly sends

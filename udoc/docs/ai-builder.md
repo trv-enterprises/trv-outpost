@@ -57,11 +57,13 @@ Ask the AI to refine the component:
 - "Add a legend to the bottom"
 - "Make the Y axis start at 0"
 - "Switch to a line chart instead"
+- "Show the temperature in Fahrenheit" (see [Unit Conversion](./chart-types.md#unit-conversion))
 
 ### The AI Can
 - Write and update component code
 - Query your data connections to understand the data structure
 - Set chart types, axis labels, and visual options
+- Convert a series to a different unit (°C → °F, Pa → psi) without touching the query
 - Configure control settings (MQTT topics, command payloads)
 - Name and describe the component
 
