@@ -274,14 +274,16 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
       display: flex;
       align-items: center;
       gap: spacing.$spacing-03;
-      // Grows to absorb the toolbar's slack (so the right group is content-
-      // sized and the title+range sit just after the back/home buttons, not
-      // pushed to the far right). A LOW min-width lets the title ellipsize as
-      // far as needed so the fixed-width range Custom editor always fits before
-      // anything overflows; the right group wraps to line 2 only once even a
-      // stub title + the range no longer fit. (Range is flex-shrink:0 — the
-      // title is what yields.)
-      flex: 1 1 auto;
+      // CONTENT-SIZED, not growing. This used to be flex:1 so the left group
+      // absorbed the toolbar's slack — correct back when the dashboard NAME
+      // lived in here. The name now sits in toolbar-center and centres itself
+      // with auto margins, and auto margins only get slack that no flex item
+      // has already eaten. Leaving flex:1 here meant the left group swallowed
+      // it all and the name never centred.
+      //
+      // Shrinkable so the variable row still yields on a narrow toolbar
+      // before anything overflows.
+      flex: 0 1 auto;
       min-width: 120px;
       // visible (not hidden) so the variable-picker dropdown menu can overflow
       // the toolbar instead of being clipped. The title still ellipsizes via
@@ -456,6 +458,17 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
             align-items: flex-end;
             gap: 0.25rem;
 
+            // Step only ever shows a short duration token ("1h", "15m",
+            // "30s") — it does NOT need the 9rem the Range preset trigger
+            // takes ("Last 24 hours"). Narrow it so the header spends its
+            // width where the text actually needs it. The open menu is
+            // `width: max-content` (set on the shared rule above), so a
+            // narrow trigger doesn't truncate any option.
+            .cds--dropdown__wrapper,
+            .cds--list-box__wrapper {
+              width: 5.5rem;
+            }
+
             .dashboard-range-step-note {
               color: #f1c21b; // warn-ish amber: the step differs from the pick
               font-size: 0.75rem;
@@ -557,26 +570,30 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
       gap: spacing.$spacing-03;
       flex-shrink: 0;
 
-      // The view-mode dashboard NAME lives here and must center on the
-      // TOOLBAR, not on whatever gap the side groups happen to leave.
+      // The view-mode dashboard NAME centres on the TOOLBAR, but must GIVE
+      // WAY when the left group needs the room rather than being overlapped
+      // by it.
       //
-      // Packing it between two flex siblings does NOT center it: toolbar-left
-      // (nav cluster + variable pickers) is far wider than toolbar-right, so
-      // a packed center group lands wherever the left group ends — measured
-      // 254px right of true centre, overlapping the refresh pill. Take it out
-      // of the flow and pin it to the toolbar's midpoint instead.
+      // Absolute centring (the previous approach) centres perfectly but is
+      // out of flow, so it cannot see the left group at all — with a wide
+      // variable row the name printed straight over the Step control.
+      // Packing it as a plain flex item has the opposite failure: toolbar-left
+      // is far wider than toolbar-right, so it lands wherever the left group
+      // ends (measured 254px right of true centre).
       //
-      // pointer-events:none on the container (restored on its children) keeps
-      // the overlay from swallowing clicks on controls it passes over.
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
-      max-width: 40%;
+      // `margin-inline: auto` gets both. Auto margins absorb the LEFTOVER
+      // space and split it evenly, which centres the item on the toolbar
+      // whenever there is slack — and when there isn't, the auto margins
+      // collapse to zero and the item simply sits after the left group and
+      // shrinks, exactly the "slide right when necessary" behaviour. No
+      // overlap is possible because it stays in flow.
+      margin-inline: auto;
+      // Shrinkable, so a long name ellipsizes instead of pushing the right
+      // group off; min-width:0 is what lets text-overflow work through the
+      // flex chain.
+      flex: 0 1 auto;
       min-width: 0;
-      pointer-events: none;
       justify-content: center;
-
-      > * { pointer-events: auto; }
 
       .cds--tooltip,
       .cds--tooltip-trigger__wrapper {
