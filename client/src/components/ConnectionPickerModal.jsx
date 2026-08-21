@@ -24,6 +24,7 @@ import NamespaceFilter from './shared/NamespaceFilter';
 import NamespaceChip from './shared/NamespaceChip';
 import ResetFiltersButton from './shared/ResetFiltersButton';
 import { connectionTypeLabel, connectionTypeColor } from '../utils/connectionTypeMeta';
+import { formatDate } from '../utils/formatDate';
 import './ConnectionPickerModal.scss';
 
 // Type filter options. Mirrors the connections list page; 'all' first.
@@ -90,6 +91,7 @@ function ConnectionPickerModal({ open, onClose, onSelect, selectedId = '' }) {
     { key: 'type', header: 'Type', isSortable: true },
     { key: 'tags', header: 'Tags', isSortable: false },
     { key: 'description', header: 'Description', isSortable: false },
+    { key: 'updated_at', header: 'Last modified', isSortable: true },
   ];
 
   const filtered = useMemo(() => {
@@ -115,8 +117,17 @@ function ConnectionPickerModal({ open, onClose, onSelect, selectedId = '' }) {
         c.type?.toLowerCase().includes(term));
     }
     result.sort((a, b) => {
-      let aVal = String(a[sortKey] || '').toLowerCase();
-      let bVal = String(b[sortKey] || '').toLowerCase();
+      // Dates compare as TIMESTAMPS, not strings. The displayed value is a
+      // locale string, and sorting those alphabetically puts "1/9/2026"
+      // before "12/2/2025" — the column would look sortable and be wrong.
+      // Sort on the raw connection field, which is what `result` holds.
+      if (sortKey === 'updated_at') {
+        const aT = Date.parse(a.updated_at) || 0;
+        const bT = Date.parse(b.updated_at) || 0;
+        return sortDirection === 'asc' ? aT - bT : bT - aT;
+      }
+      const aVal = String(a[sortKey] || '').toLowerCase();
+      const bVal = String(b[sortKey] || '').toLowerCase();
       if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
       if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
       return 0;
@@ -139,6 +150,7 @@ function ConnectionPickerModal({ open, onClose, onSelect, selectedId = '' }) {
     type: c.type,
     tags: Array.isArray(c.tags) ? c.tags : [],
     description: c.description || '',
+    updated_at: formatDate(c.updated_at),
   }));
 
   const filtersActive = !!searchTerm || namespaceFilter.length > 0 || typeFilter !== 'all' || tagFilter.length > 0;
@@ -149,12 +161,19 @@ function ConnectionPickerModal({ open, onClose, onSelect, selectedId = '' }) {
     onClose?.();
   };
 
+  // Per-column default direction. A date column wants NEWEST first on the
+  // first click — the reason to sort by "Last modified" is almost always to
+  // find what changed recently, and ascending would bury it at the bottom.
+  // Text columns keep A→Z. Matches the connections LIST page, which declares
+  // the same `defaultDir: 'desc'` for updated_at.
+  const defaultDirFor = (key) => (key === 'updated_at' ? 'desc' : 'asc');
+
   const handleSort = (key) => {
     if (sortKey === key) {
       setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortKey(key);
-      setSortDirection('asc');
+      setSortDirection(defaultDirFor(key));
     }
   };
 
