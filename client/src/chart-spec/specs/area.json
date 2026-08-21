@@ -149,6 +149,34 @@
           ]
         },
         {
+          "id": "gaps_group",
+          "label": "Data gaps",
+          "helperText": "When the source misses a collection interval there is no row for it, so the line would otherwise be drawn straight through the outage as if the data were continuous. Breaking the line makes the gap visible. The break shows WHERE data is missing, not how long for \u2014 the axis spaces points evenly.",
+          "layout": "row-2",
+          "fields": [
+            {
+              "id": "show_gaps",
+              "binds": "options.showGaps",
+              "type": "boolean",
+              "label": "Break the line on missing data",
+              "default": true,
+              "helperText": "On by default: a chart that draws through an outage is misleading. Turn off for a deliberately sparse series (events, manual readings) where gaps are normal."
+            },
+            {
+              "id": "gap_interval_seconds",
+              "binds": "options.gapIntervalSeconds",
+              "type": "number",
+              "label": "Expected interval (seconds)",
+              "helperText": "Leave empty to detect the cadence from the data (median spacing between points). Set it when detection is wrong \u2014 e.g. a 1-minute rollup that is often late, or a series sparse enough that the median misleads.",
+              "min": 0,
+              "visibleWhen": {
+                "field": "show_gaps",
+                "operator": "truthy"
+              }
+            }
+          ]
+        },
+        {
           "id": "accumulator_group",
           "label": "Accumulator",
           "helperText": "Counter-reset handling for any Y column with Δ Delta ticked above.",

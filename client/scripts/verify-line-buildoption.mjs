@@ -976,6 +976,61 @@ const data = {
     JSON.stringify(off.series[0].data) === JSON.stringify([12, 18, 22, 19, 25]));
 }
 
+// --- Case 10: time-series gaps break the line (#281 interim) ---
+// A missing collection interval has NO ROW, so on a category axis ECharts
+// joins the neighbours and a multi-hour outage renders as continuous data.
+// buildOption splices a null row at each detected gap so the line breaks.
+{
+  const T0 = Date.parse('2026-08-21T00:00:00Z');
+  const at = (min) => new Date(T0 + min * 60000).toISOString();
+  const f = (v) => String(v ?? '');
+  const dm = { x_axis: 'ts', y_axis: [{ column: 'temp', axis: 'left' }] };
+  const mk = (mins, options = {}) => buildOption(
+    { data_mapping: dm, options },
+    { columns: ['ts', 'temp'], rows: mins.map((m, i) => [at(m), 20 + i]) },
+    { formatCellValue: f, chartType: 'line' },
+  );
+
+  // 6-minute cadence with a 2-hour hole after the 3rd point.
+  const gapped = mk([0, 6, 12, 132, 138, 144]);
+  check('case 10: a gap becomes a null, breaking the line',
+    JSON.stringify(gapped.series[0].data) === JSON.stringify([20, 21, 22, null, 23, 24, 25]),
+    JSON.stringify(gapped.series[0].data));
+  check('case 10: the x-axis grows a slot for the gap',
+    gapped.xAxis.data.length === 7, String(gapped.xAxis.data.length));
+
+  // Evenly-sampled data must be untouched — no phantom breaks.
+  const even = mk([0, 6, 12, 18, 24]);
+  check('case 10: an even series is left alone',
+    JSON.stringify(even.series[0].data) === JSON.stringify([20, 21, 22, 23, 24]));
+
+  // Jitter must not shred the line.
+  const jitter = mk([0, 6.1, 11.9, 18.05, 24]);
+  check('case 10: collector jitter does not create gaps',
+    !jitter.series[0].data.includes(null));
+
+  // Opt-out.
+  const off = mk([0, 6, 12, 132, 138, 144], { showGaps: false });
+  check('case 10: showGaps:false disables it',
+    !off.series[0].data.includes(null));
+
+  // Explicit interval overrides the inferred median: declaring a 2-hour
+  // cadence means the 2-hour hole is NORMAL and must not break.
+  const override = mk([0, 6, 12, 132, 138, 144], { gapIntervalSeconds: 7200 });
+  check('case 10: gapIntervalSeconds overrides the inferred cadence',
+    !override.series[0].data.includes(null),
+    JSON.stringify(override.series[0].data));
+
+  // A non-timestamp x-axis has no cadence to infer — must not break.
+  const cats = buildOption(
+    { data_mapping: dm, options: {} },
+    { columns: ['ts', 'temp'], rows: [['alpha', 1], ['bravo', 2], ['charlie', 3]] },
+    { formatCellValue: f, chartType: 'line' },
+  );
+  check('case 10: a categorical x-axis is unaffected',
+    !cats.series[0].data.includes(null));
+}
+
 if (FAILURES.length > 0) {
   process.stderr.write(`\n${FAILURES.length} failure(s):\n${FAILURES.join('\n')}\n`);
   process.exit(1);

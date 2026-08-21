@@ -10,6 +10,25 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Line and area charts now break the line where data is missing.** When a
+  source misses a collection interval there is no row for it, so the chart
+  joined the readings either side and a multi-hour outage looked like a flat,
+  healthy line — the most misleading thing a time-series chart can do.
+
+  The expected cadence is detected from the data (median spacing between
+  consecutive points), so ordinary collector jitter is tolerated and only a
+  genuinely missing interval breaks the line. A new **Data gaps** section in
+  the chart editor turns it off for deliberately sparse series (events,
+  manual readings) and lets an author declare the interval when detection
+  misleads. On by default. Available to the AI as `showGaps` /
+  `gapIntervalSeconds`.
+
+  Note the break shows *where* data is missing, not *how long* — a 20-hour
+  outage draws the same width as a 12-minute one, because the x-axis spaces
+  points evenly rather than by elapsed time. Gaps at true scale need a
+  time-based axis (#281).
+
+
 - **The step dropdown no longer offers resolutions finer than the data** (#277).
   A dashboard reading a 1-minute rollup was still offering 15s and 30s steps —
   asking for a resolution the store can't produce, which draws interpolated or

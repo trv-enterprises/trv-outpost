@@ -35,6 +35,7 @@ import {
 } from '../option-helpers.js';
 import { parseTimestamp } from '../../utils/dataTransforms.js';
 import { applyConversion, normalizeConversion, distinctConversionSymbols } from '../units.js';
+import { inferIntervalMs, insertGapRows } from '../gap-detection.js';
 
 // Carbon's blue+purple dual-axis palette. Single-y mode forces blue
 // (matches legacy). N-series single-axis mode uses the Carbon
@@ -624,6 +625,33 @@ export function buildOption(values, data, helpers = {}) {
   // explicit preset is honored unchanged.
   const opts = values?.options || {};
   const xColIdx = columnIndex(xAxisCol);
+
+  // Gap indication. A missing collection interval has NO ROW, so on a
+  // category axis ECharts joins the neighbouring points and a multi-hour
+  // outage reads as continuous data. Splice a null row at each detected gap
+  // so the line breaks (connectNulls is already false by default).
+  //
+  // Line/area only, and only when the x-axis is a real timestamp column —
+  // the concept is meaningless for a categorical x. Pivots are skipped: their
+  // rows are per-series groups concatenated, so consecutive deltas jump
+  // backwards at every group boundary and every boundary would read as a gap.
+  //
+  // `showGaps` defaults ON: a chart that silently draws through an outage is
+  // lying, and that is the worse default. `gapIntervalSeconds` overrides the
+  // inferred cadence when the median is wrong (a deliberately sparse series)
+  // or when the author knows the real collection rate.
+  //
+  // NOTE the gap is visible but NOT TO SCALE — the category axis is evenly
+  // spaced, so a 40-hour hole draws the same width as a 12-minute one.
+  // True-width gaps need xAxis.type:'time' — issue #281.
+  if ((chartType === 'line' || chartType === 'area') && !seriesCol && xColIdx >= 0
+      && opts.showGaps !== false) {
+    const override = Number(opts.gapIntervalSeconds);
+    const intervalMs = Number.isFinite(override) && override > 0
+      ? override * 1000
+      : inferIntervalMs(rows.map((r) => r[xColIdx]));
+    rows = insertGapRows(rows, xColIdx, intervalMs);
+  }
 
   // X-axis category values. When pivoting (seriesCol set), the rows are the
   // pivot column's groups concatenated (e.g. all `iowait` rows, then all `irq`

@@ -158,6 +158,37 @@ Note that **Sliding Window** and **Time Bucket** are different tools that pair
 well. The window sets *how far back* you look; the bucket sets *how coarse* the
 readings are within it. "Last 6 hours, averaged per minute" uses both.
 
+### Data Gaps
+
+When a source misses a collection interval there is simply **no row** for it.
+Left alone, the chart joins the two readings either side and a multi-hour
+outage looks like a flat, healthy line — the most misleading thing a
+time-series chart can do.
+
+**Line** and **area** charts break the line at those points instead, so the
+gap is visible. This is on by default.
+
+The expected cadence is detected from the data (the median spacing between
+consecutive points), so a series collected every 6 minutes tolerates the
+usual second or two of jitter and only breaks on a genuinely missing
+interval.
+
+Two settings under **Data gaps**:
+
+- **Break the line on missing data** — turn off for a deliberately sparse
+  series (events, manual readings) where irregular spacing is normal and
+  breaks would just be noise.
+- **Expected interval (seconds)** — leave empty to auto-detect. Set it when
+  detection misleads: a rollup that is frequently late, or a series sparse
+  enough that the median isn't the real cadence.
+
+:::note
+The break shows **where** data is missing, not **how long** it was missing.
+A 20-hour outage and a 12-minute one draw the same width, because the x-axis
+spaces points evenly rather than by elapsed time. Gaps drawn to true scale
+need a time-based axis — tracked separately.
+:::
+
 ### Chart Options
 | Option | Applicable Types |
 |--------|-----------------|
