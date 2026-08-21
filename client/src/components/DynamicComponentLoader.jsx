@@ -17,6 +17,12 @@ import ReactECharts from 'echarts-for-react';
 // AI-generated charts that skip the theme prop need to set appendToBody
 // in their option block directly (system prompt instructs this).
 import { carbonLightTheme, carbonDarkTheme } from '../theme/carbonEchartsTheme';
+// Themes are registered at module load by this side-effect import (shared with
+// ChartShell). It used to happen inside the effect below, keyed on `code`, so
+// only custom-code charts triggered it — spec-driven charts asking for the same
+// theme name got ECharts' default LIGHT theme unless a custom-code chart
+// happened to render first.
+import '../theme/registerEchartsThemes';
 import { useData as useDataOriginal } from '../hooks/useData';
 import { transformData, toObjects, getValue, formatTimestamp, formatCellValue, buildTransformsFromMapping, DASHBOARD_VARIABLE_TOKEN } from '../utils/dataTransforms';
 import * as Babel from '@babel/standalone';
@@ -323,10 +329,6 @@ export default function DynamicComponentLoader({ code, props = {}, componentMeta
     }
 
     try {
-      // Register Carbon themes with ECharts
-      echarts.registerTheme('carbon-light', carbonLightTheme);
-      echarts.registerTheme('carbon-dark', carbonDarkTheme);
-
       // Transform JSX to JavaScript using Babel
       const transformedCode = Babel.transform(code, {
         presets: ['react'],

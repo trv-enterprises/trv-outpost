@@ -99,6 +99,7 @@ escaped safely server-side) or in a client-side filter value. See
 | **Presets** | The relative windows offered (e.g. `1h`, `6h`, `24h`, `7d`, `30d`). |
 | **Default preset** | Pre-selected on first load. |
 | **Allow absolute** | Adds **Custom…** with absolute from/to date-time inputs. |
+| **Minimum step** | Hides step choices finer than the data's own granularity. Usually unnecessary — see below. |
 
 How the window reaches each panel depends on its connection type:
 
@@ -112,6 +113,40 @@ How the window reaches each panel depends on its connection type:
   arrive.
 - **Instantaneous tiles** (gauge / number / pie) always show the latest value —
   the range deliberately does not hijack them into a historical query.
+
+### Step, and why fine resolutions sometimes disappear
+
+On ts-store and Prometheus dashboards the range picker also offers a **Step** —
+the resolution the source downsamples to. SQL and EdgeLake panels have no step
+control; they return whatever the query asks for.
+
+Two things narrow the choices, at opposite ends:
+
+- **Too coarse for the window.** A range query is capped at a point budget, so
+  a fine step over a wide window is raised automatically. When that happens the
+  picker shows the *effective* step next to your selection.
+- **Too fine for the data.** A store that records one point per minute can't
+  answer a 15-second question — you'd get interpolated or empty buckets between
+  the real points, which looks like missing data. Those choices are hidden, and
+  the dropdown notes the limit (e.g. *Limited by 1m data granularity*).
+
+**ts-store rollup stores are detected automatically.** A store created as a
+rollup reports its window, so a dashboard reading a 1-minute rollup floors its
+own step list with no configuration.
+
+Set **Minimum step** by hand when that detection can't apply:
+
+- **Prometheus** — the scrape interval isn't published, so nothing can be
+  inferred.
+- **Raw ts-store stores** — a non-rollup store doesn't declare how often it's
+  written to.
+
+A manual value always wins over detection, in both directions — it can be
+coarser *or* finer than what was detected, because you may know something the
+metadata doesn't. When several panels contribute, the **coarsest** floor
+applies: a 1-minute series and a 5-minute series on one dashboard floor at 5
+minutes, since anything finer would draw one real line beside one interpolated
+line.
 
 ## Value discovery (from connection)
 

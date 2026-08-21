@@ -203,6 +203,9 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
     display: flex;
     align-items: center;
     justify-content: space-between;
+    // Positioning context for the absolutely-centered dashboard name
+    // (.toolbar-center) — see the note there.
+    position: relative;
     padding: 0 spacing.$spacing-04;
     background-color: #262626;
     border-bottom: 1px solid #393939;
@@ -231,6 +234,40 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
       min-height: 56px;
       max-height: none;
       row-gap: spacing.$spacing-02;
+    }
+
+    // Phone width. Fit mode renders this DESKTOP toolbar on a phone, where the
+    // title and the range/step controls compete for one line: the Range
+    // dropdown paints OVER the dashboard name and the Step dropdown clips at
+    // the right edge. Let the left zone stack instead of sharing a baseline
+    // that cannot fit, and let the range controls size to the row rather than
+    // holding their fixed 12rem/9rem widths.
+    //
+    // The right-hand action group is deliberately untouched: it is
+    // `flex-wrap: nowrap` so the cluster stays atomic, and measurement at 390px
+    // confirms it already fits (x 226-378 in a 390px viewport) — including the
+    // fit-mode menu that returns to the stacked mobile layout.
+    @media (max-width: 600px) {
+      .toolbar-left {
+        flex-wrap: wrap;
+        row-gap: spacing.$spacing-02;
+
+        .dashboard-info {
+          flex-wrap: wrap;
+          row-gap: spacing.$spacing-02;
+        }
+      }
+
+      .dashboard-variable-picker {
+        margin-left: 0;
+
+        .cds--dropdown__wrapper,
+        .cds--list-box__wrapper,
+        .cds--text-input__field-wrapper {
+          width: auto;
+          min-width: 7rem;
+        }
+      }
     }
 
     .toolbar-left {
@@ -425,6 +462,21 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
               white-space: nowrap;
               padding-bottom: 0.25rem;
             }
+
+            // Granularity floor (#277) — steps finer than the data aren't
+            // offered. Rendered INLINE beside the dropdown, not as Carbon
+            // helperText: helper text is a block BELOW the control, which grows
+            // the item's height and breaks this header row's flex-end baseline
+            // (the range picker visibly dropped out of alignment). Secondary
+            // text, not amber — a floor is informational, whereas the clamp
+            // note above means "your pick was overridden".
+            .dashboard-range-step-floor {
+              color: var(--cds-text-secondary);
+              font-size: 0.75rem;
+              white-space: nowrap;
+              padding-bottom: 0.25rem;
+              cursor: default;
+            }
           }
 
           // Range "Custom…" absolute editor: from-date / from-time / to-date /
@@ -504,6 +556,47 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
       align-items: center;
       gap: spacing.$spacing-03;
       flex-shrink: 0;
+
+      // The view-mode dashboard NAME lives here and must center on the
+      // TOOLBAR, not on whatever gap the side groups happen to leave.
+      //
+      // Packing it between two flex siblings does NOT center it: toolbar-left
+      // (nav cluster + variable pickers) is far wider than toolbar-right, so
+      // a packed center group lands wherever the left group ends — measured
+      // 254px right of true centre, overlapping the refresh pill. Take it out
+      // of the flow and pin it to the toolbar's midpoint instead.
+      //
+      // pointer-events:none on the container (restored on its children) keeps
+      // the overlay from swallowing clicks on controls it passes over.
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 40%;
+      min-width: 0;
+      pointer-events: none;
+      justify-content: center;
+
+      > * { pointer-events: auto; }
+
+      .cds--tooltip,
+      .cds--tooltip-trigger__wrapper {
+        display: flex;
+        min-width: 0;
+        flex: 0 1 auto;
+      }
+
+      .dashboard-title {
+        color: #f4f4f4;
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        // A floor so the name never collapses to a sliver when the side
+        // groups are wide; below this the toolbar wraps instead.
+        min-width: 6ch;
+      }
 
       .cds--tag {
         display: flex;

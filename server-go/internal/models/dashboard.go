@@ -650,6 +650,23 @@ type RangeConfig struct {
 	DefaultPreset string `json:"default_preset,omitempty" bson:"default_preset,omitempty"`
 	// AllowAbsolute toggles the absolute from/to picker. Nil → treated as true.
 	AllowAbsolute *bool `json:"allow_absolute,omitempty" bson:"allow_absolute,omitempty"`
+	// MinStep is the manual granularity FLOOR for the step dropdown (#277): a
+	// duration token like "1m". Steps FINER than this are not offered, because
+	// asking for a resolution the data doesn't have draws interpolated or empty
+	// buckets between real points — which reads as missing data rather than as
+	// an impossible request.
+	//
+	// The floor is normally INFERRED: ts-store reports a rollup store's window
+	// in its store listing, so a 1m-rollup dashboard floors itself with no
+	// author action. This field is the override for sources whose cadence is
+	// not discoverable — a Prometheus scrape interval, or a raw ts-store
+	// store's collection rate — and it WINS over inference when set, since an
+	// author who types one knows something the metadata doesn't.
+	//
+	// Empty → inference only. The client owns the comparison (see
+	// resolveMinStepMs in client/src/utils/rangePresets.js); the server just
+	// round-trips the token.
+	MinStep string `json:"min_step,omitempty" bson:"min_step,omitempty"`
 }
 
 // Variable mode constants — the DashboardVariable.Mode discriminator.

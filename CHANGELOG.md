@@ -10,6 +10,23 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **The step dropdown no longer offers resolutions finer than the data** (#277).
+  A dashboard reading a 1-minute rollup was still offering 15s and 30s steps —
+  asking for a resolution the store can't produce, which draws interpolated or
+  empty buckets between the real points and reads as missing data rather than
+  as an impossible request.
+
+  **ts-store rollup stores are detected automatically**: a rollup reports its
+  window in the store listing, so a 1m-rollup dashboard now floors its own step
+  list with no configuration. For sources whose cadence isn't discoverable —
+  a Prometheus scrape interval, a raw ts-store store's write rate — a new
+  **Minimum step** field on the range variable sets the floor by hand, and
+  always wins over detection. When several panels contribute, the coarsest
+  floor applies, since anything finer would draw one real series beside one
+  interpolated one. A compact `≥ 1m` marker beside the dropdown (with the
+  reason on hover) keeps the missing choices from reading as a bug.
+
+
 - **Per-series unit conversion on line and area charts** (#265). A stored
   column doesn't always hold the unit you want to display — a sensor records
   Celsius, the dashboard should read Fahrenheit. Each series row now has a

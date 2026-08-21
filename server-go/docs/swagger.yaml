@@ -2798,6 +2798,25 @@ definitions:
           Empty → no default (picker shows unset; token components show the
           "select a range" empty-state).
         type: string
+      min_step:
+        description: |-
+          MinStep is the manual granularity FLOOR for the step dropdown (#277): a
+          duration token like "1m". Steps FINER than this are not offered, because
+          asking for a resolution the data doesn't have draws interpolated or empty
+          buckets between real points — which reads as missing data rather than as
+          an impossible request.
+
+          The floor is normally INFERRED: ts-store reports a rollup store's window
+          in its store listing, so a 1m-rollup dashboard floors itself with no
+          author action. This field is the override for sources whose cadence is
+          not discoverable — a Prometheus scrape interval, or a raw ts-store
+          store's collection rate — and it WINS over inference when set, since an
+          author who types one knows something the metadata doesn't.
+
+          Empty → inference only. The client owns the comparison (see
+          resolveMinStepMs in client/src/utils/rangePresets.js); the server just
+          round-trips the token.
+        type: string
       presets:
         description: |-
           Presets offered in the header dropdown — relative windows resolved to

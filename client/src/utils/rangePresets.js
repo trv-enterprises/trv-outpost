@@ -266,14 +266,70 @@ export function clampPromStep(step, windowMs) {
  * (a very wide window still offers the largest step). windowMs unknown/invalid
  * → the full list (no basis to filter). Preserves STEP_PRESETS order.
  */
-export function stepsForWindow(windowMs, maxPoints) {
-  if (!windowMs || windowMs <= 0 || !maxPoints || maxPoints <= 0) return STEP_PRESETS;
-  const viable = STEP_PRESETS.filter((s) => {
+export function stepsForWindow(windowMs, maxPoints, minStepMs = 0) {
+  const floorMs = Number.isFinite(minStepMs) && minStepMs > 0 ? minStepMs : 0;
+  // Floor first: a step finer than the DATA is never offerable, regardless of
+  // the window. (The window budget is about readability; the floor is about
+  // whether the resolution can exist at all.)
+  const aboveFloor = floorMs > 0
+    ? STEP_PRESETS.filter((s) => {
+      const ms = presetDurationMs(s);
+      return ms && ms >= floorMs;
+    })
+    : STEP_PRESETS;
+  // A floor coarser than every preset (e.g. a 2h rollup) would empty the list;
+  // keep the coarsest so the dropdown still offers the closest legal option.
+  const base = aboveFloor.length > 0 ? aboveFloor : [STEP_PRESETS[STEP_PRESETS.length - 1]];
+  if (!windowMs || windowMs <= 0 || !maxPoints || maxPoints <= 0) return base;
+  const viable = base.filter((s) => {
     const ms = presetDurationMs(s);
     return ms && windowMs / ms <= maxPoints;
   });
   if (viable.length > 0) return viable;
-  return [STEP_PRESETS[STEP_PRESETS.length - 1]]; // never empty — coarsest wins
+  return [base[base.length - 1]]; // never empty — coarsest surviving wins
+}
+
+/**
+ * rollupWindowMs — the granularity floor a ts-store store implies, in ms, or 0
+ * when it implies none.
+ *
+ * ts-store reports rollup granularity in its store listing (verified against
+ * ts-store v0.20.4): a rollup store carries `role: "rollup"` plus a `window`
+ * token like "1m". A raw/source store declares no cadence, so it contributes
+ * no floor — its collection interval isn't discoverable and has to be set by
+ * hand via the range variable's minimum step.
+ */
+export function rollupWindowMs(store) {
+  if (!store || typeof store !== 'object') return 0;
+  if (store.role !== 'rollup') return 0;
+  return presetDurationMs(store.window) || 0;
+}
+
+/**
+ * resolveMinStepMs — the effective step floor for a dashboard, in ms.
+ *
+ * MAX of every contributing floor, because the dropdown is shared: a 1-minute
+ * rollup beside a 15-second raw store must floor at 1m, or one series draws
+ * real points and the other draws interpolation between them.
+ *
+ * A MANUAL floor always wins when set — an author who types one knows
+ * something the metadata doesn't (a raw store's collection cadence, a
+ * Prometheus scrape interval), and inference can only ever under-report.
+ * Returns 0 when nothing applies, which callers treat as "no floor".
+ *
+ * @param {Array<object>} stores      store descriptors for range-scoped panels
+ * @param {string|number} manualToken the range variable's min_step, if any
+ */
+export function resolveMinStepMs(stores, manualToken) {
+  const manualMs = presetDurationMs(manualToken)
+    || (durationTokenToSeconds(manualToken) || 0) * 1000;
+  if (manualMs > 0) return manualMs;
+  let maxMs = 0;
+  for (const st of Array.isArray(stores) ? stores : []) {
+    const ms = rollupWindowMs(st);
+    if (ms > maxMs) maxMs = ms;
+  }
+  return maxMs;
 }
 
 export default {
@@ -289,6 +345,9 @@ export default {
   clampStep,
   clampPromStep,
   maxPointsForType,
+  stepsForWindow,
+  rollupWindowMs,
+  resolveMinStepMs,
   PROM_MAX_POINTS,
   TSSTORE_MAX_POINTS,
 };

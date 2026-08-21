@@ -2,6 +2,8 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
+import { positionTooltip } from '../chart-spec/tooltip-position';
+
 /**
  * Carbon Design System ECharts Theme
  *
@@ -381,11 +383,45 @@ export const carbonLightTheme = {
     // panel's overflow:hidden. Without this, hovering near a panel edge
     // hides the tooltip behind neighbouring panels.
     appendToBody: true,
-    backgroundColor: 'rgba(22, 22, 22, 0.9)',
-    borderColor: carbonColors.gray70,
+    // No show/hide animation. ECharts defaults to transitionDuration 0.4 with
+    // displayTransition on, which (a) animates the box SLIDING from wherever
+    // it last was — so moving between charts drags the tooltip across the
+    // screen — and (b) hides via `visibility:hidden; opacity:0` rather than
+    // `display:none`, so the box lingers mid-fade. Each chart owns its OWN
+    // tooltip div appended to <body> (appendToBody), so on a multi-panel
+    // dashboard several of these overlap and the lingering one reads as "the
+    // tooltip won't let go of the first chart I touched".
+    //
+    // 0 makes hide immediate (`display:none`, see TooltipHTMLContent.hide)
+    // and show instant at the computed position.
+    transitionDuration: 0,
+    // Placement is OURS, not ECharts' (see chart-spec/tooltip-position.js).
+    // Its built-in placement only flips right→left and never falls back to
+    // above/below, so a tooltip wider than the space on either side of the
+    // cursor overflowed the panel and clipped the series names.
+    position: positionTooltip,
+    // NOTE: do NOT add `confine: true` here. confine and appendToBody are
+    // mutually exclusive in ECharts. With appendToBody the tooltip's
+    // coordinates are page-relative (TooltipHTMLContent makes its style
+    // coords against document.body), but confineTooltipPosition() clamps
+    // against `api.getWidth()/getHeight()` — the CHART's box, not the page's.
+    // Setting both pins the tooltip near the top-left of the page and breaks
+    // dismissal: it stops tracking the pointer, so the chart never gets the
+    // leave that would hide it, and it hangs over the UI blocking clicks.
+    //
+    // Keeping the tooltip inside the viewport is handled by ECharts' own
+    // refixTooltipPosition() (the `else` branch above confine), which already
+    // nudges the box back on-screen near an edge. That is what fixed the
+    // truncated series names — the tooltip escaping the PANEL was the actual
+    // bug, and appendToBody alone does that.
+    // Light theme → LIGHT surface, dark text. (These values were swapped with
+    // the dark theme's, so a dark dashboard drew a white tooltip with
+    // near-black text.)
+    backgroundColor: 'rgba(244, 244, 244, 0.95)',
+    borderColor: carbonColors.gray30,
     borderWidth: 1,
     textStyle: {
-      color: carbonColors.white,
+      color: carbonColors.gray100,
     },
     axisPointer: {
       lineStyle: {
@@ -778,11 +814,45 @@ export const carbonDarkTheme = {
     // panel's overflow:hidden. Without this, hovering near a panel edge
     // hides the tooltip behind neighbouring panels.
     appendToBody: true,
-    backgroundColor: 'rgba(244, 244, 244, 0.95)',
-    borderColor: carbonColors.gray30,
+    // No show/hide animation. ECharts defaults to transitionDuration 0.4 with
+    // displayTransition on, which (a) animates the box SLIDING from wherever
+    // it last was — so moving between charts drags the tooltip across the
+    // screen — and (b) hides via `visibility:hidden; opacity:0` rather than
+    // `display:none`, so the box lingers mid-fade. Each chart owns its OWN
+    // tooltip div appended to <body> (appendToBody), so on a multi-panel
+    // dashboard several of these overlap and the lingering one reads as "the
+    // tooltip won't let go of the first chart I touched".
+    //
+    // 0 makes hide immediate (`display:none`, see TooltipHTMLContent.hide)
+    // and show instant at the computed position.
+    transitionDuration: 0,
+    // Placement is OURS, not ECharts' (see chart-spec/tooltip-position.js).
+    // Its built-in placement only flips right→left and never falls back to
+    // above/below, so a tooltip wider than the space on either side of the
+    // cursor overflowed the panel and clipped the series names.
+    position: positionTooltip,
+    // NOTE: do NOT add `confine: true` here. confine and appendToBody are
+    // mutually exclusive in ECharts. With appendToBody the tooltip's
+    // coordinates are page-relative (TooltipHTMLContent makes its style
+    // coords against document.body), but confineTooltipPosition() clamps
+    // against `api.getWidth()/getHeight()` — the CHART's box, not the page's.
+    // Setting both pins the tooltip near the top-left of the page and breaks
+    // dismissal: it stops tracking the pointer, so the chart never gets the
+    // leave that would hide it, and it hangs over the UI blocking clicks.
+    //
+    // Keeping the tooltip inside the viewport is handled by ECharts' own
+    // refixTooltipPosition() (the `else` branch above confine), which already
+    // nudges the box back on-screen near an edge. That is what fixed the
+    // truncated series names — the tooltip escaping the PANEL was the actual
+    // bug, and appendToBody alone does that.
+    // Dark theme → DARK surface, light text. (These values were swapped with
+    // the light theme's, which is what put a white tooltip on the dark
+    // dashboard.)
+    backgroundColor: 'rgba(22, 22, 22, 0.9)',
+    borderColor: carbonColors.gray70,
     borderWidth: 1,
     textStyle: {
-      color: carbonColors.gray100,
+      color: carbonColors.white,
     },
     axisPointer: {
       lineStyle: {
