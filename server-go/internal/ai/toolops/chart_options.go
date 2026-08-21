@@ -68,6 +68,8 @@ func ChartOptionsSchema() map[string]interface{} {
 				"description": "Legend config. Shape: {show: bool (default true), position: \"top\"|\"bottom\"|\"left\"|\"right\" (default \"top\")}. Left/right reserve ~135px of plot width.",
 			},
 			"chartSmooth":         map[string]interface{}{"type": "boolean", "description": "Smooth (curved) line segments. line/area only."},
+			"showGaps":            map[string]interface{}{"type": "boolean", "description": "line/area only. Break the line where the source MISSED a collection interval, instead of drawing straight through the outage as if the data were continuous. Default TRUE — a chart that hides an outage is misleading. Set false for a deliberately sparse series (events, manual readings) where irregular spacing is normal and breaks would be noise. The break marks WHERE data is missing, not how long for (the x-axis spaces points evenly)."},
+			"gapIntervalSeconds":  map[string]interface{}{"type": "number", "description": "line/area only. Expected seconds between points, used to decide what counts as a gap (a delta over ~1.5x this). OMIT to auto-detect from the data (median spacing between consecutive points), which is right for regularly-collected series. Set it when detection misleads — e.g. a 1-minute rollup that is frequently late, or a series sparse enough that the median is not the true cadence. Ignored when showGaps is false."},
 			"showSymbol":          map[string]interface{}{"type": "boolean", "description": "Show point markers on the line. Turn off for dense time series. line/area only."},
 			"chartShowDataLabels": map[string]interface{}{"type": "boolean", "description": "Render the value next to each data point."},
 			"chartSiPrefixes":     map[string]interface{}{"type": "boolean", "description": "Abbreviate large numbers with SI prefixes at 3 significant digits (14,340,393,939 → 14.3G) on axis ticks, gauge dial labels, data labels, and tooltip values; all labels on one axis share the same prefix. Default TRUE — only set this key (false) when the user asks for full/unabbreviated numbers."},
@@ -169,6 +171,7 @@ func ChartOptionsSchema() map[string]interface{} {
 var ChartOptionKeys = map[string]struct{}{
 	"yAxisRange": {}, "tooltip": {}, "yThresholds": {}, "yThresholdRenderMode": {},
 	"sampling": {}, "legend": {}, "chartSmooth": {}, "showSymbol": {},
+	"showGaps": {}, "gapIntervalSeconds": {},
 	"chartShowDataLabels": {}, "chartSiPrefixes": {}, "chartShowZoomSlider": {}, "chartStacked": {},
 	"xAxisLabelRotate": {}, "barOrientation": {}, "barWidthPct": {},
 	"bandedBarStyle": {}, "valueFormat": {}, "valueDateFormat": {},
