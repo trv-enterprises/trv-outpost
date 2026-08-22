@@ -74,6 +74,35 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Alert namespace no longer presents itself as derived from the connection**
+  (#283). An alert rule's namespace decides who can see the rule and its fired
+  alerts, and it is a property of the *rule* — but the editor put it beside a
+  second "filter connections by namespace" dropdown and defaulted it to
+  *Follow the connection*, which read as causal. It isn't: a store is
+  reachable through several connections that differ only by namespace, so the
+  delivering connection's namespace is not a stable identity for a rule, and
+  every other object in the app (connections, components, dashboards) takes
+  the active namespace at creation instead.
+
+  A new rule now prefills **File alerts into** with your active namespace,
+  like every other create form. The connection-filter dropdown is gone —
+  connection selection moved to the shared, searchable connection picker (the
+  one the component editor uses), which paginates and filters by namespace and
+  tag on its own, so there is exactly one namespace control on the page. When
+  the chosen namespace differs from the connection's, the editor says so;
+  it never blocks, because the two are legitimately independent.
+
+  Editing a rule that carries no namespace — created before the field existed,
+  or by the ts-store CLI — prefills the **connection's** namespace (where its
+  alerts have in fact been landing) and names both the namespace its alerts go
+  to today and the one saving will write onto the rule, so legacy rules heal on
+  edit rather than being silently relocated. Change the field first and the
+  notice says so: saving then *moves* who can see the alerts. The webhook
+  receiver's fallback stays: the CLI can always create rules without one.
+
+  The rule-details page now shows the alert namespace too, matching the
+  editor's structure and terminology.
+
 - **Ticking Δ Delta did nothing until the chart was saved and reopened.** The
   per-column accumulator flag (#8) was dropped when it arrived inline on a
   y-axis entry — the shape the editor's live preview emits — so the parallel

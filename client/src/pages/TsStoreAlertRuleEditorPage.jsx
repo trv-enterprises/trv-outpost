@@ -15,6 +15,7 @@ import {
   RadioButtonGroup,
   RadioButton,
   ComboBox,
+  Dropdown,
   InlineNotification,
   Loading,
   Tag,
@@ -25,7 +26,8 @@ import { SECRET_MASKED_VALUE } from '../components/shared/SecretTextInput';
 import useExtensions from '../hooks/useExtensions';
 import { useNamespaces } from '../context/NamespaceContext';
 import DashboardPickerModal from '../components/DashboardPickerModal';
-import { Dropdown } from '@carbon/react';
+import ConnectionPickerModal from '../components/ConnectionPickerModal';
+import NamespaceSelect from '../components/shared/NamespaceSelect';
 import { candidateLabel } from '../utils/tagValueByPrefix';
 import './TsStoreAlertRuleEditorPage.scss';
 
@@ -92,18 +94,23 @@ function TsStoreAlertRuleEditorPage() {
   // Form state.
   const [connections, setConnections] = useState([]);
   const [connectionsLoading, setConnectionsLoading] = useState(true);
-  // Namespace filter — empty array means "show all" (the default).
-  // Populating it narrows the connection list to those namespaces.
-  // Single-select namespace scope for the connection picker ('' = all).
-  // Deliberately NOT a multiselect: choosing the namespace to work in is a
-  // one-of choice here, and the count-pill UX read as broken.
-  const [namespaceFilter, setNamespaceFilter] = useState('');
-  // #263: the namespace a rule's FIRED ALERTS are filed into — a rule
-  // property carried in ts-store's external_ref, NOT the picker filter
-  // above. Empty = inherit the delivering connection's namespace, which
-  // is the pre-#263 behavior and stays the default.
+  // #263/#283: the namespace a rule's FIRED ALERTS are filed into — a
+  // rule property carried in ts-store's external_ref. It gates who sees
+  // the rule's fired alerts on the bell and is NOT derived from the
+  // connection: a store is reachable through several connections that
+  // differ only by namespace, so "the delivering connection's namespace"
+  // is not a stable identity. Prefilled like every other create form in
+  // the app (the user's active namespace) rather than left blank.
   const [alertNamespace, setAlertNamespace] = useState('');
+  // True when the prefill above came from the CONNECTION because the
+  // stored rule carries no namespace (legacy / CLI-authored). Saving
+  // then RECORDS where its alerts have already been landing, so the
+  // form warns and starts dirty rather than silently relocating it.
+  const [namespaceFromConnection, setNamespaceFromConnection] = useState(false);
   const [connectionId, setConnectionId] = useState('');
+  // Connection picker modal (shared with ComponentEditor). Restricted to
+  // tsstore — an alert rule can't be administered through anything else.
+  const [connectionPickerOpen, setConnectionPickerOpen] = useState(false);
   // #248: target store for an ENDPOINT-SCOPED connection (no pinned
   // store_name) — required there; a pinned connection's rule always
   // registers on its pin and shows no picker. storeOptions is the
@@ -208,17 +215,6 @@ function TsStoreAlertRuleEditorPage() {
         if (cancelled) return;
         setConnections(ts?.connections || []);
         setMqttConnections(mq?.connections || []);
-        // Default the namespace filter to the user's ACTIVE namespace (the
-        // header picker) — but only when it actually contains a tsstore
-        // connection (an empty pre-filtered dropdown reads as broken), and
-        // never when cloning (the source rule's connection may live in
-        // another namespace and must stay selectable).
-        if (!location.state?.cloneFrom && activeNamespace) {
-          const namespaces = new Set((ts?.connections || []).map((c) => c.namespace || 'default'));
-          if (namespaces.has(activeNamespace)) {
-            setNamespaceFilter(activeNamespace);
-          }
-        }
       } catch (err) {
         if (cancelled) return;
         setError(`Failed to load connections: ${err.message || err}`);
@@ -227,11 +223,24 @@ function TsStoreAlertRuleEditorPage() {
       }
     })();
     return () => { cancelled = true; };
-    // Mount-once by design: activeNamespace/cloneFrom only seed the INITIAL
-    // filter — re-running on namespace switch mid-form would clobber the
-    // user's own filter choice.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Mount-once by design: this list only backs display + store lookup.
   }, []);
+
+  // #283: prefill "File alerts into" with the user's ACTIVE namespace on a
+  // new rule — the same rule every other create form in the app follows
+  // (connections, components, dashboards all read activeNamespace). Not an
+  // inheritance from the connection; it is the authoring default.
+  // Skipped while editing (the stored value wins) and while cloning (the
+  // source rule's own namespace is carried over by the clone effect).
+  // Runs when activeNamespace resolves — the context loads it async, so it
+  // is 'default' on the first render.
+  const nsPrefilledRef = useRef(false);
+  useEffect(() => {
+    if (isEditingRef.current || location.state?.cloneFrom) return;
+    if (nsPrefilledRef.current || !activeNamespace) return;
+    nsPrefilledRef.current = true;
+    setAlertNamespace(activeNamespace);
+  }, [activeNamespace, location.state]);
 
   // "From Existing" prefill (#152): seed the form from a source rule passed via
   // router state. This is create-with-prefill — it deliberately makes a NEW
@@ -311,12 +320,43 @@ function TsStoreAlertRuleEditorPage() {
         // Rule type + its one field. ts-store omits rule_type on rules
         // that predate #134, so absent means condition.
         setRuleType(sink?.rule_type || d?.rule_type || 'condition');
-        // Authored alert namespace, if the rule carries one. Absent on
-        // pre-#263 rules — the field then shows "Follow the connection".
+        // Authored alert namespace (#263/#283). Present on rules created
+        // here post-#263; absent on older ones and on CLI-authored rules
+        // whose external_ref isn't our JSON at all.
+        //
+        // When absent, prefill from the CONNECTION's namespace and flag it
+        // — deliberately NOT the user's active namespace. The webhook
+        // receiver already falls back to the connection's namespace
+        // (webhook_handler.go), so that is where this rule's alerts have
+        // actually been landing; saving RECORDS existing behavior instead
+        // of relocating the rule's visibility to whichever namespace the
+        // user happens to be browsing.
+        let storedNamespace = '';
         try {
           const ref = sink?.external_ref ? JSON.parse(sink.external_ref) : null;
-          if (ref?.namespace) setAlertNamespace(String(ref.namespace));
-        } catch { /* non-JSON ref (CLI producer) — leave unset */ }
+          if (ref?.namespace) storedNamespace = String(ref.namespace);
+        } catch { /* non-JSON ref (CLI producer) — treated as absent */ }
+        if (storedNamespace) {
+          setAlertNamespace(storedNamespace);
+          setNamespaceFromConnection(false);
+        } else {
+          // The connection list races this fetch, so read the record
+          // directly rather than off `connections`. Merge it in as well:
+          // the rule's connection may sit outside the page's own capped
+          // fetch, and the display + mismatch check both read from there.
+          try {
+            const conn = await apiClient.getConnection(routeConnectionId);
+            if (!cancelled) {
+              if (conn?.id) {
+                setConnections((prev) => (prev.some((c) => c.id === conn.id) ? prev : [...prev, conn]));
+              }
+              setAlertNamespace(conn?.namespace || 'default');
+              setNamespaceFromConnection(true);
+            }
+          } catch {
+            if (!cancelled) setNamespaceFromConnection(true);
+          }
+        }
         setMaxAge(sink?.max_age || '');
         setCondition(sink?.condition || '');
         setCooldown(sink?.cooldown || '');
@@ -546,31 +586,17 @@ function TsStoreAlertRuleEditorPage() {
     );
   }, [webhookURL, webhookURLRedacted]);
 
-  const visibleConnections = useMemo(() => {
-    // The namespace filter narrows this list for browsing, but it must
-    // never hide the selected connection: a <select> whose value matches
-    // no option renders BLANK. That's what made an edited rule look like
-    // its connection failed to load when the rule lived outside the
-    // active namespace. The current connection is always included,
-    // whatever namespace it belongs to.
-    const inFilter = namespaceFilter
-      ? connections.filter((c) => (c.namespace || 'default') === namespaceFilter)
-      : connections;
-    if (!connectionId || inFilter.some((c) => c.id === connectionId)) return inFilter;
-    const current = connections.find((c) => c.id === connectionId);
-    return current ? [current, ...inFilter] : inFilter;
-  }, [connections, namespaceFilter, connectionId]);
-
-  // Distinct namespace values across loaded tsstore connections.
-  // Treat empty / missing as the "default" namespace so the option
-  // list is honest about where the unscoped connections live.
-  const namespaceOptions = useMemo(() => {
-    const set = new Set();
-    for (const c of connections) {
-      set.add(c.namespace || 'default');
-    }
-    return Array.from(set).sort();
-  }, [connections]);
+  // #283: the alert namespace and the connection's namespace are
+  // independent — a store is reachable through connections in several
+  // namespaces, so they legitimately differ. Surface a mismatch as
+  // information only: never a block, never a validation error.
+  const connectionNamespace = selectedConn ? (selectedConn.namespace || 'default') : '';
+  const namespaceMismatch =
+    !!alertNamespace && !!connectionNamespace && alertNamespace !== connectionNamespace;
+  // A legacy rule whose pending namespace differs from the one its alerts
+  // have actually been landing in: saving RELOCATES it rather than
+  // recording the status quo. Worth saying plainly.
+  const namespaceMovesOnSave = namespaceFromConnection && namespaceMismatch;
 
   // MQTT-sink fields are required when alertType === 'mqtt'; for
   // webhook the sink URL is autogenerated server-side from the
@@ -800,48 +826,56 @@ function TsStoreAlertRuleEditorPage() {
             )}
           </FormGroup>
 
-          {/* 3. Namespace. TWO different things share the word, so they
-              are separate controls:
-                - the PICKER FILTER (create only) just narrows the
-                  connection list below; it is not stored anywhere.
-                - ALERT NAMESPACE is a property of the rule (#263). It
-                  decides who can SEE this rule's fired alerts on the
-                  bell, and is carried in ts-store's external_ref. It is
-                  editable on an existing rule precisely because it does
-                  NOT address the rule — unlike connection/store/type/URL,
-                  changing it moves nothing. */}
-          {!connectionsLoading && (
-            <FormGroup legendText="Namespace">
-              <div className="namespace-section">
-                {!isEditing && (
-                  <Dropdown
-                    id="rule-namespace-filter"
-                    titleText="Filter connections by namespace"
-                    label="All"
-                    items={['', ...namespaceOptions]}
-                    itemToString={(ns) => (ns === '' ? 'All' : ns)}
-                    selectedItem={namespaceFilter}
-                    onChange={({ selectedItem }) => setNamespaceFilter(selectedItem || '')}
-                    size="md"
-                    helperText="Narrows the connection list below. Not saved on the rule."
-                  />
-                )}
-                <Dropdown
-                  id="rule-alert-namespace"
-                  titleText="File alerts into"
-                  label="Follow the connection"
-                  items={['', ...namespaceOptions]}
-                  itemToString={(ns) => (ns === '' ? 'Follow the connection' : ns)}
-                  selectedItem={alertNamespace}
-                  onChange={({ selectedItem }) => setAlertNamespace(selectedItem || '')}
-                  size="md"
-                  helperText={alertNamespace
-                    ? `Fired alerts are filed into “${alertNamespace}”. Only users with access to that namespace see them on the bell.`
-                    : 'Fired alerts inherit the delivering connection’s namespace. Set one explicitly when a store is reachable through connections in several namespaces.'}
+          {/* 3. Namespace — a PROPERTY of the rule (#263), not something
+              derived from its connection (#283). It decides who can SEE
+              this rule's fired alerts on the bell, and is carried in
+              ts-store's external_ref. Editable on an existing rule
+              precisely because it does NOT address the rule — unlike
+              connection/store/type/URL, changing it moves nothing.
+
+              There is exactly ONE namespace control on this page. The
+              old "filter connections by namespace" dropdown is gone: the
+              connection picker below has its own namespace filter, and
+              two controls sharing the word made the alert namespace read
+              as connection-derived. */}
+          <FormGroup legendText="Namespace">
+            <div className="namespace-section">
+              <NamespaceSelect
+                id="rule-alert-namespace"
+                labelText="File alerts into"
+                value={alertNamespace}
+                onChange={setAlertNamespace}
+                helperText="Only users with access to this namespace see the rule’s fired alerts on the bell."
+              />
+              {/* The rule records no namespace of its own. This state is
+                  about the STORED rule, so it survives the user changing
+                  the dropdown — that is precisely when "saving writes this
+                  onto the rule" is most worth saying, since the pending
+                  value then MOVES the rule's visibility rather than
+                  recording where its alerts already land. The text names
+                  both namespaces so the difference is legible. */}
+              {namespaceFromConnection && (
+                <InlineNotification
+                  kind="warning"
+                  lowContrast
+                  hideCloseButton
+                  title="This rule doesn’t record a namespace yet"
+                  subtitle={namespaceMovesOnSave
+                    ? `Its alerts are currently filed into “${connectionNamespace}”, inherited from the connection. Saving writes “${alertNamespace}” onto the rule, which moves who can see them.`
+                    : `Its alerts are currently filed into “${alertNamespace}”, inherited from the connection. Saving writes that onto the rule itself, so it no longer depends on which connection delivers the alert.`}
                 />
-              </div>
-            </FormGroup>
-          )}
+              )}
+              {namespaceMismatch && !namespaceFromConnection && (
+                <InlineNotification
+                  kind="info"
+                  lowContrast
+                  hideCloseButton
+                  title="Different namespace from the connection"
+                  subtitle={`The connection lives in “${connectionNamespace}”. That’s allowed — the alert namespace is a property of the rule — but only users with access to “${alertNamespace}” will see these alerts.`}
+                />
+              )}
+            </div>
+          </FormGroup>
 
           {/* 4. Store — the connection + store the rule lives on.
               Connection takes 2/3 of the row: connection names run
@@ -876,22 +910,32 @@ function TsStoreAlertRuleEditorPage() {
                         helperText="Fixed — the rule is administered through this connection."
                       />
                     ) : (
-                      <Select
-                        id="rule-connection"
-                        labelText="ts-store connection"
-                        value={connectionId}
-                        onChange={(e) => setConnectionId(e.target.value)}
-                        helperText="Which connection registers the rule."
-                      >
-                        <SelectItem value="" text="Select a connection…" />
-                        {visibleConnections.map((c) => (
-                          <SelectItem
-                            key={c.id}
-                            value={c.id}
-                            text={`${c.name} (${c.namespace || 'default'})`}
-                          />
-                        ))}
-                      </Select>
+                      /* #283: the shared ConnectionPickerModal, same one
+                         ComponentEditor uses — a searchable, sortable,
+                         namespace/tag-filterable table. The old inline
+                         Select was capped at the page's own fetch
+                         (page_size 200) and needed a separate namespace
+                         dropdown beside it just to stay browsable. */
+                      <div className="rule-connection-picker">
+                        <span className="cds--label">ts-store connection</span>
+                        <div className="rule-connection-picker__control">
+                          <Button
+                            kind="tertiary"
+                            size="md"
+                            onClick={() => setConnectionPickerOpen(true)}
+                          >
+                            {selectedConn ? 'Change' : 'Select'}
+                          </Button>
+                          <span className="rule-connection-picker__selected">
+                            {selectedConn
+                              ? `${selectedConn.name} (${selectedConn.namespace || 'default'})`
+                              : 'No connection selected'}
+                          </span>
+                        </div>
+                        <div className="cds--form__helper-text">
+                          Which connection registers the rule.
+                        </div>
+                      </div>
                     )}
                   </div>
                   {/* #248: endpoint-scoped connection → the rule's store is
@@ -1356,12 +1400,33 @@ function TsStoreAlertRuleEditorPage() {
         </Form>
       </div>
 
+      {/* Connection picker — restricted to tsstore, the only type that
+          can administer an alert rule. Create-mode only: the connection
+          is fixed while editing (see the edit-mode branch above). */}
+      {connectionPickerOpen && (
+        <ConnectionPickerModal
+          open
+          heading="Select a ts-store connection"
+          restrictType="tsstore"
+          selectedId={connectionId}
+          onClose={() => setConnectionPickerOpen(false)}
+          onSelect={(conn) => {
+            // The page's own list is a capped fetch; the picker loads
+            // more. Merge the chosen record in so selectedConn (and the
+            // endpoint-scoped/store logic reading off it) resolves even
+            // when it wasn't in the original page.
+            setConnections((prev) => (prev.some((c) => c.id === conn.id) ? prev : [...prev, conn]));
+            setConnectionId(conn.id);
+          }}
+        />
+      )}
+
       <DashboardPickerModal
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
         currentId={dashboardId || null}
         defaultConnectionId={connectionId || ''}
-        defaultNamespaces={namespaceFilter ? [namespaceFilter] : []}
+        defaultNamespaces={alertNamespace ? [alertNamespace] : []}
         onSelect={(d) => {
           setDashboardRecord(d);
           setDashboardId(d.id);

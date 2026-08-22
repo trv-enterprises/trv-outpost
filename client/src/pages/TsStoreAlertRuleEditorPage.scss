@@ -113,10 +113,54 @@
       }
     }
 
-    // Namespace sits in its own section above Store — it scopes which
-    // connections the picker offers rather than being part of the rule.
+    // The alert namespace — a property of the rule, not a filter. The
+    // select keeps the narrow field width the rest of the form uses;
+    // the notifications beneath it are allowed to run wider so their
+    // two-line explanations don't wrap to five.
     .namespace-section {
-      max-width: 320px;
+      max-width: 640px;
+
+      .cds--dropdown__wrapper {
+        max-width: 320px;
+      }
+
+      .cds--inline-notification {
+        margin-top: spacing.$spacing-04;
+        margin-bottom: 0;
+        max-width: none;
+      }
+    }
+
+    // Connection picker trigger — mirrors ComponentEditor's
+    // .connection-picker-control (Change/Select button + the chosen
+    // connection inline) so the affordance reads the same in both
+    // places. Hand-built rather than a Carbon form control: there is no
+    // input here, just a button and a label.
+    .rule-connection-picker {
+      .cds--label {
+        display: block;
+        margin-bottom: spacing.$spacing-03;
+      }
+
+      .rule-connection-picker__control {
+        display: flex;
+        align-items: center;
+        gap: spacing.$spacing-04;
+      }
+
+      .rule-connection-picker__selected {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        color: var(--cds-text-primary);
+        font-size: 0.875rem;
+      }
+
+      .cds--form__helper-text {
+        margin-top: spacing.$spacing-03;
+      }
     }
 
     .picker-help {
