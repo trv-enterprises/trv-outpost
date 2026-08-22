@@ -6,7 +6,7 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.58.0] — 2026-08-22
 
 ### Added
 
@@ -28,6 +28,15 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   points evenly rather than by elapsed time. Gaps at true scale need a
   time-based axis (#281).
 
+
+- **The connection picker gained a sortable "Last modified" column** (#280).
+  The picker (component editor → select connection) showed name, namespace,
+  type, tags and description — so there was no way to find the connection you
+  just edited. The connections *list* page has had the column all along.
+  Sorting is on the real timestamp rather than the rendered locale string (a
+  string sort puts "1/9/2026" before "12/2/2025" — sortable and wrong), and the
+  first click sorts newest-first, since the reason to sort by "Last modified"
+  is almost always to find what changed recently.
 
 - **The step dropdown no longer offers resolutions finer than the data** (#277).
   A dashboard reading a 1-minute rollup was still offering 15s and 30s steps —
@@ -102,6 +111,49 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
   The rule-details page now shows the alert namespace too, matching the
   editor's structure and terminology.
+
+- **Chart tooltips: dark theme, clipping, and getting stuck.** Several
+  related faults that together made the tooltip feel broken on a populated
+  dashboard.
+
+  The dark and light themes' `tooltip` blocks were **swapped**, so a dark
+  dashboard drew a near-white tooltip — and the theme registration only ran
+  when a custom-code chart mounted, so spec-driven charts asked for
+  `carbon-dark` and silently got ECharts' default. The box is also no longer
+  clipped by its panel, which had been truncating series names to fragments
+  like `y-1` / `odb-1`.
+
+  Dismissal is fixed in three situations that each left a box stranded on the
+  page: the pointer leaving a chart, moving to a *different* chart, and
+  scrolling. The cross-chart case is now coordinated by a small broker —
+  every ECharts instance creates its own tooltip element on `<body>`, so
+  "which chart owns the tooltip" is a page-level question no individual chart
+  can answer, and the earlier per-chart fix raced.
+
+  Finally, when the tooltip fits on **neither** side of the cursor it now
+  goes *above* it. ECharts only ever flips horizontally and never clamps, so
+  a wide multi-series readout on a mid-width panel used to hang off the edge
+  with the series names cut off.
+
+- **View-mode toolbar overlapped itself.** The centred dashboard name was
+  absolutely positioned — perfectly centred, but out of flow, so it could not
+  see the variables row and printed straight over the Step control on a
+  dashboard with several variables. The Step dropdown also inherited the
+  range picker's 9rem width when it only ever shows a short token (`1h`,
+  `15m`), and at phone width (fit mode renders the desktop viewer scaled
+  down, so ~390px has to work) the Range dropdown painted over the title
+  while Step clipped off the right edge. The step-floor hint contributed too:
+  shipped as Carbon `helperText`, it rendered a block *below* the control,
+  growing that item's height and pushing the range dropdown off the shared
+  baseline — it's now a compact inline `≥ 1m` marker with the explanation on
+  hover.
+
+  The navigation controls are also regrouped into one cluster at the start of
+  the row (`< [H] [#] >`). They had been split, with "back to dashboards" at
+  the far left and prev/home/next at the opposite end — two halves of one
+  idea. Return-to-list uses the Dashboard glyph rather than a second
+  left-pointing arrow, so nothing in the cluster points left except
+  *previous*.
 
 - **Ticking Δ Delta did nothing until the chart was saved and reopened.** The
   per-column accumulator flag (#8) was dropped when it arrived inline on a
