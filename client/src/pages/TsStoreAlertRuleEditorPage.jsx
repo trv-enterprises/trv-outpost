@@ -984,7 +984,6 @@ function TsStoreAlertRuleEditorPage() {
                         <TextInput
                           id="rule-store"
                           labelText="Store"
-                          placeholder="store name"
                           value={storeName}
                           onChange={(e) => setStoreName(e.target.value)}
                           placeholder="store name (list unavailable)"
