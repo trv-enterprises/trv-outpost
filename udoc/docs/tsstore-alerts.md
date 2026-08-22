@@ -141,9 +141,11 @@ connection's namespace instead. That fallback is arbitrary when the same
 store is reachable through several connections in different namespaces —
 whichever connection delivered the alert decides who sees it. Opening such a
 rule in the editor prefills the field with the connection's namespace and
-says where it came from; saving records it on the rule, so the guesswork
-stops for that rule. The fallback itself stays, since the CLI can always
-create rules without one.
+says where it came from — along with what saving will write onto the rule,
+which is whatever the field shows. Leave it as prefilled and saving records
+where the alerts already go; change it first and saving *moves* them, which
+the editor says in as many words. The fallback itself stays, since the CLI
+can always create rules without one.
 
 ## One alert, one rule
 

@@ -94,8 +94,10 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
   Editing a rule that carries no namespace — created before the field existed,
   or by the ts-store CLI — prefills the **connection's** namespace (where its
-  alerts have in fact been landing) and warns that saving records it, so
-  legacy rules heal on edit rather than being silently relocated. The webhook
+  alerts have in fact been landing) and names both the namespace its alerts go
+  to today and the one saving will write onto the rule, so legacy rules heal on
+  edit rather than being silently relocated. Change the field first and the
+  notice says so: saving then *moves* who can see the alerts. The webhook
   receiver's fallback stays: the CLI can always create rules without one.
 
   The rule-details page now shows the alert namespace too, matching the
