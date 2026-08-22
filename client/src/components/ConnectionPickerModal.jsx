@@ -54,8 +54,21 @@ const TYPE_FILTER_ITEMS = [
  * @param {Function} onClose
  * @param {Function} onSelect       (connection) => void
  * @param {string}   selectedId     currently-selected connection id (row highlight)
+ * @param {string}   restrictType   when set, only connections of this type are
+ *                                  listed and the type filter is hidden — for
+ *                                  callers where the type is a hard requirement
+ *                                  (the ts-store alert editor can only address
+ *                                  a tsstore connection).
+ * @param {string}   heading        modal heading override
  */
-function ConnectionPickerModal({ open, onClose, onSelect, selectedId = '' }) {
+function ConnectionPickerModal({
+  open,
+  onClose,
+  onSelect,
+  selectedId = '',
+  restrictType = '',
+  heading = 'Select a connection',
+}) {
   const [connections, setConnections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -75,7 +88,7 @@ function ConnectionPickerModal({ open, onClose, onSelect, selectedId = '' }) {
     setTagFilter([]);
     setNamespaceFilter([]);
     apiClient
-      .getConnections({ page: 1, page_size: 500 })
+      .getConnections({ page: 1, page_size: 500, ...(restrictType ? { type: restrictType } : {}) })
       .then((res) => {
         if (cancelled) return;
         setConnections(res?.connections || res?.Connections || []);
@@ -83,12 +96,15 @@ function ConnectionPickerModal({ open, onClose, onSelect, selectedId = '' }) {
       .catch(() => { if (!cancelled) setConnections([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [open]);
+  }, [open, restrictType]);
 
+  // Type column earns its place only when the list can hold more than
+  // one type. A restricted picker would repeat the same tag on every
+  // row, so it drops the column and gives the width to Description.
   const headers = [
     { key: 'name', header: 'Name', isSortable: true },
     { key: 'namespace', header: 'Namespace', isSortable: true },
-    { key: 'type', header: 'Type', isSortable: true },
+    ...(restrictType ? [] : [{ key: 'type', header: 'Type', isSortable: true }]),
     { key: 'tags', header: 'Tags', isSortable: false },
     { key: 'description', header: 'Description', isSortable: false },
     { key: 'updated_at', header: 'Last modified', isSortable: true },
@@ -147,13 +163,15 @@ function ConnectionPickerModal({ open, onClose, onSelect, selectedId = '' }) {
     id: c.id,
     name: c.name,
     namespace: c.namespace || 'default',
-    type: c.type,
+    // Omitted with the column (a restricted picker lists one type only).
+    ...(restrictType ? {} : { type: c.type }),
     tags: Array.isArray(c.tags) ? c.tags : [],
     description: c.description || '',
     updated_at: formatDate(c.updated_at),
   }));
 
-  const filtersActive = !!searchTerm || namespaceFilter.length > 0 || typeFilter !== 'all' || tagFilter.length > 0;
+  const filtersActive = !!searchTerm || namespaceFilter.length > 0
+    || (!restrictType && typeFilter !== 'all') || tagFilter.length > 0;
 
   const handleRowClick = (id) => {
     const conn = byId[id];
@@ -181,7 +199,7 @@ function ConnectionPickerModal({ open, onClose, onSelect, selectedId = '' }) {
     <Modal
       open={open}
       onRequestClose={onClose}
-      modalHeading="Select a connection"
+      modalHeading={heading}
       passiveModal
       size="lg"
       className="connection-picker-modal"
@@ -206,6 +224,7 @@ function ConnectionPickerModal({ open, onClose, onSelect, selectedId = '' }) {
             selected={namespaceFilter}
             onChange={setNamespaceFilter}
           />
+          {!restrictType && (
           <Dropdown
             id="conn-picker-type-filter"
             label="Filter by type"
@@ -216,6 +235,7 @@ function ConnectionPickerModal({ open, onClose, onSelect, selectedId = '' }) {
             onChange={({ selectedItem }) => setTypeFilter(selectedItem?.id || 'all')}
             size="md"
           />
+          )}
           <TagFilter
             entityType="connections"
             selected={tagFilter}
@@ -333,6 +353,8 @@ ConnectionPickerModal.propTypes = {
   onClose: PropTypes.func,
   onSelect: PropTypes.func,
   selectedId: PropTypes.string,
+  restrictType: PropTypes.string,
+  heading: PropTypes.string,
 };
 
 export default ConnectionPickerModal;

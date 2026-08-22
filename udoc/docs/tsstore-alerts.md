@@ -36,7 +36,10 @@ connections still render normally.
 
 The new-rule wizard walks through:
 
-1. **Connection** — which ts-store the rule lives on.
+1. **Connection** — which ts-store the rule lives on. **Select** opens
+   the same searchable connection picker the component editor uses,
+   filtered to ts-store connections; search, namespace and tag filters
+   all work there.
 2. **Fires when** — what makes the rule trigger. Two kinds:
    - **A record matches a condition** — a SQL-like expression
      ts-store evaluates against each arriving record. This is the
@@ -121,20 +124,26 @@ An alert is filed into a **namespace**, and only users with access to that
 namespace see it on the bell. The rule editor's **File alerts into** field
 chooses it.
 
-Left as *Follow the connection*, the alert inherits the namespace of the
-connection that delivered it — which is fine when a store is reached through
-one connection. When the same store is reachable through several connections
-in **different** namespaces, that inheritance is arbitrary: whichever
-connection was picked in the wizard decides who can see the alerts. Setting
-the field explicitly removes the guesswork.
+The namespace is a property of the **rule**, not of its connection. A new
+rule prefills the namespace you're currently working in — the same way a new
+connection, component or dashboard does — and you can change it to anything
+you have access to. Picking a connection from another namespace is allowed;
+the editor says so, and nothing is blocked.
 
 This is one of the few things that IS editable on an existing rule. Unlike
 the connection, store, delivery type and destination URL, the namespace does
 not *address* the rule — changing it moves nothing, it only changes who the
 fired alerts are visible to.
 
-Rules created before this existed, or created by the ts-store CLI, carry no
-namespace and keep inheriting the connection's.
+Rules created before this existed, and rules created by the ts-store CLI,
+carry no namespace of their own. Their alerts are filed into the delivering
+connection's namespace instead. That fallback is arbitrary when the same
+store is reachable through several connections in different namespaces —
+whichever connection delivered the alert decides who sees it. Opening such a
+rule in the editor prefills the field with the connection's namespace and
+says where it came from; saving records it on the rule, so the guesswork
+stops for that rule. The fallback itself stays, since the CLI can always
+create rules without one.
 
 ## One alert, one rule
 

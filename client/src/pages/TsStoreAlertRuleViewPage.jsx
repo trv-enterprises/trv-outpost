@@ -118,6 +118,13 @@ function TsStoreAlertRuleViewPage() {
   const restartPolicy = sink?.restart_policy || 'now';
   const maxReplay = sink?.max_replay || '';
   const dashboardId = decodeDashboardId(sink?.external_ref);
+  // #283: the two pages agree on structure and terminology — the editor's
+  // "File alerts into" is shown here too, so a rule's visibility is
+  // readable without opening the editor. Absent means the receiver falls
+  // back to the connection's namespace at delivery time; say exactly that
+  // rather than leaving the field off the page.
+  const alertNamespace = decodeAlertNamespace(sink?.external_ref);
+  const connectionNamespace = connection?.namespace || '';
 
   return (
     <div className="tsstore-alert-rule-editor">
@@ -206,6 +213,21 @@ function TsStoreAlertRuleViewPage() {
                 <RadioButton id="view-type-webhook" value="webhook" labelText="Webhook (dashboard bell)" />
                 <RadioButton id="view-type-mqtt" value="mqtt" labelText="MQTT (publish to broker)" />
               </RadioButtonGroup>
+            </FormGroup>
+
+            {/* Namespace — a property of the RULE, not of its connection
+                (#283). Mirrors the editor's "File alerts into" field and
+                sits in the same slot, above Store. */}
+            <FormGroup legendText="Namespace">
+              <TextInput
+                id="view-rule-alert-namespace"
+                labelText="Alerts filed into"
+                value={alertNamespace || (connectionNamespace ? `${connectionNamespace} (from the connection)` : 'From the connection')}
+                readOnly
+                helperText={alertNamespace
+                  ? 'Only users with access to this namespace see the rule’s fired alerts on the bell.'
+                  : 'This rule doesn’t record a namespace, so its alerts are filed into the delivering connection’s. Edit the rule to record one.'}
+              />
             </FormGroup>
 
             <FormGroup legendText="Store">
@@ -376,6 +398,20 @@ function decodeDashboardId(externalRef) {
   try {
     const parsed = JSON.parse(externalRef);
     return parsed?.dashboard_id || '';
+  } catch {
+    return '';
+  }
+}
+
+// The rule's ALERT NAMESPACE (#263), also carried in external_ref. Empty
+// for rules that predate it and for CLI-authored rules whose ref isn't
+// our JSON — the webhook receiver then falls back to the delivering
+// connection's namespace. Same soft-fail as above.
+function decodeAlertNamespace(externalRef) {
+  if (!externalRef) return '';
+  try {
+    const parsed = JSON.parse(externalRef);
+    return parsed?.namespace || '';
   } catch {
     return '';
   }
