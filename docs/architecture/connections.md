@@ -320,14 +320,39 @@ repo for local testing).
 - **Streaming**: `streaming/tsstore_stream.go`, described in
   [streaming.md](streaming.md)
 - **Push direction**: ts-store can also push data into the dashboard
-  via `GET /api/streams/inbound/:datasourceId` — an inbound WebSocket
-  endpoint the ts-store server dials into. On an endpoint-scoped
-  connection each per-component store gets its own channel at
-  `/api/streams/inbound/:datasourceId/:channelHash` (#248): one
-  `TSStoreStream` + one ts-store push registration per distinct
-  (connection, store), shared by every component on that store; the
-  hash is a pure config hash so the URL is stable across restarts.
-  Pinned connections keep the single-segment URL unchanged.
+  via an inbound WebSocket endpoint the ts-store server dials into. On
+  an endpoint-scoped connection each per-component store gets its own
+  channel (#248): one `TSStoreStream` + one ts-store push registration
+  per distinct (connection, store), shared by every component on that
+  store; the channel hash is a pure config hash.
+
+  The callback path is the channel identity followed by a **per-channel
+  push secret** (#260):
+
+  ```
+  /api/streams/inbound/<connID>/<secret>            pinned connection
+  /api/streams/inbound/<connID>/<hash>/<secret>     endpoint-scoped store channel
+  ```
+
+  The endpoint sits outside the authenticated `/api` group and the
+  secret is its only credential, because ts-store dials *us* and its
+  push API accepts a URL and nothing else — no header or body field we
+  control reaches us on the frames it sends back. Same reasoning as the
+  secret-gated webhook receiver. A secret authorises exactly one
+  channel; every refusal answers 404, so probing cannot enumerate
+  channels.
+
+  Set **`DASHBOARD_PUBLIC_TLS=true`** where the dashboard is reached
+  over TLS, and the advertised callback uses `wss://` instead of
+  `ws://`. It is an explicit variable because the server usually
+  terminates plain HTTP behind a reverse proxy and cannot infer its own
+  public scheme. Advertising `ws://` while embedding a credential would
+  put that credential on the wire in the clear.
+
+  Secrets rotate on each stream start (upsert keyed on the channel), so
+  the URL is **not** stable across restarts — stale-push cleanup
+  therefore matches the channel path prefix rather than the full URL,
+  which is also what retires pre-#260 secret-less registrations.
 
 ### `frigate`
 
