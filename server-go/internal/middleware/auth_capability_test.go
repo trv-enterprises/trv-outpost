@@ -111,12 +111,19 @@ func TestGetRequiredCapability_Extensions(t *testing.T) {
 		// EdgeLake Terminal — executing a command is a write.
 		{"edgelake execute requires design", "/api/edgelake-terminal/execute", "POST", models.CapabilityDesign},
 
-		// Reads stay viewer-available for now. When these move behind
-		// design (or a per-app grant), update these two lines
-		// deliberately — they are the record of the current policy,
-		// not an accident.
-		{"alert list is viewer-readable", "/api/tsstore-alerts/rules", "GET", ""},
-		{"alert detail is viewer-readable", "/api/tsstore-alerts/rules/abc-123", "GET", ""},
+		// Reads are design-gated too: the extension is reached from
+		// the Design menu, and the rule list names every ts-store
+		// connection and the conditions being watched.
+		{"alert list requires design", "/api/tsstore-alerts/rules", "GET", models.CapabilityDesign},
+		{"alert detail requires design", "/api/tsstore-alerts/rules/abc-123", "GET", models.CapabilityDesign},
+		{"alert probe requires design", "/api/tsstore-alerts/probe", "GET", models.CapabilityDesign},
+
+		// Fired alerts must NOT be swept up by the prefix rule — they
+		// reach the bell through the webhook receiver, which stays on
+		// its own secret-gated public path. A view-only kiosk still
+		// receives alerts; it just cannot browse the rules that made
+		// them.
+		{"secret-gated webhook receiver stays public", "/api/webhooks/tsstore/conn-1/s3cr3t", "POST", ""},
 	}
 
 	for _, tt := range tests {

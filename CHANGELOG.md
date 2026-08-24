@@ -33,6 +33,23 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   mode, and reaching them needed a hand-made API call. Deployments that issue
   view-only credentials (kiosk users, read-only API keys) are the exposed case.
 
+### Changed
+
+- **Reading ts-store alert rules now requires Design**, not View. The rule list
+  names every ts-store connection and the conditions being watched — authoring
+  information rather than dashboard content — and the extension is reached from
+  the Design menu, so Design is the honest floor for seeing it at all.
+
+  Previously the read was deliberately open to any authenticated viewer. This
+  tightens that decision now, and the whole `/api/tsstore-alerts` prefix is
+  covered by a single method-agnostic rule so no future verb can slip through
+  the way `PUT` did.
+
+  **Fired alerts are unaffected.** They reach the notification bell through the
+  webhook receiver and the event stream, both gated separately, so a view-only
+  user (a kiosk, say) still sees the alerts they are meant to see — they just
+  cannot browse the rules that produced them.
+
 ## [0.58.0] — 2026-08-22
 
 ### Added

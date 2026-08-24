@@ -191,22 +191,30 @@ func buildRouteRules() []RouteCapability {
 		// record, its config, its component) is grant-enforced.
 		{PathPrefix: "/api/frigate/", Method: "GET", Public: true},
 
-		// ts-store Alerts extension — read available to any
-		// authenticated viewer; writes (create/edit/delete a rule)
-		// require Design. Matches the phase-2 decision: the
-		// extension lives in Design mode, authoring is a Design
-		// concern.
+		// ts-store Alerts extension — Design for the WHOLE surface,
+		// reads included. The extension is reached from the Design
+		// menu, so Design is the honest floor for seeing it at all:
+		// the rule list names every ts-store connection and the
+		// conditions being watched, which is authoring information
+		// rather than dashboard content.
 		//
-		// One line per VERB, deliberately: getRequiredCapability
-		// matches on an exact method, so an unlisted verb finds no
-		// rule and falls through to Authorize()'s view default.
-		// PUT was added with the in-place edit flow (ts-store#166,
-		// v0.57.0) and its rule was missed — editing a rule was
-		// reachable by a view-only principal until this line landed.
-		// Adding a verb here is part of adding a route.
-		{PathPrefix: "/api/tsstore-alerts", Method: "POST", Required: models.CapabilityDesign, WriteOnly: true},
-		{PathPrefix: "/api/tsstore-alerts", Method: "PUT", Required: models.CapabilityDesign, WriteOnly: true},
-		{PathPrefix: "/api/tsstore-alerts", Method: "DELETE", Required: models.CapabilityDesign, WriteOnly: true},
+		// Method is deliberately empty so this covers every verb —
+		// past and future. getRequiredCapability matches on an exact
+		// method, and the per-verb form this replaces is exactly how
+		// PUT slipped through: it arrived with the in-place edit flow
+		// (ts-store#166, v0.57.0) and nobody added its line, leaving
+		// rule EDITING reachable by a view-only principal. A
+		// prefix-wide rule cannot develop that hole.
+		//
+		// Fired alerts are unaffected: they reach the notification
+		// bell through the webhook receiver and the event stream,
+		// both gated separately, so a view-only user still sees the
+		// alerts they are meant to see. This gates the RULES API.
+		//
+		// Superseded when extensions become apps with their own
+		// grants — this becomes `tsstore:view` and the question stops
+		// being "which menu is it in".
+		{PathPrefix: "/api/tsstore-alerts", Required: models.CapabilityDesign},
 
 		// EdgeLake Terminal extension — sends raw AnyLog commands to
 		// an EdgeLake connection. Had NO rule at all, so it inherited
