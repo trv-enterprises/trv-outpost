@@ -340,22 +340,13 @@ func (a *APIAdapter) Write(ctx context.Context, cmd registry.Command) (*registry
 
 // buildRequest creates an HTTP request
 func (a *APIAdapter) buildRequest(ctx context.Context, query registry.Query) (*http.Request, error) {
-	url := a.config.URL
-	if query.Raw != "" {
-		if strings.HasPrefix(query.Raw, "?") {
-			// Bare query string — append to the base URL, preserving its path.
-			if strings.Contains(a.config.URL, "?") {
-				url = a.config.URL + "&" + strings.TrimPrefix(query.Raw, "?")
-			} else {
-				url = a.config.URL + query.Raw
-			}
-		} else if strings.HasPrefix(query.Raw, "/") {
-			url = strings.TrimSuffix(a.config.URL, "/") + query.Raw
-		} else if strings.HasPrefix(query.Raw, "http://") || strings.HasPrefix(query.Raw, "https://") {
-			url = query.Raw
-		} else {
-			url = strings.TrimSuffix(a.config.URL, "/") + "/" + query.Raw
-		}
+	// #287: resolveAPIURL refuses a raw value that would move the request
+	// to another host. The stored credentials below are attached AFTER the
+	// URL is chosen, so without this check the raw body could aim them
+	// anywhere.
+	url, err := resolveAPIURL(a.config.URL, query.Raw)
+	if err != nil {
+		return nil, err
 	}
 
 	var bodyReader io.Reader
@@ -642,27 +633,13 @@ func (a *APIDataSource) Stream(ctx context.Context, query models.Query) (<-chan 
 
 // buildRequest creates an HTTP request with all configured options
 func (a *APIDataSource) buildRequest(ctx context.Context, query models.Query) (*http.Request, error) {
-	// Use config URL as base, append query.Raw as path if it starts with /
-	url := a.config.URL
-	if query.Raw != "" {
-		if strings.HasPrefix(query.Raw, "?") {
-			// Bare query string — append to the base URL, preserving its path.
-			// Merge if the base already has a query string ("base?a=1" + "?b=2").
-			if strings.Contains(a.config.URL, "?") {
-				url = a.config.URL + "&" + strings.TrimPrefix(query.Raw, "?")
-			} else {
-				url = a.config.URL + query.Raw
-			}
-		} else if strings.HasPrefix(query.Raw, "/") {
-			// Append path to base URL
-			url = strings.TrimSuffix(a.config.URL, "/") + query.Raw
-		} else if strings.HasPrefix(query.Raw, "http://") || strings.HasPrefix(query.Raw, "https://") {
-			// Full URL override
-			url = query.Raw
-		} else {
-			// Treat as path segment
-			url = strings.TrimSuffix(a.config.URL, "/") + "/" + query.Raw
-		}
+	// #287: resolveAPIURL refuses a raw value that would move the request
+	// to another host. The stored credentials below are attached AFTER the
+	// URL is chosen, so without this check the raw body could aim them
+	// anywhere — including at an attacker-controlled listener.
+	url, err := resolveAPIURL(a.config.URL, query.Raw)
+	if err != nil {
+		return nil, err
 	}
 
 	// Create request body
