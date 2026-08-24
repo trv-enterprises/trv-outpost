@@ -6,7 +6,7 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.58.1] — 2026-08-24
 
 ### Security
 
