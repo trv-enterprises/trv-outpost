@@ -75,17 +75,27 @@ func TestComposeStreamKeyShape(t *testing.T) {
 	}
 }
 
-// TestInboundURLShapes locks the wire contract: pinned channels keep the
-// exact pre-#248 single-segment URL (zero migration for existing ts-store
-// push registrations), and per-store channels get a two-segment path.
+// TestInboundURLShapes locks the wire contract: the channel path is the
+// stream key — one segment for a pinned channel, two for a per-store
+// channel (#248) — followed by the per-channel push secret (#260).
+//
+// NOTE: #260 deliberately BROKE the "zero migration for existing ts-store
+// push registrations" property this test previously asserted. Every
+// callback now carries a credential, so a pre-#260 registration dialling a
+// secret-less URL is refused. Existing registrations are replaced on the
+// owning stream's next start, and stale-push cleanup matches on the channel
+// path prefix so the orphaned one is removed rather than left dialling.
 func TestInboundURLShapes(t *testing.T) {
-	if got := GetInboundURL("host:3001", "conn-123"); got != "ws://host:3001/api/streams/inbound/conn-123" {
+	if got := GetInboundURL("host:3001", "conn-123", "SEC", false); got != "ws://host:3001/api/streams/inbound/conn-123/SEC" {
 		t.Fatalf("pinned URL changed: %s", got)
 	}
 	key := composeStreamKey("conn-123", "home-env", nil)
-	got := GetInboundURL("host:3001", key)
+	got := GetInboundURL("host:3001", key, "SEC", false)
 	if !strings.HasPrefix(got, "ws://host:3001/api/streams/inbound/conn-123/") {
 		t.Fatalf("store-channel URL = %s, want two-segment path under the connection id", got)
+	}
+	if !strings.HasSuffix(got, "/SEC") {
+		t.Fatalf("store-channel URL = %s, want the secret as the final segment", got)
 	}
 }
 
