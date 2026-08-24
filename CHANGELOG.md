@@ -10,6 +10,27 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- **A view-only user could redirect an `api` connection at any host and leak
+  its credentials** (#287). The raw query body could replace the request URL
+  outright, and the connection's stored headers and bearer / basic / api-key
+  credentials were attached *after* that choice — with nothing re-checking that
+  the host still matched the configured one. Order was the whole bug: the
+  caller picked the destination, then the server attached the secret.
+
+  A raw value may still supply a path, a query string, or an absolute URL **on
+  the connection's own host** — every form the query guidance documents. An
+  absolute URL pointing anywhere else is refused. Both copies of the logic (the
+  legacy datasource and the registry adapter) now share one implementation.
+
+  Reproduced before and after: a `capabilities: ["view"]` user aimed a
+  connection at a listener and received its bearer token; against the fix the
+  same request is refused and the listener sees nothing. The refusal names no
+  host, so it cannot be used to probe what a connection is configured for.
+
+  This also closes an unrestricted SSRF from the same endpoint — cloud metadata
+  endpoints, loopback services and internal hosts were all reachable from the
+  server's network position.
+
 - **The ts-store inbound push endpoint was unauthenticated** (#260). Anything
   that could reach the server and guess a channel URL could open a WebSocket
   and push arbitrary frames into a live stream — or, because registering a

@@ -14,9 +14,17 @@ import (
 
 // TestAPIBuildRequestURL covers how query.Raw combines with the connection's
 // base URL: a bare query string (?k=v) appends to the base preserving its path;
-// a leading-slash path replaces the path; an absolute URL overrides; anything
-// else is a path segment. The bare-query-string case is the regression that
-// 404'd ("?limit=1000" was treated as a path segment → base + "/?limit=1000").
+// a leading-slash path replaces the path; an absolute URL is allowed only on
+// the SAME host; anything else is a path segment. The bare-query-string case is
+// the regression that 404'd ("?limit=1000" was treated as a path segment →
+// base + "/?limit=1000").
+//
+// NOTE: this test previously asserted `{"absolute url overrides",
+// "http://host:21082/data", "http://elsewhere/x", "http://elsewhere/x"}` —
+// i.e. it codified #287 as intended behaviour. A cross-host override let a
+// caller aim the connection's stored credentials at any host they chose.
+// The case is inverted below rather than deleted, so the contract change is
+// visible in the diff instead of silently disappearing.
 func TestAPIBuildRequestURL(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -28,7 +36,7 @@ func TestAPIBuildRequestURL(t *testing.T) {
 		{"bare query string merges with existing", "http://host:21082/data?a=1", "?limit=1000", "http://host:21082/data?a=1&limit=1000"},
 		{"empty raw uses base verbatim", "http://host:21082/data", "", "http://host:21082/data"},
 		{"leading slash appends to base path", "http://host:21082/data", "/other", "http://host:21082/data/other"},
-		{"absolute url overrides", "http://host:21082/data", "http://elsewhere/x", "http://elsewhere/x"},
+		{"absolute url on the same host is allowed", "http://host:21082/data", "http://host:21082/x", "http://host:21082/x"},
 		{"path segment appends", "http://host:21082/data", "more", "http://host:21082/data/more"},
 	}
 
@@ -43,6 +51,26 @@ func TestAPIBuildRequestURL(t *testing.T) {
 				t.Errorf("URL = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestAPIBuildRequestRefusesCrossHost is the #287 regression at the
+// buildRequest layer: resolveAPIURL has its own unit tests, but this asserts
+// the refusal actually reaches the request builder — that no caller of
+// buildRequest can end up with a request aimed off-host, credentials attached.
+func TestAPIBuildRequestRefusesCrossHost(t *testing.T) {
+	a := &APIDataSource{config: &models.APIConfig{
+		URL:             "http://host:21082/data",
+		Method:          "GET",
+		AuthType:        "bearer",
+		AuthCredentials: map[string]string{"token": "SECRET"},
+	}}
+	req, err := a.buildRequest(context.Background(), models.Query{Raw: "http://elsewhere/steal"})
+	if err == nil {
+		t.Fatalf("cross-host raw was accepted; request aimed at %s", req.URL)
+	}
+	if req != nil {
+		t.Errorf("expected no request on refusal, got one for %s", req.URL)
 	}
 }
 
