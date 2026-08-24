@@ -6,6 +6,33 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Security
+
+- **Two extension endpoints were reachable by a read-only user.** Route
+  capability rules match on an exact HTTP method, so a verb with no rule falls
+  through to the `view` default. Two were missing:
+
+  - `PUT /api/tsstore-alerts/rules/:id` — added with the in-place alert edit
+    flow in v0.57.0 without its matching rule, so **editing an alert rule
+    required only `view`**. Create and delete were correctly gated the whole
+    time; only the edit verb was exposed.
+  - `POST /api/edgelake-terminal/execute` — had no rule at all, so a
+    **read-only user could run arbitrary AnyLog commands** against any
+    EdgeLake connection.
+
+  Both now require `design`, matching the Design-mode pages they are reached
+  from. Verified against a running server as a `capabilities: ["view"]`
+  principal: both moved from 400 (request reached the handler) to 403, with no
+  change for `design` users. A new `TestGetRequiredCapability_Extensions` locks
+  every extension verb, including the reads, so the next added route cannot
+  silently inherit the `view` default.
+
+  No evidence either was exercised — the UI only offers both behind Design
+  mode, and reaching them needed a hand-made API call. Deployments that issue
+  view-only credentials (kiosk users, read-only API keys) are the exposed case.
+
 ## [0.58.0] — 2026-08-22
 
 ### Added

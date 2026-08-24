@@ -48,11 +48,11 @@ const (
 
 // RouteCapability defines which capability is required for a route pattern
 type RouteCapability struct {
-	PathPrefix string             // Path prefix to match (e.g., "/api/dashboards")
-	Method     string             // HTTP method (empty = all methods)
-	Required   models.Capability  // Required capability
-	WriteOnly  bool               // If true, only applies to write operations (POST, PUT, DELETE)
-	Exact      bool               // If true, match `path == PathPrefix` (with optional trailing slash) instead of prefix. Use to gate a collection root (e.g. GET /api/users) without affecting nested paths (GET /api/users/:id).
+	PathPrefix string            // Path prefix to match (e.g., "/api/dashboards")
+	Method     string            // HTTP method (empty = all methods)
+	Required   models.Capability // Required capability
+	WriteOnly  bool              // If true, only applies to write operations (POST, PUT, DELETE)
+	Exact      bool              // If true, match `path == PathPrefix` (with optional trailing slash) instead of prefix. Use to gate a collection root (e.g. GET /api/users) without affecting nested paths (GET /api/users/:id).
 	// PathPattern is an optional compiled regex evaluated *in addition
 	// to* PathPrefix's prefix check. When set, the path must match
 	// PathPrefix (prefix) AND PathPattern (anchored). Use this for
@@ -192,12 +192,28 @@ func buildRouteRules() []RouteCapability {
 		{PathPrefix: "/api/frigate/", Method: "GET", Public: true},
 
 		// ts-store Alerts extension — read available to any
-		// authenticated viewer; writes (create/delete a rule)
+		// authenticated viewer; writes (create/edit/delete a rule)
 		// require Design. Matches the phase-2 decision: the
 		// extension lives in Design mode, authoring is a Design
 		// concern.
+		//
+		// One line per VERB, deliberately: getRequiredCapability
+		// matches on an exact method, so an unlisted verb finds no
+		// rule and falls through to Authorize()'s view default.
+		// PUT was added with the in-place edit flow (ts-store#166,
+		// v0.57.0) and its rule was missed — editing a rule was
+		// reachable by a view-only principal until this line landed.
+		// Adding a verb here is part of adding a route.
 		{PathPrefix: "/api/tsstore-alerts", Method: "POST", Required: models.CapabilityDesign, WriteOnly: true},
+		{PathPrefix: "/api/tsstore-alerts", Method: "PUT", Required: models.CapabilityDesign, WriteOnly: true},
 		{PathPrefix: "/api/tsstore-alerts", Method: "DELETE", Required: models.CapabilityDesign, WriteOnly: true},
+
+		// EdgeLake Terminal extension — sends raw AnyLog commands to
+		// an EdgeLake connection. Had NO rule at all, so it inherited
+		// the view default: a read-only principal could execute
+		// arbitrary commands against any EdgeLake host. Design-gated
+		// like the page it is reached from.
+		{PathPrefix: "/api/edgelake-terminal", Method: "POST", Required: models.CapabilityDesign, WriteOnly: true},
 
 		// Secret-gated tsstore webhook receiver — the URL embeds a
 		// per-connection random secret that the dashboard issues at
@@ -343,7 +359,7 @@ func buildRouteRules() []RouteCapability {
 //  1. `Authorization: Bearer <token>` — dispatched by token shape:
 //     a) `trve_…` → API key (validated by APIKeyService).
 //     b) anything else → Clerk JWT (validated by IdentityVerifier
-//        when configured; otherwise rejected as 401).
+//     when configured; otherwise rejected as 401).
 //  2. `?token=<token>` query param — fallback for EventSource, which
 //     can't set custom headers. Same shape-based dispatch as the
 //     Bearer header: `trve_…` → API key, anything else → JWT.
@@ -710,4 +726,3 @@ func GetUser(c *gin.Context) *models.User {
 	}
 	return user
 }
-
