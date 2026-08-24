@@ -298,6 +298,13 @@ are NOT affected by this toggle.
 | DELETE | `/api/tsstore-alerts/rules/:alert_id`          | Delete the alert and ALL its rules                    |
 | GET    | `/api/tsstore-alerts/probe`                    | Pre-submit auth probe used by the rule-create wizard  |
 
+**Capability:** the whole prefix requires `design` — reads included, since
+the rule list names every ts-store connection and the conditions being
+watched. Two gates apply in order: the extension toggle above, then the
+capability. Fired alerts are unaffected; they reach the notification bell
+via the webhook receiver and the event stream, so a view-only user still
+sees its alerts without being able to browse the rules behind them.
+
 ### EdgeLake Terminal — `extensions.edgelake_terminal.enabled`
 
 Powers the [EdgeLake Terminal page](../../udoc/docs/edgelake-terminal.md)
@@ -308,6 +315,10 @@ only — chart queries against EdgeLake connections (`POST
 schema-discovery endpoints under `/api/connections/:id/edgelake/*`
 are NOT affected by this toggle. To disable EdgeLake entirely, use
 the `enabled_types` admin setting instead.
+
+**Capability:** `POST /api/edgelake-terminal/execute` requires `design`.
+It sends raw AnyLog commands to a connection, so it is an authoring
+operation regardless of whether a given command reads or writes.
 
 | Method | Endpoint                              | Description                                                  |
 | ------ | ------------------------------------- | ------------------------------------------------------------ |

@@ -48,11 +48,11 @@ const (
 
 // RouteCapability defines which capability is required for a route pattern
 type RouteCapability struct {
-	PathPrefix string             // Path prefix to match (e.g., "/api/dashboards")
-	Method     string             // HTTP method (empty = all methods)
-	Required   models.Capability  // Required capability
-	WriteOnly  bool               // If true, only applies to write operations (POST, PUT, DELETE)
-	Exact      bool               // If true, match `path == PathPrefix` (with optional trailing slash) instead of prefix. Use to gate a collection root (e.g. GET /api/users) without affecting nested paths (GET /api/users/:id).
+	PathPrefix string            // Path prefix to match (e.g., "/api/dashboards")
+	Method     string            // HTTP method (empty = all methods)
+	Required   models.Capability // Required capability
+	WriteOnly  bool              // If true, only applies to write operations (POST, PUT, DELETE)
+	Exact      bool              // If true, match `path == PathPrefix` (with optional trailing slash) instead of prefix. Use to gate a collection root (e.g. GET /api/users) without affecting nested paths (GET /api/users/:id).
 	// PathPattern is an optional compiled regex evaluated *in addition
 	// to* PathPrefix's prefix check. When set, the path must match
 	// PathPrefix (prefix) AND PathPattern (anchored). Use this for
@@ -191,13 +191,37 @@ func buildRouteRules() []RouteCapability {
 		// record, its config, its component) is grant-enforced.
 		{PathPrefix: "/api/frigate/", Method: "GET", Public: true},
 
-		// ts-store Alerts extension — read available to any
-		// authenticated viewer; writes (create/delete a rule)
-		// require Design. Matches the phase-2 decision: the
-		// extension lives in Design mode, authoring is a Design
-		// concern.
-		{PathPrefix: "/api/tsstore-alerts", Method: "POST", Required: models.CapabilityDesign, WriteOnly: true},
-		{PathPrefix: "/api/tsstore-alerts", Method: "DELETE", Required: models.CapabilityDesign, WriteOnly: true},
+		// ts-store Alerts extension — Design for the WHOLE surface,
+		// reads included. The extension is reached from the Design
+		// menu, so Design is the honest floor for seeing it at all:
+		// the rule list names every ts-store connection and the
+		// conditions being watched, which is authoring information
+		// rather than dashboard content.
+		//
+		// Method is deliberately empty so this covers every verb —
+		// past and future. getRequiredCapability matches on an exact
+		// method, and the per-verb form this replaces is exactly how
+		// PUT slipped through: it arrived with the in-place edit flow
+		// (ts-store#166, v0.57.0) and nobody added its line, leaving
+		// rule EDITING reachable by a view-only principal. A
+		// prefix-wide rule cannot develop that hole.
+		//
+		// Fired alerts are unaffected: they reach the notification
+		// bell through the webhook receiver and the event stream,
+		// both gated separately, so a view-only user still sees the
+		// alerts they are meant to see. This gates the RULES API.
+		//
+		// Superseded when extensions become apps with their own
+		// grants — this becomes `tsstore:view` and the question stops
+		// being "which menu is it in".
+		{PathPrefix: "/api/tsstore-alerts", Required: models.CapabilityDesign},
+
+		// EdgeLake Terminal extension — sends raw AnyLog commands to
+		// an EdgeLake connection. Had NO rule at all, so it inherited
+		// the view default: a read-only principal could execute
+		// arbitrary commands against any EdgeLake host. Design-gated
+		// like the page it is reached from.
+		{PathPrefix: "/api/edgelake-terminal", Method: "POST", Required: models.CapabilityDesign, WriteOnly: true},
 
 		// Secret-gated tsstore webhook receiver — the URL embeds a
 		// per-connection random secret that the dashboard issues at
@@ -343,7 +367,7 @@ func buildRouteRules() []RouteCapability {
 //  1. `Authorization: Bearer <token>` — dispatched by token shape:
 //     a) `trve_…` → API key (validated by APIKeyService).
 //     b) anything else → Clerk JWT (validated by IdentityVerifier
-//        when configured; otherwise rejected as 401).
+//     when configured; otherwise rejected as 401).
 //  2. `?token=<token>` query param — fallback for EventSource, which
 //     can't set custom headers. Same shape-based dispatch as the
 //     Bearer header: `trve_…` → API key, anything else → JWT.
@@ -710,4 +734,3 @@ func GetUser(c *gin.Context) *models.User {
 	}
 	return user
 }
-

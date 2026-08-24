@@ -81,3 +81,57 @@ func TestGetRequiredCapability_NamespaceUsers(t *testing.T) {
 		})
 	}
 }
+
+// TestGetRequiredCapability_Extensions locks the authz surface of the
+// Design-mode extensions. Both gaps this covers were live on main:
+//
+//   - PUT /api/tsstore-alerts/rules/:id — added with the in-place edit
+//     flow (v0.57.0) without a matching rule, so it fell through to the
+//     view default and a read-only principal could edit a rule.
+//   - POST /api/edgelake-terminal/execute — never had a rule, so a
+//     read-only principal could run arbitrary AnyLog commands.
+//
+// getRequiredCapability matches on an EXACT method, so every write verb
+// needs its own line. That is the failure mode being locked here: adding
+// a route without adding its verb silently downgrades it to view.
+func TestGetRequiredCapability_Extensions(t *testing.T) {
+	m := &AuthMiddleware{rules: buildRouteRules()}
+
+	tests := []struct {
+		name   string
+		path   string
+		method string
+		want   models.Capability
+	}{
+		// ts-store Alerts — every write verb is design-gated.
+		{"alert create requires design", "/api/tsstore-alerts/rules", "POST", models.CapabilityDesign},
+		{"alert edit requires design", "/api/tsstore-alerts/rules/abc-123", "PUT", models.CapabilityDesign},
+		{"alert delete requires design", "/api/tsstore-alerts/rules/abc-123", "DELETE", models.CapabilityDesign},
+
+		// EdgeLake Terminal — executing a command is a write.
+		{"edgelake execute requires design", "/api/edgelake-terminal/execute", "POST", models.CapabilityDesign},
+
+		// Reads are design-gated too: the extension is reached from
+		// the Design menu, and the rule list names every ts-store
+		// connection and the conditions being watched.
+		{"alert list requires design", "/api/tsstore-alerts/rules", "GET", models.CapabilityDesign},
+		{"alert detail requires design", "/api/tsstore-alerts/rules/abc-123", "GET", models.CapabilityDesign},
+		{"alert probe requires design", "/api/tsstore-alerts/probe", "GET", models.CapabilityDesign},
+
+		// Fired alerts must NOT be swept up by the prefix rule — they
+		// reach the bell through the webhook receiver, which stays on
+		// its own secret-gated public path. A view-only kiosk still
+		// receives alerts; it just cannot browse the rules that made
+		// them.
+		{"secret-gated webhook receiver stays public", "/api/webhooks/tsstore/conn-1/s3cr3t", "POST", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := m.getRequiredCapability(tt.path, tt.method)
+			if got != tt.want {
+				t.Errorf("getRequiredCapability(%q, %q) = %q, want %q", tt.path, tt.method, got, tt.want)
+			}
+		})
+	}
+}
