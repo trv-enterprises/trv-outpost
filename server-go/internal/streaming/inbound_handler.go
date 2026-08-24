@@ -5,9 +5,11 @@
 package streaming
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/gin-gonic/gin"
@@ -25,7 +27,15 @@ import (
 // what stops two stores' pushers from evicting each other's socket — the
 // one-socket-per-key rule below is per CHANNEL, not per connection.
 type InboundHandler struct {
-	upgrader    websocket.Upgrader
+	upgrader websocket.Upgrader
+	// authorize verifies the URL-embedded secret against the stream key
+	// it is dialling (#260). Nil means UNAUTHENTICATED — the pre-#260
+	// behaviour — which is only reachable when the server was built
+	// without wiring SetAuthorizer. main.go always wires it; the nil
+	// case exists so unit tests can exercise the socket plumbing
+	// without a database. Guarded explicitly at the accept path so a
+	// missing wiring fails CLOSED rather than silently open.
+	authorize   InboundAuthorizer
 	connections map[string]*inboundConnection   // keyed by stream key
 	listeners   map[string][]chan models.Record // listeners per stream key
 	mu          sync.RWMutex
@@ -52,6 +62,63 @@ var (
 	inboundHandlerOnce     sync.Once
 )
 
+// InboundSecretProvider mints (or returns the current) per-channel push
+// secret for streamKey, persisting it so the accept path can verify it.
+// connectionID is denormalised onto the record for revoke-by-connection.
+//
+// A package-level hook rather than a field on TSStoreStream: streams are
+// constructed in several places and none of them has repository access,
+// while the wiring is a single boot-time concern. Mirrors how the
+// InboundHandler singleton takes its authorizer.
+type InboundSecretProvider func(ctx context.Context, connectionID, streamKey string) (string, error)
+
+var (
+	inboundSecretProvider InboundSecretProvider
+	inboundSecretMu       sync.RWMutex
+	// inboundSecureCallback reports whether the advertised callback URL
+	// should use wss://. Set at boot from deployment config (#260).
+	inboundSecureCallback bool
+)
+
+// SetInboundSecretProvider wires secret minting. Called once at boot from
+// main.go. Without it, push registration fails rather than advertising an
+// unauthenticated callback.
+func SetInboundSecretProvider(fn InboundSecretProvider) {
+	inboundSecretMu.Lock()
+	defer inboundSecretMu.Unlock()
+	inboundSecretProvider = fn
+}
+
+// SetInboundCallbackSecure declares whether the dashboard is reached over
+// TLS, which decides ws:// vs wss:// in the advertised callback (#260).
+func SetInboundCallbackSecure(secure bool) {
+	inboundSecretMu.Lock()
+	defer inboundSecretMu.Unlock()
+	inboundSecureCallback = secure
+}
+
+func getInboundSecretProvider() (InboundSecretProvider, bool) {
+	inboundSecretMu.RLock()
+	defer inboundSecretMu.RUnlock()
+	return inboundSecretProvider, inboundSecureCallback
+}
+
+// InboundAuthorizer reports whether a URL-embedded secret authorises
+// pushing to streamKey (#260). Implementations return false for any
+// failure — unknown secret, wrong channel, lookup error — so the accept
+// path cannot distinguish them and the response never reveals which
+// channels exist.
+type InboundAuthorizer func(ctx context.Context, streamKey, secret string) bool
+
+// SetAuthorizer wires the secret check onto the singleton. Called once
+// from main.go at boot, before any route is served. Without it the
+// accept path refuses every connection (fail closed).
+func (h *InboundHandler) SetAuthorizer(fn InboundAuthorizer) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.authorize = fn
+}
+
 // GetInboundHandler returns the global inbound handler instance
 func GetInboundHandler() *InboundHandler {
 	inboundHandlerOnce.Do(func() {
@@ -68,26 +135,67 @@ func GetInboundHandler() *InboundHandler {
 	return inboundHandlerInstance
 }
 
-// HandleInboundWebSocket handles incoming WebSocket connections from ts-store
-// Routes: GET /api/streams/inbound/:connectionId            (pinned channel)
+// HandleInboundWebSocket handles incoming WebSocket connections from ts-store.
 //
-//	GET /api/streams/inbound/:connectionId/:channel    (per-store channel, #248)
+// Route: GET /api/streams/inbound/*path, where path is
 //
-// The path IS the stream key — a pinned connection's pusher dials the bare
-// connection id exactly as before #248; a per-component store channel's
-// pusher dials connID/<hash>.
+//	<connID>/<secret>            pinned channel
+//	<connID>/<hash>/<secret>     per-component store channel (#248)
+//
+// The leading segments ARE the stream key; the trailing one is the
+// per-channel push secret (#260). This endpoint is deliberately outside the
+// authenticated /api group — ts-store dials US, and its push API accepts
+// only a URL, so the path is the sole place a credential can ride.
 //
 // Deliberately excluded from swagger: this is a machine-to-machine
 // WebSocket endpoint (ts-store push producers dial in), not a REST API
 // surface for interactive clients.
 func (h *InboundHandler) HandleInboundWebSocket(c *gin.Context) {
-	streamKey := c.Param("connectionId")
-	if streamKey == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "connectionId is required"})
+	// The route is a single wildcard (see main.go): gin cannot hold two
+	// different param names at the same position, and the two channel
+	// shapes differ in length. Split it here — the LAST segment is the
+	// secret, everything before it is the stream key:
+	//
+	//	<connID>/<secret>            pinned channel
+	//	<connID>/<hash>/<secret>     per-component store channel (#248)
+	//
+	// A bare <connID> with no secret is a pre-#260 pusher. It is refused
+	// like any other unauthenticated dial; the owning stream re-registers
+	// with a secret-bearing URL on its next start.
+	rest := strings.Trim(c.Param("path"), "/")
+	parts := strings.Split(rest, "/")
+	if rest == "" || len(parts) < 2 {
+		log.Printf("[InboundHandler] refused inbound connection for %q from %s (no secret segment)", rest, c.Request.RemoteAddr)
+		c.Status(http.StatusNotFound)
 		return
 	}
-	if channel := c.Param("channel"); channel != "" {
-		streamKey += "/" + channel
+	secret := parts[len(parts)-1]
+	streamKey := strings.Join(parts[:len(parts)-1], "/")
+
+	// #260: verify the secret BEFORE the upgrade, so an unauthorised
+	// dialer never gets a WebSocket and cannot evict the live socket for
+	// this channel — the registration below closes any existing connection
+	// for the key, so without this check that alone is a denial-of-service
+	// primitive against a running stream.
+	//
+	// Every failure answers 404, matching the secret-gated webhook
+	// receiver: a caller probing for channels learns nothing from the
+	// response about which ones exist.
+	h.mu.RLock()
+	authorize := h.authorize
+	h.mu.RUnlock()
+	if authorize == nil {
+		// Fail CLOSED. Reaching here means SetAuthorizer was never
+		// wired, which is a deployment bug, not a reason to accept
+		// anonymous pushes.
+		log.Printf("[InboundHandler] refusing %s — no authorizer wired", streamKey)
+		c.Status(http.StatusNotFound)
+		return
+	}
+	if secret == "" || !authorize(c.Request.Context(), streamKey, secret) {
+		log.Printf("[InboundHandler] refused inbound connection for %s from %s (bad or missing secret)", streamKey, c.Request.RemoteAddr)
+		c.Status(http.StatusNotFound)
+		return
 	}
 
 	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -268,9 +376,34 @@ func (h *InboundHandler) Unsubscribe(streamKey string, ch chan models.Record) {
 // streamKey is the channel identity and becomes the URL path verbatim — one
 // segment for a pinned channel (the bare connection id, unchanged pre-#248
 // shape), two segments ("<connID>/<hash>") for a per-component store
-// channel. The key is a pure config hash, so this URL is stable across
-// restarts — ts-store persists it, and stale-connection cleanup matches on
-// it.
-func GetInboundURL(dashboardHost string, streamKey string) string {
-	return "ws://" + dashboardHost + "/api/streams/inbound/" + streamKey
+// channel.
+//
+// secret is the per-channel credential (#260) and is appended as the FINAL
+// path segment, because ts-store's push API takes only a URL — no header or
+// body field we control reaches us on the frames it sends back.
+//
+// Scheme follows the deployment (#260): wss:// behind TLS, ws:// otherwise.
+// Advertising a plaintext callback while shipping a credential in the path
+// would put the credential on the wire in the clear, which is why the two
+// halves of #260 had to land together.
+//
+// NOTE: this URL is no longer stable across secret rotation. ts-store
+// persists the callback and stale-connection cleanup matches on it, so
+// rotating a secret orphans the old push registration — cleanupStale-
+// PushConnections handles that by matching the channel prefix rather than
+// the full URL.
+func GetInboundURL(dashboardHost string, streamKey string, secret string, secure bool) string {
+	scheme := "ws://"
+	if secure {
+		scheme = "wss://"
+	}
+	return scheme + dashboardHost + "/api/streams/inbound/" + streamKey + "/" + secret
+}
+
+// inboundPathPrefix returns the callback path up to (but excluding) the
+// secret segment. Stale-push cleanup matches on this so rotating a
+// channel's secret still recognises — and removes — the registration made
+// with the previous one.
+func inboundPathPrefix(dashboardHost string, streamKey string) string {
+	return dashboardHost + "/api/streams/inbound/" + streamKey + "/"
 }

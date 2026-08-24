@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -176,17 +177,31 @@ func (ts *TSStoreStream) cleanupStalePushConnections(ctx context.Context, inboun
 	// THIS store (the pre-unpin identity). Compare by URL path so the match
 	// survives a dashboard host/IP change.
 	legacyPath := "/api/streams/inbound/" + ts.connectionID
+	// #260: the callback now ends in a per-channel secret, so an exact URL
+	// compare would stop recognising our OWN previous registration the
+	// moment a secret rotates — leaving an orphan pusher dialling a dead
+	// credential forever. Match on the channel path instead, with or
+	// without a trailing secret segment, which also cleans up registrations
+	// made by pre-#260 builds (no secret at all).
+	ownPath := "/api/streams/inbound/" + ts.streamKey
+	matchesChannel := func(p, channelPath string) bool {
+		return p == channelPath || strings.HasPrefix(p, channelPath+"/")
+	}
 	isStale := func(rawURL string) bool {
 		if rawURL == inboundURL {
 			return true
 		}
+		u, err := url.Parse(rawURL)
+		if err != nil {
+			return false
+		}
+		if matchesChannel(u.Path, ownPath) {
+			return true
+		}
 		if ts.streamKey == ts.connectionID {
-			return false // pinned channel: exact match only, same as always
+			return false // pinned channel: own path only, same as always
 		}
-		if u, err := url.Parse(rawURL); err == nil {
-			return u.Path == legacyPath
-		}
-		return false
+		return matchesChannel(u.Path, legacyPath)
 	}
 
 	log.Printf("[TSStoreStream %s] Found %d existing push connections, looking for URL: %s", ts.streamKey, len(connections), inboundURL)
@@ -218,7 +233,20 @@ func (ts *TSStoreStream) createPushConnection(ctx context.Context) error {
 	// stores' pushers can never share (and evict each other from) one
 	// inbound socket.
 	dashboardHost := ts.getDashboardHost()
-	inboundURL := GetInboundURL(dashboardHost, ts.streamKey)
+
+	// #260: mint (or fetch) this channel's push secret and embed it in the
+	// callback. Fail the registration rather than fall back to an
+	// unauthenticated URL — advertising a credential-free callback is the
+	// hole this closes, so degrading to it on error would defeat the fix.
+	provider, secure := getInboundSecretProvider()
+	if provider == nil {
+		return fmt.Errorf("inbound push secret provider not wired — refusing to advertise an unauthenticated callback")
+	}
+	secret, err := provider(ctx, ts.connectionID, ts.streamKey)
+	if err != nil {
+		return fmt.Errorf("mint inbound push secret: %w", err)
+	}
+	inboundURL := GetInboundURL(dashboardHost, ts.streamKey, secret, secure)
 
 	// Clean up any stale push connections that target our inbound URL
 	// This ensures ts-store doesn't resume from a persisted cursor

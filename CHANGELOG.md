@@ -10,6 +10,34 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- **The ts-store inbound push endpoint was unauthenticated** (#260). Anything
+  that could reach the server and guess a channel URL could open a WebSocket
+  and push arbitrary frames into a live stream — or, because registering a
+  channel closes any socket already on it, silently evict the real pusher.
+
+  The callback URL now carries a **per-channel secret** as its final path
+  segment, verified before the upgrade. A secret is bound to one channel, so a
+  leaked one cannot be replayed against another. This mirrors the secret-gated
+  webhook receiver, and for the same reason: ts-store dials *us*, and its push
+  API accepts only a URL — there is no header or body field we control on the
+  frames it sends back.
+
+  **The advertised callback also follows the deployment's scheme.** It was
+  hardcoded `ws://`, so a TLS deployment advertised a plaintext callback. Set
+  `DASHBOARD_PUBLIC_TLS=true` where the dashboard is reached over TLS and the
+  callback is advertised as `wss://`. The two halves shipped together
+  deliberately — embedding a credential in a URL that is advertised as
+  plaintext would put the credential on the wire in the clear.
+
+  Every refusal answers 404, so probing cannot enumerate channels, and a
+  missing authorizer fails **closed** rather than reverting to anonymous
+  accepts.
+
+  **Existing ts-store push registrations are replaced automatically** on the
+  owning stream's next start; stale-push cleanup now matches the channel path
+  rather than the exact URL, so the pre-#260 registration is removed rather
+  than left dialling a URL that no longer authenticates. No manual step.
+
 - **Two extension endpoints were reachable by a read-only user.** Route
   capability rules match on an exact HTTP method, so a verb with no rule falls
   through to the `view` default. Two were missing:

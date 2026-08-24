@@ -999,7 +999,7 @@ func (s *TSStoreAlertRulesService) CreateAlert(ctx context.Context, req *CreateA
 			// the dashboard's own bell receiver. Stale secrets after
 			// downstream errors are harmless (receiver checks
 			// connection binding).
-			secret, err := mintWebhookSecret()
+			secret, err := MintURLSecret()
 			if err != nil {
 				return nil, fmt.Errorf("mint secret: %w", err)
 			}
@@ -1352,10 +1352,14 @@ func decodeDashboardVars(externalRef string) map[string]string {
 	return parsed.DashboardVars
 }
 
-// mintWebhookSecret returns a high-entropy URL-safe token suitable
-// for embedding directly in a path segment. 32 bytes random → 43
-// chars base64url (no padding).
-func mintWebhookSecret() (string, error) {
+// MintURLSecret returns a high-entropy URL-safe token suitable for
+// embedding directly in a path segment. 32 bytes random → 43 chars
+// base64url (no padding).
+//
+// Shared by both URL-embedded credentials: the tsstore webhook receiver
+// and the ts-store inbound push callback (#260). One implementation so
+// the entropy and encoding cannot drift apart between them.
+func MintURLSecret() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", err

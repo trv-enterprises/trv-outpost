@@ -161,6 +161,7 @@ func main() {
 	apiKeyRepo := repository.NewAPIKeyRepository(mongodb.Database)
 	alertRepo := repository.NewAlertRepository(mongodb.Database)
 	webhookSecretRepo := repository.NewWebhookSecretRepository(mongodb.Database)
+	pushSecretRepo := repository.NewPushSecretRepository(mongodb.Database)
 	snippetRepo := repository.NewSnippetRepository(mongodb.Database)
 	chatToolResultRepo := repository.NewChatToolResultRepository(mongodb.Database)
 	chatUsageRepo := repository.NewChatUsageRepository(mongodb.Database)
@@ -228,6 +229,9 @@ func main() {
 	// Create alert indexes (incl. TTL for retention sweep)
 	if err := webhookSecretRepo.CreateIndexes(ctx); err != nil {
 		log.Printf("⚠ Failed to create webhook_secrets indexes: %v", err)
+	}
+	if err := pushSecretRepo.CreateIndexes(ctx); err != nil {
+		log.Printf("⚠ Failed to create push_secrets indexes: %v", err)
 	}
 	if err := alertRepo.CreateIndexes(ctx); err != nil {
 		log.Printf("Warning: Failed to create alert indexes: %v", err)
@@ -382,7 +386,55 @@ func main() {
 	// DASHBOARD_HOST autodiscovery fallback can build the inbound
 	// callback URL with the right port.
 	streaming.SetServerPort(cfg.Server.Port)
-	fmt.Println("✓ InboundHandler initialized for ts-store push connections")
+
+	// #260: the inbound push route carries a per-channel secret in its URL
+	// instead of a user session, because ts-store dials US and its push API
+	// accepts only a URL. Wire both halves — minting (outbound, when we
+	// register the callback) and verification (inbound, at accept).
+	// Without these the handler fails closed and push registration refuses
+	// to advertise a callback, which is the intended posture: better a
+	// broken stream than an anonymous write channel.
+	inboundHandler.SetAuthorizer(func(ctx context.Context, streamKey, secret string) bool {
+		ps, err := pushSecretRepo.FindBySecret(ctx, secret)
+		if err != nil || ps == nil {
+			return false // unknown secret, or lookup failed — refuse either way
+		}
+		if ps.StreamKey != streamKey {
+			// Valid secret bound to a DIFFERENT channel. Refuse: a leaked
+			// secret must not become a key to every channel.
+			return false
+		}
+		go func() {
+			// Audit only — never block the accept path on it.
+			if err := pushSecretRepo.TouchLastUsed(context.Background(), ps.ID); err != nil {
+				log.Printf("push secret: TouchLastUsed failed for %s: %v", ps.ID, err)
+			}
+		}()
+		return true
+	})
+	streaming.SetInboundSecretProvider(func(ctx context.Context, connectionID, streamKey string) (string, error) {
+		secret, err := service.MintURLSecret()
+		if err != nil {
+			return "", err
+		}
+		// Upsert keyed on stream key: a channel has exactly one live
+		// secret, so restarts rotate rather than accumulate credentials.
+		ps := &models.PushSecret{
+			Secret:       secret,
+			StreamKey:    streamKey,
+			ConnectionID: connectionID,
+		}
+		if err := pushSecretRepo.Upsert(ctx, ps); err != nil {
+			return "", err
+		}
+		return secret, nil
+	})
+	// TLS posture decides ws:// vs wss:// in the advertised callback.
+	// DASHBOARD_PUBLIC_TLS is explicit because the server itself usually
+	// terminates plain HTTP behind a reverse proxy — it cannot infer from
+	// its own listener whether the outside world reaches it over TLS.
+	streaming.SetInboundCallbackSecure(strings.EqualFold(os.Getenv("DASHBOARD_PUBLIC_TLS"), "true"))
+	fmt.Println("✓ InboundHandler initialized for ts-store push connections (secret-gated)")
 
 	// Initialize AI agent (optional - requires ANTHROPIC_API_KEY)
 	toolExecutor := ai.NewToolExecutor(componentRepo, connectionRepo, connectionService, deviceTypeRepo, chartHub)
@@ -1103,14 +1155,24 @@ func main() {
 	mcpGroup.Use(authMiddleware.Authorize())
 	mcpHandler.SetupRoutes(mcpGroup)
 
-	// Inbound WebSocket endpoint for ts-store push connections (outside /api group, no auth required)
-	// ts-store dials out to this endpoint to push data. Two shapes (#248 PR 2):
-	// the single segment is a pinned connection's channel (the pre-#248 URL,
-	// unchanged so existing ts-store push registrations keep working); the
-	// two-segment form addresses a per-component store channel on an
-	// endpoint-scoped connection (<connID>/<channel-hash>).
-	router.GET("/api/streams/inbound/:connectionId", inboundHandler.HandleInboundWebSocket)
-	router.GET("/api/streams/inbound/:connectionId/:channel", inboundHandler.HandleInboundWebSocket)
+	// Inbound WebSocket endpoint for ts-store push connections. Outside the
+	// /api group because it carries its OWN credential rather than a user
+	// session: ts-store dials us, and its push API accepts only a URL — no
+	// header or body field we control reaches us on the frames it sends
+	// back. So the final path segment is a per-channel secret, verified by
+	// the handler before the upgrade (#260). Same shape as the secret-gated
+	// tsstore webhook receiver, for the same reason.
+	//
+	// Two channel shapes (#248 PR 2): one segment is a pinned connection's
+	// channel; two segments address a per-component store channel on an
+	// endpoint-scoped connection (<connID>/<channel-hash>). The secret is
+	// always the LAST segment, so both shapes gain one.
+	// ONE wildcard route, not two named-param routes: gin cannot hold
+	// ":secret" and ":channel" at the same path position (it panics at
+	// registration with a wildcard conflict), and the two channel shapes
+	// differ in length. The handler splits the tail itself — last segment
+	// is the secret, everything before it is the stream key.
+	router.GET("/api/streams/inbound/*path", inboundHandler.HandleInboundWebSocket)
 
 	// Swagger documentation. The committed spec has a static @host
 	// (localhost:3001), but the UI is reached over many origins (homelab
