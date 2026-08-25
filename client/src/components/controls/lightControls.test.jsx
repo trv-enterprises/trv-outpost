@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 
 vi.mock('../../utils/streamConnectionManager', () => ({
   default: { getInstance: () => ({ subscribe: () => () => {} }) },
@@ -82,5 +82,39 @@ describe('controls barrel exports', () => {
   it('has no undefined exports at all', () => {
     const dead = Object.keys(controlsBarrel).filter((k) => controlsBarrel[k] === undefined);
     expect(dead).toEqual([]);
+  });
+});
+
+// The swatch sits inside the tile, which opens a popup on click. Stopping
+// propagation on the whole wrapper made its padding/gap a dead zone: clicks
+// there were swallowed but hit no handler, so that corner of the tile did
+// nothing at all instead of opening the popup like everywhere else.
+describe('tile swatch click handling', () => {
+  const mkTile = () => ({
+    id: 'c1', name: 'Nightlight', title: 'Nightlight',
+    connection_id: 'conn1',
+    control_config: { control_type: 'tile_light', target: 'zigbee2mqtt/lamp/set', ui_config: {} },
+  });
+
+  it('opens the picker (not the tile popup) when the swatch itself is clicked', async () => {
+    const { container } = render(<ControlRenderer control={mkTile()} />);
+    fireEvent.click(container.querySelector('.tile-light-swatch button'));
+    expect(await screen.findByLabelText('Amber')).toBeTruthy();
+    expect(document.querySelector('.tile-popup')).toBeFalsy();
+  });
+
+  it('opens the tile popup when the wrapper AROUND the swatch is clicked', () => {
+    const { container } = render(<ControlRenderer control={mkTile()} />);
+    const wrapper = container.querySelector('.tile-light-swatch');
+    // A click landing on the wrapper but not on the picker must fall through
+    // to the tile rather than being silently swallowed.
+    fireEvent.click(wrapper, { bubbles: true });
+    expect(document.querySelector('.tile-popup')).toBeTruthy();
+  });
+
+  it('opens the tile popup from the tile body', () => {
+    const { container } = render(<ControlRenderer control={mkTile()} />);
+    fireEvent.click(container.querySelector('.tile-light'));
+    expect(document.querySelector('.tile-popup')).toBeTruthy();
   });
 });

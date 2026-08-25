@@ -212,8 +212,18 @@ function TileLight({ control, readOnly = false, onSuccess, onError }) {
             // tile popup behind it.
             <span
               className="tile-light-swatch"
-              onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => e.stopPropagation()}
+              // Only swallow clicks that actually land ON the picker (its
+              // trigger button, or the popover it renders). A blanket
+              // stopPropagation here also ate clicks on this element's own
+              // padding and the flex gap around the 16px button — those hit
+              // no handler, so that corner of the tile silently did nothing
+              // instead of opening the popup like the rest of the tile.
+              onClick={(e) => {
+                if (e.target.closest('.color-swatch-picker')) e.stopPropagation();
+              }}
+              onKeyDown={(e) => {
+                if (e.target.closest('.color-swatch-picker')) e.stopPropagation();
+              }}
               role="presentation"
             >
               <ColorSwatchPicker
