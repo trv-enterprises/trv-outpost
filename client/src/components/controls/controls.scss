@@ -844,7 +844,16 @@
     // background-color from the live colour overrides this.
     background-color: var(--cds-support-warning);
     transition: height 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-                background-color 0.25s ease;
+                background-color 0.25s ease,
+                opacity 0.25s ease, filter 0.25s ease;
+
+    // Zigbee reports brightness as the REMEMBERED level while state is OFF,
+    // so the bar keeps showing it — knocked back hard so an unlit light never
+    // reads as lit. The colour is still legible, just clearly inactive.
+    &.is-off {
+      opacity: 0.28;
+      filter: grayscale(0.55);
+    }
   }
 
   .control-light__bar-value {

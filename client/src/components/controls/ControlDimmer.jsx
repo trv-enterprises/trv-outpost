@@ -57,9 +57,26 @@ function ControlDimmer({ control, readOnly = false, onSuccess, onError }) {
   });
 
   // The displayed level — drag value takes priority during interaction
+  // Zigbee keeps `brightness` as the REMEMBERED level while the light is OFF,
+  // so level alone cannot say whether it is lit. Prefer the device's `state`
+  // when it publishes one; fall back to the level otherwise (historical
+  // behaviour, and correct for devices with no state field). Must match
+  // TileDimmer, or the tile and its own popup disagree about one device.
+  const { value: rawState } = useControlState({
+    connectionId: control.connection_id,
+    target: control.control_config?.target || '',
+    stateField: 'state',
+    fallbackFields: [],
+    initialValue: undefined,
+  });
+
   const displayLevel = dragging && dragLevel !== null ? dragLevel : level;
   const fillPercent = ((displayLevel - min) / (max - min)) * 100;
-  const isOn = displayLevel > min;
+  const hasState = rawState !== undefined;
+  const stateOn = typeof rawState === 'string'
+    ? rawState.toUpperCase() === 'ON'
+    : !!rawState;
+  const isOn = hasState ? stateOn : displayLevel > min;
 
   // Convert a Y position within the pill to a level value
   const yToLevel = useCallback((clientY) => {

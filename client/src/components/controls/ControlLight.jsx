@@ -100,17 +100,27 @@ function ControlLight({ control, readOnly = false, onSuccess, onError, compact =
   }, [readOnly, loading, execute, label, setRawState]);
 
   const sendBrightness = useCallback((pct) => {
-    // Sending state:'ON' alongside brightness means dragging up from zero
-    // turns the light on, rather than setting the brightness of a light that
-    // is still off.
     setBrightnessPct(pct);
+    if (pct <= 0) {
+      execute({ state: 'OFF' }, `${label} OFF`);
+      return;
+    }
+    // Only force the light on when it is already on, or when the user is
+    // raising it from zero (an unambiguous "turn it up" gesture).
+    //
+    // Zigbee keeps `brightness` as the REMEMBERED level while `state` is OFF —
+    // the device reports state:OFF with brightness:109 — so setting brightness
+    // on an off light must adjust that remembered level, not switch it on.
+    // Sending state:'ON' unconditionally turned the light on any time the
+    // slider moved, which is not what the gesture means.
+    const turnOn = isOn || (brightnessPct || 0) <= 0;
     execute(
-      pct <= 0
-        ? { state: 'OFF' }
-        : { state: 'ON', brightness: pctToZigbee(pct) },
-      `${label} ${pct <= 0 ? 'OFF' : `${pct}%`}`,
+      turnOn
+        ? { state: 'ON', brightness: pctToZigbee(pct) }
+        : { brightness: pctToZigbee(pct) },
+      `${label} ${pct}%`,
     );
-  }, [execute, label, setBrightnessPct]);
+  }, [execute, label, setBrightnessPct, isOn, brightnessPct]);
 
   const handleColor = useCallback((hex) => {
     if (readOnly || loading || !hex) return;
@@ -192,8 +202,11 @@ function ControlLight({ control, readOnly = false, onSuccess, onError, compact =
             aria-valuemax={100}
           >
             <div
-              className="control-light__bar-fill"
+              className={`control-light__bar-fill ${isOn ? '' : 'is-off'}`}
               style={{
+                // The bar still shows the level while the light is off,
+                // because that IS the remembered level the bulb will return
+                // to — but dimmed, so "off at 43%" cannot be mistaken for lit.
                 height: `${displayPct}%`,
                 // Tint the fill with the live colour so brightness and colour
                 // read as one object rather than two unrelated widgets.
