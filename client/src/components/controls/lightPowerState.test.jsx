@@ -56,16 +56,24 @@ describe('an OFF light with a remembered brightness', () => {
     expect(container.querySelector('.tile-dimmer-fill').style.height).toBe('0%');
   });
 
-  it('adjusting brightness on an off light does NOT turn it on', async () => {
+  it('adjusting brightness on an off light turns it on, and says so', async () => {
+    // Verified on the real bulb: {"brightness":N} on an OFF light makes it
+    // ON, and {"state":"OFF","brightness":N} leaves the level unchanged --
+    // the value is DISCARDED, not remembered. So "set the level without
+    // lighting it" is not achievable; sending state:'ON' keeps the UI honest
+    // rather than showing OFF while the bulb lights up.
     record = OFF_WITH_LEVEL;
     const { container } = render(<ControlRenderer control={mk('light')} />);
-    const bar = container.querySelector('.control-light__bar');
-    // Keyboard is the deterministic path; pointer drag needs real geometry.
-    fireEvent.keyDown(bar, { key: 'ArrowUp' });
+    fireEvent.keyDown(container.querySelector('.control-light__bar'), { key: 'ArrowUp' });
     await waitFor(() => expect(executeControlCommand).toHaveBeenCalled());
     const [, value] = executeControlCommand.mock.calls[0];
-    expect(value.state).toBeUndefined();   // must not force ON
+    expect(value.state).toBe('ON');
     expect(value.brightness).toBeGreaterThan(0);
+    // And the toggle must follow the command, not lag behind it.
+    expect(
+      container.querySelector('.control-light__toggle button[role="switch"]')
+        .getAttribute('aria-checked'),
+    ).toBe('true');
   });
 
   it('the brightness bar is styled as inactive while off', () => {

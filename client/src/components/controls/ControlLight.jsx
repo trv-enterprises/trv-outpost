@@ -38,6 +38,11 @@ function ControlLight({ control, readOnly = false, onSuccess, onError, compact =
   const [writtenHex, setWrittenHex] = useState('');
   const [dragPct, setDragPct] = useState(null);
   const barRef = useRef(null);
+  // ONE suppression window for all three reads. Without this only the state
+  // hook suppressed after a command while brightness and colour kept
+  // accepting messages, so the fields drifted apart and this popup could show
+  // OFF while the tiles showed ON at 58%.
+  const suppressRef = useRef(0);
 
   // Power. `state` arrives as the string "ON"/"OFF".
   const { value: rawState, setValue: setRawState, suppress, clearSuppress } = useControlState({
@@ -46,6 +51,7 @@ function ControlLight({ control, readOnly = false, onSuccess, onError, compact =
     stateField: uiConfig.state_field || 'state',
     fallbackFields: ['state'],
     initialValue: undefined,
+    sharedSuppressRef: suppressRef,
   });
 
   // Brightness, normalised to percent for display.
@@ -59,6 +65,7 @@ function ControlLight({ control, readOnly = false, onSuccess, onError, compact =
       return Number.isFinite(n) ? zigbeeToPct(n) : undefined;
     },
     initialValue: 0,
+    sharedSuppressRef: suppressRef,
   });
 
   // Colour. The device only ever reports {x,y}, so convert on the way in.
@@ -69,6 +76,7 @@ function ControlLight({ control, readOnly = false, onSuccess, onError, compact =
     fallbackFields: [],
     transform: (raw) => colorFieldToHex(raw),
     initialValue: '',
+    sharedSuppressRef: suppressRef,
   });
 
   const isOn = typeof rawState === 'string' ? rawState.toUpperCase() === 'ON' : !!rawState;
@@ -102,25 +110,34 @@ function ControlLight({ control, readOnly = false, onSuccess, onError, compact =
   const sendBrightness = useCallback((pct) => {
     setBrightnessPct(pct);
     if (pct <= 0) {
+      setRawState('OFF');
       execute({ state: 'OFF' }, `${label} OFF`);
       return;
     }
-    // Only force the light on when it is already on, or when the user is
-    // raising it from zero (an unambiguous "turn it up" gesture).
+    // Setting brightness turns the light on, and the toggle says so.
     //
-    // Zigbee keeps `brightness` as the REMEMBERED level while `state` is OFF —
-    // the device reports state:OFF with brightness:109 — so setting brightness
-    // on an off light must adjust that remembered level, not switch it on.
-    // Sending state:'ON' unconditionally turned the light on any time the
-    // slider moved, which is not what the gesture means.
-    const turnOn = isOn || (brightnessPct || 0) <= 0;
+    // This mirrors what the hardware actually does rather than what the
+    // payload appears to say. Verified on a Third Reality 3RSNL02043Z:
+    //
+    //   {"brightness":200}            on an OFF light -> state becomes ON
+    //   {"state":"OFF","brightness":120} -> stays OFF, and the 120 is
+    //                                       DISCARDED, not remembered
+    //
+    // So "set the level without lighting it" is not achievable on this bulb:
+    // brightness in an OFF payload is the level it was last at, not a
+    // writable preference. Sending state:'ON' explicitly keeps the UI honest
+    // instead of showing OFF while the bulb lights up.
+    //
+    // Lights that DO support a remembered level (Hue exposes
+    // level_config.on_level, and Zigbee has move-to-level-without-onoff) could
+    // behave differently — that is per-device behaviour and belongs with the
+    // device-compatibility work, not a blanket assumption here.
+    setRawState('ON');
     execute(
-      turnOn
-        ? { state: 'ON', brightness: pctToZigbee(pct) }
-        : { brightness: pctToZigbee(pct) },
+      { state: 'ON', brightness: pctToZigbee(pct) },
       `${label} ${pct}%`,
     );
-  }, [execute, label, setBrightnessPct, isOn, brightnessPct]);
+  }, [execute, label, setBrightnessPct, setRawState]);
 
   const handleColor = useCallback((hex) => {
     if (readOnly || loading || !hex) return;

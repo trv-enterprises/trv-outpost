@@ -58,6 +58,9 @@ function TileLight({ control, readOnly = false, onSuccess, onError }) {
   const [popupOpen, setPopupOpen] = useState(false);
   const [popupStyle, setPopupStyle] = useState({});
   const tileRef = useRef(null);
+  // The tile only reads, but its four reads must still move together — a
+  // per-field window would let brightness and state drift apart mid-update.
+  const suppressRef = useRef(0);
   const fontSize = useTileFontSize();
 
   const uiConfig = control.control_config?.ui_config || {};
@@ -71,6 +74,7 @@ function TileLight({ control, readOnly = false, onSuccess, onError }) {
     stateField: uiConfig.state_field || 'state',
     fallbackFields: ['state'],
     initialValue: undefined,
+  sharedSuppressRef: suppressRef,
   });
 
   const { value: brightnessPct } = useControlState({
@@ -83,6 +87,7 @@ function TileLight({ control, readOnly = false, onSuccess, onError }) {
       return Number.isFinite(n) ? zigbeeToPct(n) : undefined;
     },
     initialValue: 0,
+  sharedSuppressRef: suppressRef,
   });
 
   const { value: deviceHex } = useControlState({
@@ -92,6 +97,7 @@ function TileLight({ control, readOnly = false, onSuccess, onError }) {
     fallbackFields: [],
     transform: (raw) => colorFieldToHex(raw),
     initialValue: '',
+  sharedSuppressRef: suppressRef,
   });
 
   // Read-only presence indicator. `undefined` means this device doesn't
@@ -103,6 +109,7 @@ function TileLight({ control, readOnly = false, onSuccess, onError }) {
     stateField: 'occupancy',
     fallbackFields: [],
     initialValue: undefined,
+  sharedSuppressRef: suppressRef,
   });
 
   const isOn = typeof rawState === 'string' ? rawState.toUpperCase() === 'ON' : !!rawState;
