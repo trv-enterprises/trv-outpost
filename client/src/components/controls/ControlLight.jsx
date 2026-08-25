@@ -244,6 +244,10 @@ function ControlLight({ control, readOnly = false, onSuccess, onError, compact =
             palette={LIGHT_COLOR_PALETTE}
             allowAuto={false}
             allowCustom
+            // Dashboard panels and the tile popup both clip their content, so
+            // the palette has to render outside them or it is cut off at the
+            // edge.
+            float
           />
         </div>
       )}

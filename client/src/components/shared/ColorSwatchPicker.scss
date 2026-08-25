@@ -114,3 +114,21 @@
     }
   }
 }
+
+// Floating (portalled) palette. Dashboard panels and tiles set
+// overflow:hidden — they must, panel content has to stay in its cell — which
+// clipped the palette at the panel edge. In float mode the palette renders on
+// document.body instead, positioned from the trigger's viewport rect.
+.color-swatch-picker__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+}
+
+.color-swatch-picker__content--float {
+  background-color: var(--cds-layer-02);
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: 4px;
+  padding: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+}
