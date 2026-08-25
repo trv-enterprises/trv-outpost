@@ -6,6 +6,25 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.59.1] — 2026-08-25
+
+### Fixed
+
+- **The Connections page failed to load** when any ts-store connection stored
+  its push `from` timestamp as an embedded document rather than a number —
+  `error decoding key config.tsstore.push.from: cannot decode embedded
+  document into an integer type`. The value is a JavaScript `Long` written
+  structurally by a non-Go tool. Because the connection list decodes every
+  record in one pass, a single malformed document broke the whole response
+  rather than just its own connection. The field now accepts both shapes and
+  always writes back a plain integer; migration
+  `tsstore_push_from_long_object_v1` normalizes stored records on boot.
+
+- **`tile_light` could not be resized below 4 cells wide.** It had no minimum
+  size registered, so it fell back to the generic default instead of the 3×3
+  every other tile uses. `light`, `garage_door`, and `mqtt_publish` were
+  missing entries too and now have them.
+
 ## [0.59.0] — 2026-08-25
 
 ### Added
