@@ -1001,7 +1001,7 @@ definitions:
         description: |-
           PassthroughValue publishes the control's value AS the payload, ignoring
           Template entirely. For controls that send a composite object rather than
-          a scalar -- a colour light sends
+          a scalar -- a color light sends
           {"state":"ON","brightness":120,"color":{"hex":"#ffd300"}} -- where a
           key/value template cannot express the shape.
 
