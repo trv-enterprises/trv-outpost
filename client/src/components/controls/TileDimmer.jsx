@@ -31,6 +31,7 @@ import { useControlState } from './useControlState';
 import { useTileFontSize } from './useTileFontSize';
 import { registerControl } from './controlRegistry';
 import ControlDimmer from './ControlDimmer';
+import { resolveDeviceScale, deviceToUi } from './lightPalette';
 import './controls.scss';
 
 function TileDimmer({ control, readOnly = false, onSuccess, onError }) {
@@ -44,6 +45,9 @@ function TileDimmer({ control, readOnly = false, onSuccess, onError }) {
   const min = uiConfig.min ?? 0;
   const max = uiConfig.max ?? 100;
   const iconPath = ICON_MAP[uiConfig.icon] || mdiLightbulbOn;
+  // Must match ControlDimmer's scaling, or the tile and its own popup
+  // disagree about the same device.
+  const deviceMax = resolveDeviceScale(uiConfig, max);
 
   const { value: level } = useControlState({
     connectionId: control.connection_id,
@@ -52,7 +56,7 @@ function TileDimmer({ control, readOnly = false, onSuccess, onError }) {
     fallbackFields: ['level', 'brightness'],
     transform: (raw) => {
       const num = Number(raw);
-      return !isNaN(num) ? Math.max(min, Math.min(max, num)) : undefined;
+      return Number.isFinite(num) ? deviceToUi(num, min, max, deviceMax) : undefined;
     },
     initialValue: 0
   });

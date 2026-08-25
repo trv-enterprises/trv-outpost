@@ -121,7 +121,8 @@ export const CONTROL_TYPE_INFO = {
       min: 0,
       max: 100,
       step: 1,
-      state_field: 'level'
+      state_field: 'level',
+      device_scale: 254
     }
   },
   [CONTROL_TYPES.GARAGE_DOOR]: {
@@ -162,6 +163,10 @@ export const CONTROL_TYPE_INFO = {
       min: 0,
       max: 100,
       step: 1,
+      // Device-side scale. Zigbee brightness is 0-254, so without this the
+      // control sends 50 for "50%" (really 20%) and reads the echo back as
+      // a percent. Set to the UI max for a device that genuinely uses 0-100.
+      device_scale: 254,
       state_field: 'level'
     }
   },

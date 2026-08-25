@@ -37,3 +37,38 @@ export const pctToZigbee = (pct) =>
 
 export const zigbeeToPct = (raw) =>
   Math.max(0, Math.min(100, Math.round((Number(raw) / ZIGBEE_MAX_BRIGHTNESS) * 100)));
+
+/**
+ * Resolve a control's device-side brightness scale.
+ *
+ * The UI works in 0–100%, but devices don't: Zigbee bulbs use 0–254, and
+ * other integrations use their own ranges. A control that assumes the device
+ * shares its own 0–100 scale both under-sends (50% → raw 50, which is 20% of
+ * 254) and mis-displays (raw 48 read straight back as "48%").
+ *
+ * `ui_config.device_scale` names the device's maximum. When unset, the scale
+ * is 1:1 with the UI range, which is the historical behaviour — so existing
+ * controls on genuinely 0–100 devices are unaffected.
+ *
+ * @param {object} uiConfig
+ * @param {number} uiMax - the control's own UI maximum (usually 100)
+ * @returns {number} the device-side maximum
+ */
+export function resolveDeviceScale(uiConfig = {}, uiMax = 100) {
+  const raw = Number(uiConfig.device_scale);
+  return Number.isFinite(raw) && raw > 0 ? raw : uiMax;
+}
+
+/** UI value (min..uiMax) → device value (0..deviceMax). */
+export function uiToDevice(value, uiMin, uiMax, deviceMax) {
+  if (uiMax === uiMin) return 0;
+  const ratio = (value - uiMin) / (uiMax - uiMin);
+  return Math.max(0, Math.min(deviceMax, Math.round(ratio * deviceMax)));
+}
+
+/** Device value (0..deviceMax) → UI value (uiMin..uiMax). */
+export function deviceToUi(raw, uiMin, uiMax, deviceMax) {
+  if (deviceMax <= 0) return uiMin;
+  const ratio = Number(raw) / deviceMax;
+  return Math.max(uiMin, Math.min(uiMax, Math.round(uiMin + ratio * (uiMax - uiMin))));
+}

@@ -149,6 +149,9 @@ func init() {
 			"max":         100,
 			"step":        1,
 			"state_field": "level",
+			// Zigbee brightness is 0-254; without this the control sends 50
+			// for "50%" (really 20%) and reads the echo back as a percent.
+			"device_scale": 254,
 		},
 	})
 
@@ -261,6 +264,9 @@ func init() {
 			"max":         100,
 			"step":        1,
 			"state_field": "level",
+			// Zigbee brightness is 0-254; without this the control sends 50
+			// for "50%" (really 20%) and reads the echo back as a percent.
+			"device_scale": 254,
 		},
 	})
 
