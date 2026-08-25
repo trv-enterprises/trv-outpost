@@ -549,8 +549,10 @@ func (c *TSStoreConfig) IsStreaming() bool {
 // TSStorePushConfig configures the outbound WebSocket push from ts-store to dashboard
 // See ts-store docs: /docs/outbound-data-ws.md
 type TSStorePushConfig struct {
-	// From is the starting timestamp in nanoseconds (0 = oldest data, -1 = current time/realtime only)
-	From int64 `json:"from" bson:"from"`
+	// From is the starting timestamp in nanoseconds (0 = oldest data, -1 = current time/realtime only).
+	// PushFrom (not a bare int64) so a record written by a non-Go driver as a
+	// {high, low, unsigned} Long document still decodes — see tsstore_push_from.go.
+	From PushFrom `json:"from" bson:"from"`
 
 	// Format specifies the message format: "full" (default) or "compact" (for schema stores)
 	Format string `json:"format,omitempty" bson:"format,omitempty"`
