@@ -15,6 +15,7 @@ import {
   mdiFormTextbox,
   mdiPowerPlug,
   mdiLightbulbOn,
+  mdiLightbulbNight,
   mdiFormatText,
   mdiGarage,
   mdiSend
@@ -31,6 +32,8 @@ export const CONTROL_TYPES = {
   GARAGE_DOOR: 'garage_door',
   TILE_SWITCH: 'tile_switch',
   TILE_DIMMER: 'tile_dimmer',
+  LIGHT: 'light',
+  TILE_LIGHT: 'tile_light',
   TILE_GARAGE_DOOR: 'tile_garage_door',
   MQTT_PUBLISH: 'mqtt_publish',
   TEXT_LABEL: 'text_label'
@@ -160,6 +163,34 @@ export const CONTROL_TYPE_INFO = {
       max: 100,
       step: 1,
       state_field: 'level'
+    }
+  },
+  [CONTROL_TYPES.LIGHT]: {
+    label: 'Light',
+    description: 'Colour bulb control — power, brightness, and colour. Writes hex directly; reads CIE xy back from the device.',
+    icon: mdiLightbulbOn,
+    category: 'carbon',
+    canWrite: true,
+    canRead: true,
+    defaultUIConfig: {
+      label: 'Light',
+      state_field: 'state',
+      show_brightness: true,
+      show_color: true
+    }
+  },
+  [CONTROL_TYPES.TILE_LIGHT]: {
+    label: 'Tile Light',
+    description: 'Compact tile for a colour bulb. Fill height is brightness and the fill takes the light\'s live colour; the colour swatch sits on the tile face. Shows a motion dot when the device reports occupancy.',
+    icon: mdiLightbulbNight,
+    category: 'tile',
+    canWrite: true,
+    canRead: true,
+    defaultUIConfig: {
+      label: 'Light',
+      icon: 'lightbulb-on',
+      state_field: 'state',
+      show_color_on_tile: true
     }
   },
   [CONTROL_TYPES.TILE_GARAGE_DOOR]: {

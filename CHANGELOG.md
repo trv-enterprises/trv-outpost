@@ -6,6 +6,41 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Colour bulb controls: `light` and `tile_light`** (#292). A control for
+  Zigbee2MQTT colour-capable bulbs, offering power, brightness, and colour.
+
+  Colour is a first-class action rather than a buried setting: on the tile,
+  the colour swatch sits **on the tile face**, so changing colour is a single
+  tap. Pick from a light-oriented palette (warm whites through saturated
+  accents) or open the custom picker for any hex. The control publishes the
+  hex directly — Zigbee2MQTT accepts hex and converts on the way in, so
+  nothing is converted on the command path.
+
+  On the tile, fill height is brightness and the fill takes the bulb's live
+  colour. When the device also reports `occupancy`, a read-only motion dot
+  appears in the corner; bulbs that don't report it render without one. The
+  control is a generic Z2M colour bulb, not tied to any particular device.
+
+  Two supporting pieces:
+
+  - `CommandDef.PassthroughValue` publishes a control's value as the whole
+    payload, for controls whose command is a composite object
+    (`{"state":"ON","brightness":120,"color":{"hex":"#ffd300"}}`) that a
+    placeholder-substitution template cannot express. It applies only when the
+    value is an object; scalars fall back to the template path. The new
+    built-in **Zigbee Colour Light** device type uses it.
+  - `utils/colorXY.js` converts the CIE `{x, y}` that bulbs report back into
+    hex for display — the read direction only. It normalises by the peak
+    channel rather than clamping, which keeps saturated colours saturated (a
+    clamping conversion turned a mid blue into a pale cyan). Because the round
+    trip is lossy, the swatch holds the hex you picked until the device
+    reports a materially different colour, so an automation recolouring the
+    bulb is reflected rather than masked.
+
 ## [0.58.1] — 2026-08-24
 
 ### Security
