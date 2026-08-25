@@ -65,7 +65,7 @@ describe('colorFieldToHex', () => {
     expect(colorFieldToHex({ x: 0.4995, y: 0.4697 })).toBe('#ffd300');
   });
 
-  it('returns empty for records with no usable colour', () => {
+  it('returns empty for records with no usable color', () => {
     expect(colorFieldToHex(null)).toBe('');
     expect(colorFieldToHex(undefined)).toBe('');
     expect(colorFieldToHex({})).toBe('');
@@ -79,7 +79,7 @@ describe('colorFieldToHex', () => {
 });
 
 describe('hexDistance', () => {
-  it('is zero for identical colours and case-insensitive', () => {
+  it('is zero for identical colors and case-insensitive', () => {
     expect(hexDistance('#ffd300', '#FFD300')).toBe(0);
   });
 
@@ -96,14 +96,14 @@ describe('hexDistance', () => {
 
 describe('holdWrittenHex', () => {
   it('holds the written hex while the device agrees', () => {
-    // Guards against the swatch visibly shifting the instant a colour is set.
+    // Guards against the swatch visibly shifting the instant a color is set.
     const deviceHex = xyToHex(0.4995, 0.4697);
     expect(holdWrittenHex('#ffd300', deviceHex)).toBe('#ffd300');
   });
 
-  it('yields to the device when an automation recolours the light', () => {
-    // The engine sets colour on EVERY motion trigger, so a user-picked colour
-    // gets replaced. Holding it would show a colour the light is not emitting.
+  it('yields to the device when an automation recolors the light', () => {
+    // The engine sets color on EVERY motion trigger, so a user-picked color
+    // gets replaced. Holding it would show a color the light is not emitting.
     const engineAmber = xyToHex(0.4995, 0.4697);
     expect(holdWrittenHex('#547cff', engineAmber)).toBe(engineAmber);
   });
@@ -118,7 +118,7 @@ describe('holdWrittenHex', () => {
     const near = '#ffd300';
     const off = `#${(0xffd300 + 0x000000 + HEX_HOLD_TOLERANCE - 1).toString(16).padStart(6, '0')}`;
     expect(holdWrittenHex(near, off, HEX_HOLD_TOLERANCE)).toBe(near);
-    // A clearly different colour is never held.
+    // A clearly different color is never held.
     expect(holdWrittenHex(near, '#0000ff', HEX_HOLD_TOLERANCE)).toBe('#0000ff');
   });
 });

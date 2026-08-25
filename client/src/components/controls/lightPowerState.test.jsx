@@ -36,7 +36,7 @@ describe('an OFF light with a remembered brightness', () => {
   beforeEach(() => { executeControlCommand.mockClear(); });
 
   // The reported symptom: light is off, but the tiles rendered it as on and
-  // in colour, because brightness was non-zero.
+  // in color, because brightness was non-zero.
   const OFF_WITH_LEVEL = { state: 'OFF', brightness: 109, color: { x: 0.4995, y: 0.4697 } };
 
   it('tile_light renders OFF and unlit', () => {
@@ -44,7 +44,7 @@ describe('an OFF light with a remembered brightness', () => {
     const { container } = render(<ControlRenderer control={mk('tile_light')} />);
     expect(container.querySelector('.tile-light-off')).toBeTruthy();
     expect(container.querySelector('.tile-light-on')).toBeFalsy();
-    // No coloured fill while off.
+    // No colored fill while off.
     expect(container.querySelector('.tile-light-fill').style.height).toBe('0%');
   });
 
@@ -71,7 +71,7 @@ describe('an OFF light with a remembered brightness', () => {
     expect(value.brightness).toBeGreaterThan(0);
     // And the toggle must follow the command, not lag behind it.
     expect(
-      container.querySelector('.control-light__toggle button[role="switch"]')
+      container.querySelector('.control-light__toggle')
         .getAttribute('aria-checked'),
     ).toBe('true');
   });
@@ -87,7 +87,7 @@ describe('an ON light', () => {
   beforeEach(() => { executeControlCommand.mockClear(); });
   const ON = { state: 'ON', brightness: 109, color: { x: 0.4995, y: 0.4697 } };
 
-  it('tile_light renders ON with a coloured fill', () => {
+  it('tile_light renders ON with a colored fill', () => {
     record = ON;
     const { container } = render(<ControlRenderer control={mk('tile_light')} />);
     expect(container.querySelector('.tile-light-on')).toBeTruthy();

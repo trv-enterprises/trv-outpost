@@ -179,7 +179,7 @@ func init() {
 		Category:    CategoryControl,
 		Subtype:     "light",
 		DisplayName: "Light",
-		Description: "Colour bulb control: power, brightness, and colour. Colour is written as hex and read back from the device as CIE xy.",
+		Description: "Color bulb control: power, brightness, and color. Color is written as hex and read back from the device as CIE xy.",
 		Icon:        "mdiLightbulbOn",
 		UICategory:  "carbon",
 		Capabilities: ComponentCapabilities{
@@ -202,7 +202,7 @@ func init() {
 		Category:    CategoryControl,
 		Subtype:     "tile_light",
 		DisplayName: "Tile Light",
-		Description: "Compact tile for a colour bulb. Fill height is brightness and the fill takes the light's live colour; the colour swatch sits on the tile face. Shows a motion dot when the device reports occupancy.",
+		Description: "Compact tile for a color bulb. Fill height is brightness and the fill takes the light's live color; the color swatch sits on the tile face. Shows a motion dot when the device reports occupancy.",
 		Icon:        "mdiLightbulbNight",
 		UICategory:  "tile",
 		Capabilities: ComponentCapabilities{

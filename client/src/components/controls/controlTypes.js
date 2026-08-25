@@ -172,7 +172,7 @@ export const CONTROL_TYPE_INFO = {
   },
   [CONTROL_TYPES.LIGHT]: {
     label: 'Light',
-    description: 'Colour bulb control — power, brightness, and colour. Writes hex directly; reads CIE xy back from the device.',
+    description: 'Color bulb control — power, brightness, and color. Writes hex directly; reads CIE xy back from the device.',
     icon: mdiLightbulbOn,
     category: 'carbon',
     canWrite: true,
@@ -186,7 +186,7 @@ export const CONTROL_TYPE_INFO = {
   },
   [CONTROL_TYPES.TILE_LIGHT]: {
     label: 'Tile Light',
-    description: 'Compact tile for a colour bulb. Fill height is brightness and the fill takes the light\'s live colour; the colour swatch sits on the tile face. Shows a motion dot when the device reports occupancy.',
+    description: 'Compact tile for a color bulb. Fill height is brightness and the fill takes the light\'s live color; the color swatch sits on the tile face. Shows a motion dot when the device reports occupancy.',
     icon: mdiLightbulbNight,
     category: 'tile',
     canWrite: true,

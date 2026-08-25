@@ -29,7 +29,7 @@ const control = {
   },
 };
 
-describe('setting colour from the tile', () => {
+describe('setting color from the tile', () => {
   beforeEach(() => executeControlCommand.mockClear());
 
   it('publishes hex directly, with no conversion on the command path', async () => {
@@ -48,7 +48,7 @@ describe('setting colour from the tile', () => {
     await waitFor(() => expect(executeControlCommand).toHaveBeenCalledTimes(1));
     const [id, value] = executeControlCommand.mock.calls[0];
     expect(id).toBe('light-1');
-    // Composite object: hex verbatim, and state:ON so a colour pick also
+    // Composite object: hex verbatim, and state:ON so a color pick also
     // turns the light on.
     expect(value).toEqual({ state: 'ON', color: { hex: '#FFD300' } });
   });

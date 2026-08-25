@@ -5,9 +5,9 @@
 /**
  * Warm-to-cool palette for light controls, plus a few accents.
  *
- * These are ordinary light colours rather than the Carbon series palette,
+ * These are ordinary light colors rather than the Carbon series palette,
  * which is tuned for distinguishability between chart series and produces
- * some deeply unflattering light colours. `allowCustom` on ColorSwatchPicker
+ * some deeply unflattering light colors. `allowCustom` on ColorSwatchPicker
  * covers anything not offered here.
  *
  * Lives in its own module so both ControlLight and TileLight can import it

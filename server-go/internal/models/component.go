@@ -36,12 +36,12 @@ const (
 	ControlTypeSwitch         = "switch"           // On/off switch (HomeKit-style pill)
 	ControlTypePlug           = "plug"             // Alias for switch (backward compat)
 	ControlTypeDimmer         = "dimmer"           // Light dimmer
-	ControlTypeLight          = "light"            // Colour bulb: power + brightness + colour
+	ControlTypeLight          = "light"            // Color bulb: power + brightness + color
 	ControlTypeGarageDoor     = "garage_door"      // Full-size animated garage door status
 	ControlTypeTileSwitch     = "tile_switch"      // Compact tile switch
 	ControlTypeTilePlug       = "tile_plug"        // Alias for tile_switch (backward compat)
 	ControlTypeTileDimmer     = "tile_dimmer"      // Compact tile dimmer
-	ControlTypeTileLight      = "tile_light"       // Compact colour-bulb tile
+	ControlTypeTileLight      = "tile_light"       // Compact color-bulb tile
 	ControlTypeTileGarageDoor = "tile_garage_door" // Compact garage door status tile
 	ControlTypeTextLabel      = "text_label"       // Static text/label display
 	ControlTypeMqttPublish    = "mqtt_publish"     // Fire-and-forget MQTT JSON publish

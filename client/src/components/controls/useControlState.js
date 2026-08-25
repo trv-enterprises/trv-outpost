@@ -22,8 +22,8 @@ import { deriveStateTopic, extractStateValue, SUPPRESS_DURATION_MS } from './con
  * @param {*} options.initialValue - Initial state value
  * @param {object} [options.sharedSuppressRef] - Share ONE suppression window
  *   across several useControlState calls in the same control. A control that
- *   reads more than one field (a colour light reads state + brightness +
- *   colour) otherwise gets an independent window per field, and only the hook
+ *   reads more than one field (a color light reads state + brightness +
+ *   color) otherwise gets an independent window per field, and only the hook
  *   whose `suppress` is wired to the command actually suppresses. The others
  *   keep accepting post-command messages, so the fields drift apart and two
  *   views of the same device disagree.

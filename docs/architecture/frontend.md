@@ -177,12 +177,12 @@ Controls talk to MQTT via two shared hooks:
   `POST /api/controls/:id/execute` with notification handling
   (success/error toasts). Write-capable controls use this.
 
-### Composite-payload controls and colour
+### Composite-payload controls and color
 
 Most controls send a scalar — a boolean, a number, a string — which the
 device type's command template interpolates into a payload shape via
-`{{value}}`. Colour bulbs don't fit: a single write carries state,
-brightness, and colour together, and a key/value template can't express
+`{{value}}`. Color bulbs don't fit: a single write carries state,
+brightness, and color together, and a key/value template can't express
 that shape.
 
 For these, `CommandDef.PassthroughValue` publishes the control's value
@@ -193,28 +193,28 @@ rather than publishing something malformed. The built-in
 `zigbee-color-light` device type uses this for its `light` and
 `tile_light` commands.
 
-Colour is asymmetric, which shapes the client code:
+Color is asymmetric, which shapes the client code:
 
 - **Write** — Zigbee2MQTT accepts hex directly and converts on the way
   in, so `ControlLight` / `TileLight` send `{"color": {"hex": "#..."}}`
   with **no conversion on the command path**. A wrong conversion there
-  would be visible as the wrong colour on the light.
+  would be visible as the wrong color on the light.
 - **Read** — every state publish reports `color: {x, y}` with
   `color_mode: "xy"`, whichever form was written. There is no hex echo,
   so `utils/colorXY.js` converts xy → hex for display.
 
 `xyToHex` normalises by the **peak channel** rather than clamping after
 fixing luminance. Clamping flattens the bright channels together and
-washes saturated colours toward white — a mid blue round-tripped to a
+washes saturated colors toward white — a mid blue round-tripped to a
 pale cyan, right hue and no saturation, which is easy to miss because
 the hue looks plausible. The homelab Homebridge codec this was ported
 from clamps, but it reads only *hue* off the result and discards the
 washed-out saturation, so the bug never surfaces there.
 
 Because the xy round trip is lossy, the swatch would visibly shift the
-instant a colour is set. `holdWrittenHex` shows the written hex while
+instant a color is set. `holdWrittenHex` shows the written hex while
 the device still reports something close to it, and yields once the
-device's colour moves outside tolerance — so an automation recolouring
+device's color moves outside tolerance — so an automation recoloring
 the bulb is reflected rather than masked.
 
 ## Shared tag components

@@ -33,21 +33,21 @@ const ICON_MAP = {
 /**
  * TileLight
  *
- * Compact tile for a Zigbee2MQTT colour bulb, following TileDimmer's
+ * Compact tile for a Zigbee2MQTT color bulb, following TileDimmer's
  * vertical-fill idiom so it reads as part of the existing tile set.
  *
  * Two things it adds over TileDimmer:
  *
- *  - The fill is tinted with the light's live colour, so the tile shows what
+ *  - The fill is tinted with the light's live color, so the tile shows what
  *    the light is actually doing at a glance.
- *  - The colour swatch is ON THE TILE FACE, not only inside the popup.
- *    Changing colour is a primary action for this control (the alternative
+ *  - The color swatch is ON THE TILE FACE, not only inside the popup.
+ *    Changing color is a primary action for this control (the alternative
  *    today is hand-publishing a hex over MQTT), so it gets one tap rather
  *    than two.
  *
  * A motion dot appears only when the device reports `occupancy`. Bulbs that
  * don't publish it simply render without one — the tile is a generic Z2M
- * colour bulb, not a nightlight-specific control. Note that occupancy here is
+ * color bulb, not a nightlight-specific control. Note that occupancy here is
  * a read-only *indicator*: motion driving the light is an automation concern,
  * not something this tile does.
  *
@@ -114,7 +114,7 @@ function TileLight({ control, readOnly = false, onSuccess, onError }) {
 
   const isOn = typeof rawState === 'string' ? rawState.toUpperCase() === 'ON' : !!rawState;
   // The tile only reads, so there is no written hex to hold against — that
-  // belongs to ControlLight, which does the writing. Show the device's colour.
+  // belongs to ControlLight, which does the writing. Show the device's color.
   const displayHex = deviceHex;
   const fillPercent = isOn ? (brightnessPct || 0) : 0;
 
@@ -171,7 +171,7 @@ function TileLight({ control, readOnly = false, onSuccess, onError }) {
           path={iconPath}
           size={0.8}
           className="tile-icon"
-          // Tint the icon with the live colour when lit, so the tile reads
+          // Tint the icon with the live color when lit, so the tile reads
           // correctly even at low brightness where the fill is a sliver.
           style={displayHex && isOn ? { color: displayHex } : undefined}
         />
@@ -192,13 +192,13 @@ function TileLight({ control, readOnly = false, onSuccess, onError }) {
             // A swatch, deliberately NOT a picker. Carbon's Popover renders
             // inline, so a picker opened here is clipped by the tile's
             // overflow:hidden — the palette got cut off at the tile edge.
-            // The swatch shows the live colour and the tile's own popup (which
+            // The swatch shows the live color and the tile's own popup (which
             // portals to document.body) carries the actual picker, so this
             // stays one tap and the whole tile behaves the same way.
             <span
               className="tile-light-swatch"
               style={displayHex ? { backgroundColor: displayHex } : undefined}
-              title={displayHex ? `Colour ${displayHex}` : 'Colour'}
+              title={displayHex ? `Color ${displayHex}` : 'Color'}
               aria-hidden="true"
             />
           ) : (

@@ -208,7 +208,7 @@ function AdornmentLayer({
               borderBottomWidth: `${lineY}px`,
               // Carbon red50 — matches ADORNMENT_DEFAULT_COLOR in
               // DashboardViewerPage. Distinct from the blue edit chrome.
-              // A hidden border has no user-facing colour (the picker is
+              // A hidden border has no user-facing color (the picker is
               // dropped for it); .is-hidden-style supplies a neutral one.
               borderColor: a.color || '#fa4d56',
             }}

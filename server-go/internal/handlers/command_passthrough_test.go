@@ -6,7 +6,7 @@ import (
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
 )
 
-// A colour light sends a composite object rather than a scalar, which a
+// A color light sends a composite object rather than a scalar, which a
 // key/value template cannot express -- see CommandDef.PassthroughValue.
 func TestPassthroughPayload(t *testing.T) {
 	composite := map[string]interface{}{
@@ -25,7 +25,7 @@ func TestPassthroughPayload(t *testing.T) {
 		}
 		color, isMap := got["color"].(map[string]interface{})
 		if !isMap || color["hex"] != "#ffd300" {
-			t.Errorf("nested colour lost: %#v", got["color"])
+			t.Errorf("nested color lost: %#v", got["color"])
 		}
 	})
 

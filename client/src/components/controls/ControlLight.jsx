@@ -3,11 +3,12 @@
 // See LICENSE file for details.
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { InlineLoading, Toggle } from '@carbon/react';
+import { InlineLoading } from '@carbon/react';
 import PropTypes from 'prop-types';
 import { useControlState } from './useControlState';
 import { useControlCommand } from './useControlCommand';
 import { registerControl } from './controlRegistry';
+import PillToggle from './PillToggle';
 import ColorSwatchPicker from '../shared/ColorSwatchPicker';
 import { colorFieldToHex, holdWrittenHex } from '../../utils/colorXY';
 import { LIGHT_COLOR_PALETTE, pctToZigbee, zigbeeToPct } from './lightPalette';
@@ -16,8 +17,8 @@ import './controls.scss';
 /**
  * ControlLight
  *
- * Full control surface for a Zigbee2MQTT colour bulb: power, brightness, and
- * colour. Used on its own as a panel control, and hosted inside TileLight's
+ * Full control surface for a Zigbee2MQTT color bulb: power, brightness, and
+ * color. Used on its own as a panel control, and hosted inside TileLight's
  * popup.
  *
  * Command shape: this control sends a composite object rather than a scalar,
@@ -32,14 +33,14 @@ function ControlLight({ control, readOnly = false, onSuccess, onError, compact =
   const showColor = uiConfig.show_color !== false;
   const showBrightness = uiConfig.show_brightness !== false;
 
-  // The hex this client last wrote. Held against the device's reported colour
+  // The hex this client last wrote. Held against the device's reported color
   // so the swatch doesn't visibly shift on the lossy xy round trip — but only
-  // while the device still agrees (an automation can recolour the light).
+  // while the device still agrees (an automation can recolor the light).
   const [writtenHex, setWrittenHex] = useState('');
   const [dragPct, setDragPct] = useState(null);
   const barRef = useRef(null);
   // ONE suppression window for all three reads. Without this only the state
-  // hook suppressed after a command while brightness and colour kept
+  // hook suppressed after a command while brightness and color kept
   // accepting messages, so the fields drifted apart and this popup could show
   // OFF while the tiles showed ON at 58%.
   const suppressRef = useRef(0);
@@ -68,7 +69,7 @@ function ControlLight({ control, readOnly = false, onSuccess, onError, compact =
     sharedSuppressRef: suppressRef,
   });
 
-  // Colour. The device only ever reports {x,y}, so convert on the way in.
+  // Color. The device only ever reports {x,y}, so convert on the way in.
   const { value: deviceHex } = useControlState({
     connectionId: control.connection_id,
     target: control.control_config?.target || '',
@@ -83,7 +84,7 @@ function ControlLight({ control, readOnly = false, onSuccess, onError, compact =
   const displayHex = holdWrittenHex(writtenHex, deviceHex);
   const displayPct = dragPct !== null ? dragPct : (brightnessPct || 0);
 
-  // Once the device reports a colour materially different from what we wrote,
+  // Once the device reports a color materially different from what we wrote,
   // the hold has expired — drop it so we stop competing with the device.
   useEffect(() => {
     if (writtenHex && deviceHex && holdWrittenHex(writtenHex, deviceHex) === deviceHex) {
@@ -145,7 +146,7 @@ function ControlLight({ control, readOnly = false, onSuccess, onError, compact =
     // round-tripped approximation that arrives a moment later.
     setWrittenHex(hex);
     // Z2M takes hex directly — no conversion on the command path.
-    execute({ state: 'ON', color: { hex } }, `${label} colour ${hex}`);
+    execute({ state: 'ON', color: { hex } }, `${label} color ${hex}`);
   }, [readOnly, loading, execute, label]);
 
   // --- brightness bar drag ---------------------------------------------
@@ -189,17 +190,15 @@ function ControlLight({ control, readOnly = false, onSuccess, onError, compact =
   return (
     <div className={`control-light ${compact ? 'control-light--compact' : ''}`}>
       <div className="control-light__section control-light__section--power">
-        <Toggle
-          // Carbon toggles are Downshift-free but still need unique ids when
-          // the same control is mounted more than once on a dashboard.
+        <PillToggle
+          // Unique id: the same control can be mounted more than once on a
+          // dashboard (a tile and its popup, say).
           id={`light-power-${control.id}`}
           className="control-light__toggle"
-          labelText=""
-          labelA="Off"
-          labelB="On"
-          toggled={isOn}
+          label={`${label} power`}
+          checked={isOn}
           disabled={readOnly || loading}
-          onToggle={handleToggle}
+          onChange={handleToggle}
         />
         {loading && <InlineLoading description="" className="control-light__loading" />}
       </div>
@@ -225,7 +224,7 @@ function ControlLight({ control, readOnly = false, onSuccess, onError, compact =
                 // because that IS the remembered level the bulb will return
                 // to — but dimmed, so "off at 43%" cannot be mistaken for lit.
                 height: `${displayPct}%`,
-                // Tint the fill with the live colour so brightness and colour
+                // Tint the fill with the live color so brightness and color
                 // read as one object rather than two unrelated widgets.
                 ...(displayHex ? { backgroundColor: displayHex } : {}),
               }}
@@ -237,11 +236,11 @@ function ControlLight({ control, readOnly = false, onSuccess, onError, compact =
 
       {showColor && (
         <div className="control-light__section control-light__section--color">
-          <span className="control-light__color-label">Colour</span>
+          <span className="control-light__color-label">Color</span>
           <ColorSwatchPicker
             value={displayHex}
             onChange={handleColor}
-            label={`${label} colour`}
+            label={`${label} color`}
             palette={LIGHT_COLOR_PALETTE}
             allowAuto={false}
             allowCustom

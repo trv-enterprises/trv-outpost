@@ -49,8 +49,8 @@ const (
 	ControlUITypeSwitch         = "switch"           // On/off switch, sends boolean
 	ControlUITypePlug           = "plug"             // Alias for switch (backward compat)
 	ControlUITypeDimmer         = "dimmer"           // Vertical slider with on/off, sends number (0=off)
-	ControlUITypeLight          = "light"            // Colour bulb, sends a composite object (state/brightness/color)
-	ControlUITypeTileLight      = "tile_light"       // Compact colour-bulb tile
+	ControlUITypeLight          = "light"            // Color bulb, sends a composite object (state/brightness/color)
+	ControlUITypeTileLight      = "tile_light"       // Compact color-bulb tile
 	ControlUITypeGarageDoor     = "garage_door"      // Read-only full-size garage door contact sensor
 	ControlUITypeTileSwitch     = "tile_switch"      // Compact tile switch
 	ControlUITypeTilePlug       = "tile_plug"        // Alias for tile_switch (backward compat)
@@ -94,7 +94,7 @@ type CommandDef struct {
 
 	// PassthroughValue publishes the control's value AS the payload, ignoring
 	// Template entirely. For controls that send a composite object rather than
-	// a scalar -- a colour light sends
+	// a scalar -- a color light sends
 	// {"state":"ON","brightness":120,"color":{"hex":"#ffd300"}} -- where a
 	// key/value template cannot express the shape.
 	//

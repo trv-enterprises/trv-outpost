@@ -37,12 +37,12 @@ describe('light controls', () => {
     expect(container.querySelector('.control-title')?.textContent).toBe('Nightlight');
   });
 
-  it('shows the colour swatch on the tile face', () => {
+  it('shows the color swatch on the tile face', () => {
     const { container } = render(<ControlRenderer control={mk('tile_light')} />);
     expect(container.querySelector('.tile-light-swatch')).toBeTruthy();
   });
 
-  it('still shows the colour indicator for a view-only user', () => {
+  it('still shows the color indicator for a view-only user', () => {
     // It is a read-only indicator, not a control, so capability gating does
     // not hide it — the popup's picker is what respects readOnly.
     const { container } = render(<ControlRenderer control={mk('tile_light')} canControl={false} />);
@@ -119,7 +119,7 @@ describe('tile click handling', () => {
     expect(document.querySelector('.tile-popup')).toBeTruthy();
   });
 
-  it('offers the colour picker inside the popup', async () => {
+  it('offers the color picker inside the popup', async () => {
     const { container } = render(<ControlRenderer control={mkTile()} />);
     fireEvent.click(container.querySelector('.tile-light'));
     const popup = document.querySelector('.tile-popup');

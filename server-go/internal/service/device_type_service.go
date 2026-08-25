@@ -322,8 +322,8 @@ func getBuiltInDeviceTypes() []models.DeviceType {
 		},
 		{
 			ID:          "zigbee-color-light",
-			Name:        "Zigbee Colour Light",
-			Description: "Colour-capable bulb controlled via Zigbee2MQTT (state, brightness, colour)",
+			Name:        "Zigbee Color Light",
+			Description: "Color-capable bulb controlled via Zigbee2MQTT (state, brightness, color)",
 			Category:    models.DeviceCategoryLight,
 			Subtype:     "light",
 			Protocol:    "mqtt",
@@ -343,7 +343,7 @@ func getBuiltInDeviceTypes() []models.DeviceType {
 				{
 					Name: "color",
 					Type: "object",
-					// Z2M reports colour as {x, y} regardless of the format it
+					// Z2M reports color as {x, y} regardless of the format it
 					// was written in; the client converts for display.
 					StatePath: "$.color",
 				},

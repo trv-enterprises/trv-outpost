@@ -10,19 +10,19 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **Colour bulb controls: `light` and `tile_light`** (#292). A control for
-  Zigbee2MQTT colour-capable bulbs, offering power, brightness, and colour.
+- **Color bulb controls: `light` and `tile_light`** (#292). A control for
+  Zigbee2MQTT color-capable bulbs, offering power, brightness, and color.
 
-  The tile face shows the light's live colour, and one tap anywhere on the
+  The tile face shows the light's live color, and one tap anywhere on the
   tile opens its popup to pick a new one — from a light-oriented palette (warm
   whites through saturated accents) or the custom picker for any hex. The
   control publishes the hex directly: Zigbee2MQTT accepts hex and converts on
   the way in, so nothing is converted on the command path.
 
   On the tile, fill height is brightness and the fill takes the bulb's live
-  colour. When the device also reports `occupancy`, a read-only motion dot
+  color. When the device also reports `occupancy`, a read-only motion dot
   appears in the corner; bulbs that don't report it render without one. The
-  control is a generic Z2M colour bulb, not tied to any particular device.
+  control is a generic Z2M color bulb, not tied to any particular device.
 
   Two supporting pieces:
 
@@ -31,13 +31,13 @@ This project adheres to [Semantic Versioning](https://semver.org/).
     (`{"state":"ON","brightness":120,"color":{"hex":"#ffd300"}}`) that a
     placeholder-substitution template cannot express. It applies only when the
     value is an object; scalars fall back to the template path. The new
-    built-in **Zigbee Colour Light** device type uses it.
+    built-in **Zigbee Color Light** device type uses it.
   - `utils/colorXY.js` converts the CIE `{x, y}` that bulbs report back into
     hex for display — the read direction only. It normalises by the peak
-    channel rather than clamping, which keeps saturated colours saturated (a
+    channel rather than clamping, which keeps saturated colors saturated (a
     clamping conversion turned a mid blue into a pale cyan). Because the round
     trip is lossy, the swatch holds the hex you picked until the device
-    reports a materially different colour, so an automation recolouring the
+    reports a materially different color, so an automation recoloring the
     bulb is reflected rather than masked.
 
 ## [0.58.1] — 2026-08-24
@@ -819,7 +819,7 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
   It stays visible as a faint hairline **throughout edit mode** (not only while
   the Borders tool is active) so you can see one is there while moving panels
-  in and out of it. It disappears entirely in view mode. Colour and width
+  in and out of it. It disappears entirely in view mode. Color and width
   controls are dropped for it, since neither has anything to paint.
 
 ### Fixed

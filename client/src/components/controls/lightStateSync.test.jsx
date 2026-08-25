@@ -46,7 +46,7 @@ describe('state stays coherent across a brightness change', () => {
     // Light is ON; raising brightness must not leave the toggle reading OFF.
     initialRecord = { state: 'ON', brightness: 100, color: { x: 0.4995, y: 0.4697 } };
     const { container } = render(<ControlRenderer control={mk('light')} />);
-    const toggle = () => container.querySelector('.control-light__toggle button[role="switch"]');
+    const toggle = () => container.querySelector('.control-light__toggle');
 
     expect(toggle().getAttribute('aria-checked')).toBe('true');
     fireEvent.keyDown(container.querySelector('.control-light__bar'), { key: 'ArrowUp' });
@@ -60,8 +60,8 @@ describe('state stays coherent across a brightness change', () => {
 
   it('shares one suppression window across its three reads', async () => {
     // ControlLight calls useControlState three times (state, brightness,
-    // colour) but wires only the first hook's suppress to the command. With a
-    // window per hook, brightness and colour never suppressed at all. This
+    // color) but wires only the first hook's suppress to the command. With a
+    // window per hook, brightness and color never suppressed at all. This
     // asserts the wiring rather than a rendered symptom — the observable
     // effect needs broker timing this harness cannot reproduce faithfully.
     initialRecord = { state: 'ON', brightness: 100, color: { x: 0.4995, y: 0.4697 } };
@@ -75,7 +75,7 @@ describe('state stays coherent across a brightness change', () => {
     const [, value] = executeControlCommand.mock.calls[0];
     expect(value.state).toBe('ON');
     expect(
-      container.querySelector('.control-light__toggle button[role="switch"]')
+      container.querySelector('.control-light__toggle')
         .getAttribute('aria-checked'),
     ).toBe('true');
   });
@@ -87,6 +87,6 @@ describe('state stays coherent across a brightness change', () => {
     await waitFor(() => expect(executeControlCommand).toHaveBeenCalled());
     const [, value] = executeControlCommand.mock.calls[0];
     expect(value).toEqual({ state: 'OFF' });
-    expect(container.querySelector('.control-light__toggle button[role="switch"]').getAttribute('aria-checked')).toBe('false');
+    expect(container.querySelector('.control-light__toggle').getAttribute('aria-checked')).toBe('false');
   });
 });
