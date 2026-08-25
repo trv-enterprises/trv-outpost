@@ -4484,9 +4484,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
                   {/* Popover picker, not an inline swatch row — the toolbar
                       has no room for the full palette laid out flat.
                       Dropped entirely for a `hidden` border: it paints nothing
-                      on the dashboard, so a colour would only ever tint the
+                      on the dashboard, so a color would only ever tint the
                       editor's own hairline — a control whose only effect is on
-                      the chrome that reveals it. The stored colour survives, so
+                      the chrome that reveals it. The stored color survives, so
                       switching back to a visible style restores it. */}
                   {selectedAdornment.line_style !== 'hidden' && (
                     <ColorSwatchPicker

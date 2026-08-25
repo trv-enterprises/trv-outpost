@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from '@mdi/react';
 import PropTypes from 'prop-types';
@@ -12,13 +12,11 @@ import {
 } from '@mdi/js';
 import { formatTitle } from './controlUtils';
 import { useControlState } from './useControlState';
-import { useControlCommand } from './useControlCommand';
 import { useTileFontSize } from './useTileFontSize';
 import { registerControl } from './controlRegistry';
-import ColorSwatchPicker from '../shared/ColorSwatchPicker';
-import { colorFieldToHex, holdWrittenHex } from '../../utils/colorXY';
+import { colorFieldToHex } from '../../utils/colorXY';
 import ControlLight from './ControlLight';
-import { LIGHT_COLOR_PALETTE, zigbeeToPct } from './lightPalette';
+import { zigbeeToPct } from './lightPalette';
 import './controls.scss';
 
 const ICON_MAP = {
@@ -35,21 +33,21 @@ const ICON_MAP = {
 /**
  * TileLight
  *
- * Compact tile for a Zigbee2MQTT colour bulb, following TileDimmer's
+ * Compact tile for a Zigbee2MQTT color bulb, following TileDimmer's
  * vertical-fill idiom so it reads as part of the existing tile set.
  *
  * Two things it adds over TileDimmer:
  *
- *  - The fill is tinted with the light's live colour, so the tile shows what
+ *  - The fill is tinted with the light's live color, so the tile shows what
  *    the light is actually doing at a glance.
- *  - The colour swatch is ON THE TILE FACE, not only inside the popup.
- *    Changing colour is a primary action for this control (the alternative
+ *  - The color swatch is ON THE TILE FACE, not only inside the popup.
+ *    Changing color is a primary action for this control (the alternative
  *    today is hand-publishing a hex over MQTT), so it gets one tap rather
  *    than two.
  *
  * A motion dot appears only when the device reports `occupancy`. Bulbs that
  * don't publish it simply render without one — the tile is a generic Z2M
- * colour bulb, not a nightlight-specific control. Note that occupancy here is
+ * color bulb, not a nightlight-specific control. Note that occupancy here is
  * a read-only *indicator*: motion driving the light is an automation concern,
  * not something this tile does.
  *
@@ -59,8 +57,10 @@ const ICON_MAP = {
 function TileLight({ control, readOnly = false, onSuccess, onError }) {
   const [popupOpen, setPopupOpen] = useState(false);
   const [popupStyle, setPopupStyle] = useState({});
-  const [writtenHex, setWrittenHex] = useState('');
   const tileRef = useRef(null);
+  // The tile only reads, but its four reads must still move together — a
+  // per-field window would let brightness and state drift apart mid-update.
+  const suppressRef = useRef(0);
   const fontSize = useTileFontSize();
 
   const uiConfig = control.control_config?.ui_config || {};
@@ -68,12 +68,13 @@ function TileLight({ control, readOnly = false, onSuccess, onError }) {
   const iconPath = ICON_MAP[uiConfig.icon] || mdiLightbulbOn;
   const showColorOnTile = uiConfig.show_color_on_tile !== false;
 
-  const { value: rawState, setValue: setRawState, suppress, clearSuppress } = useControlState({
+  const { value: rawState } = useControlState({
     connectionId: control.connection_id,
     target: control.control_config?.target || '',
     stateField: uiConfig.state_field || 'state',
     fallbackFields: ['state'],
     initialValue: undefined,
+  sharedSuppressRef: suppressRef,
   });
 
   const { value: brightnessPct } = useControlState({
@@ -86,6 +87,7 @@ function TileLight({ control, readOnly = false, onSuccess, onError }) {
       return Number.isFinite(n) ? zigbeeToPct(n) : undefined;
     },
     initialValue: 0,
+  sharedSuppressRef: suppressRef,
   });
 
   const { value: deviceHex } = useControlState({
@@ -95,6 +97,7 @@ function TileLight({ control, readOnly = false, onSuccess, onError }) {
     fallbackFields: [],
     transform: (raw) => colorFieldToHex(raw),
     initialValue: '',
+  sharedSuppressRef: suppressRef,
   });
 
   // Read-only presence indicator. `undefined` means this device doesn't
@@ -106,36 +109,14 @@ function TileLight({ control, readOnly = false, onSuccess, onError }) {
     stateField: 'occupancy',
     fallbackFields: [],
     initialValue: undefined,
+  sharedSuppressRef: suppressRef,
   });
 
   const isOn = typeof rawState === 'string' ? rawState.toUpperCase() === 'ON' : !!rawState;
-  const displayHex = holdWrittenHex(writtenHex, deviceHex);
+  // The tile only reads, so there is no written hex to hold against — that
+  // belongs to ControlLight, which does the writing. Show the device's color.
+  const displayHex = deviceHex;
   const fillPercent = isOn ? (brightnessPct || 0) : 0;
-
-  useEffect(() => {
-    if (writtenHex && deviceHex && holdWrittenHex(writtenHex, deviceHex) === deviceHex) {
-      setWrittenHex('');
-    }
-  }, [deviceHex, writtenHex]);
-
-  const { execute, loading } = useControlCommand({
-    controlId: control.id,
-    label: displayName,
-    target: control.control_config?.target || '',
-    onSuppress: suppress,
-    onClearSuppress: clearSuppress,
-    onSuccess,
-    onError,
-  });
-
-  const handleColor = useCallback((hex) => {
-    if (readOnly || loading || !hex) return;
-    setWrittenHex(hex);
-    // Setting a colour also turns the light on, so reflect that immediately
-    // rather than waiting for the device to echo it back.
-    setRawState('ON');
-    execute({ state: 'ON', color: { hex } }, `${displayName} colour ${hex}`);
-  }, [readOnly, loading, execute, displayName, setRawState]);
 
   const handleTileClick = useCallback(() => {
     if (popupOpen) {
@@ -190,7 +171,7 @@ function TileLight({ control, readOnly = false, onSuccess, onError }) {
           path={iconPath}
           size={0.8}
           className="tile-icon"
-          // Tint the icon with the live colour when lit, so the tile reads
+          // Tint the icon with the live color when lit, so the tile reads
           // correctly even at low brightness where the fill is a sliver.
           style={displayHex && isOn ? { color: displayHex } : undefined}
         />
@@ -207,24 +188,19 @@ function TileLight({ control, readOnly = false, onSuccess, onError }) {
 
         <div className="tile-bottom-row">
           <span className="tile-state">{isOn ? 'ON' : 'OFF'}</span>
-          {showColorOnTile && !readOnly ? (
-            // Stop propagation so opening the picker doesn't also open the
-            // tile popup behind it.
+          {showColorOnTile ? (
+            // A swatch, deliberately NOT a picker. Carbon's Popover renders
+            // inline, so a picker opened here is clipped by the tile's
+            // overflow:hidden — the palette got cut off at the tile edge.
+            // The swatch shows the live color and the tile's own popup (which
+            // portals to document.body) carries the actual picker, so this
+            // stays one tap and the whole tile behaves the same way.
             <span
               className="tile-light-swatch"
-              onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => e.stopPropagation()}
-              role="presentation"
-            >
-              <ColorSwatchPicker
-                value={displayHex}
-                onChange={handleColor}
-                label={`${displayName} colour`}
-                palette={LIGHT_COLOR_PALETTE}
-                allowAuto={false}
-                allowCustom
-              />
-            </span>
+              style={displayHex ? { backgroundColor: displayHex } : undefined}
+              title={displayHex ? `Color ${displayHex}` : 'Color'}
+              aria-hidden="true"
+            />
           ) : (
             <span className="tile-value">{isOn ? `${fillPercent}%` : ''}</span>
           )}

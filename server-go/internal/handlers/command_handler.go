@@ -315,7 +315,7 @@ func (h *CommandHandler) buildCommandFromDeviceType(c *gin.Context, controlConfi
 
 	// Interpolate the template with {{value}} and {{target}}, unless the
 	// command publishes the value as the payload verbatim (composite-object
-	// controls such as a colour light, whose shape a key/value template
+	// controls such as a color light, whose shape a key/value template
 	// cannot express).
 	var payload map[string]interface{}
 	if obj, ok := passthroughPayload(commandDef, mappedValue); ok {

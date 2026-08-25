@@ -3,11 +3,11 @@
 // See LICENSE file for details.
 
 /**
- * CIE 1931 xy → sRGB hex conversion for Zigbee colour bulbs.
+ * CIE 1931 xy → sRGB hex conversion for Zigbee color bulbs.
  *
  * Why this exists, and why it only goes one direction:
  *
- * Zigbee2MQTT accepts colour in several forms on the way IN — hex, {r,g,b},
+ * Zigbee2MQTT accepts color in several forms on the way IN — hex, {r,g,b},
  * "r,g,b", or {x,y} — and converts them itself. But every state publish comes
  * back as `color: {x, y}` with `color_mode: "xy"`, whichever form was written.
  * There is no hex echo.
@@ -15,7 +15,7 @@
  * So the write path needs no conversion at all (we send hex straight from the
  * picker), and the read path needs exactly one: xy → hex, to paint a swatch
  * from device state. Keeping the maths off the command path matters — a wrong
- * conversion there would be user-visible as the wrong colour on the light.
+ * conversion there would be user-visible as the wrong color on the light.
  *
  * The matrices are ported from the homelab Homebridge codec's xyToHs so the
  * two agree on what a given xy looks like; this is the same conversion
@@ -23,7 +23,7 @@
  *
  * Accuracy caveat: xy covers a wider gamut than sRGB, and these matrices are
  * Hue-tuned, so a round trip (pick hex → device → read xy → hex) lands near
- * but not exactly on the original. Callers that display a colour the user just
+ * but not exactly on the original. Callers that display a color the user just
  * picked should prefer the written hex — see holdWrittenHex below.
  */
 
@@ -67,9 +67,9 @@ export function xyToHex(x, y) {
   // Normalise by the largest channel rather than clamping at 1.
   //
   // This matters more than it looks. Forcing Y = 1 above fixes luminance, not
-  // scale, so a saturated colour lands with one channel far above 1 and the
+  // scale, so a saturated color lands with one channel far above 1 and the
   // others small. Clamping there would flatten the bright channels to equal
-  // values and wash the colour out toward white — #547CFF round-tripped to a
+  // values and wash the color out toward white — #547CFF round-tripped to a
   // pale cyan that way. Dividing by the max preserves the ratios between
   // channels, which is what carries hue AND saturation.
   //
@@ -96,7 +96,7 @@ export function xyToHex(x, y) {
 
 /**
  * Pull `{x, y}` out of a Zigbee2MQTT state record's `color` field and convert.
- * Returns '' when the record carries no usable xy colour.
+ * Returns '' when the record carries no usable xy color.
  *
  * @param {object} color - the `color` value from a state publish
  * @returns {string} hex or ''
@@ -118,7 +118,7 @@ function hexToRgb(hex) {
 }
 
 /**
- * How far apart two hex colours are, as the largest per-channel difference
+ * How far apart two hex colors are, as the largest per-channel difference
  * in 0–255. Returns Infinity when either side is unparseable, so callers
  * treat "unknown" as "different".
  */
@@ -134,8 +134,8 @@ export function hexDistance(a, b) {
 }
 
 /**
- * Per-channel tolerance (0–255) within which a device-reported colour is
- * considered "the same colour we wrote, round-tripped through xy".
+ * Per-channel tolerance (0–255) within which a device-reported color is
+ * considered "the same color we wrote, round-tripped through xy".
  *
  * Empirical, and deliberately loose: the xy round trip is lossy in the
  * awkward direction (wider gamut, Hue-tuned matrices), so an exact match
@@ -143,22 +143,22 @@ export function hexDistance(a, b) {
  * reports back xy ~0.4995/0.4697 after clamping to its gamut, which is the
  * worked example this was sized against.
  *
- * NOT verified against a broad range of colours on real hardware — see the
+ * NOT verified against a broad range of colors on real hardware — see the
  * "Not yet verified" note on issue #292.
  */
 export const HEX_HOLD_TOLERANCE = 40;
 
 /**
- * Decide which colour a swatch should show.
+ * Decide which color a swatch should show.
  *
- * The problem this solves: after a user picks a colour, the device echoes it
+ * The problem this solves: after a user picks a color, the device echoes it
  * back through the lossy xy round trip, so the swatch would visibly shift the
- * instant the colour is set — looking like a bug.
+ * instant the color is set — looking like a bug.
  *
  * The naive fix ("always show what we last wrote") is wrong, because an
- * automation engine can recolour the light out from under us. On this
- * deployment the nightlight rule sets colour on EVERY motion trigger, so a
- * held hex would keep showing a colour the light is no longer displaying.
+ * automation engine can recolor the light out from under us. On this
+ * deployment the nightlight rule sets color on EVERY motion trigger, so a
+ * held hex would keep showing a color the light is no longer displaying.
  *
  * So the hold is bounded: keep showing the written hex only while the device
  * still reports something close to it, and yield the moment it moves outside

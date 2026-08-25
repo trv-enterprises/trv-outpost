@@ -56,12 +56,41 @@ func (r *PushSecretRepository) Upsert(ctx context.Context, ps *models.PushSecret
 	if ps.CreatedAt.IsZero() {
 		ps.CreatedAt = time.Now().UTC()
 	}
-	if ps.ID == "" {
+	// Reuse the existing record's _id when this stream key already has a
+	// secret. ReplaceOne carries the struct's ID into the replacement
+	// document, and Mongo rejects a replace that alters the immutable _id
+	// ("the (immutable) field '_id' was found to have been altered"), so
+	// minting a fresh UUID here would make every re-registration after the
+	// first fail — taking the stream, and the subscribe that triggered it,
+	// down with it.
+	if existing, err := r.findIDByStreamKey(ctx, ps.StreamKey); err != nil {
+		return err
+	} else if existing != "" {
+		ps.ID = existing
+	} else if ps.ID == "" {
 		ps.ID = uuid.NewString()
 	}
 	opts := options.Replace().SetUpsert(true)
 	_, err := r.collection.ReplaceOne(ctx, bson.M{"stream_key": ps.StreamKey}, ps, opts)
 	return err
+}
+
+// findIDByStreamKey returns the _id of the record for a stream key, or ""
+// when the channel has no secret yet.
+func (r *PushSecretRepository) findIDByStreamKey(ctx context.Context, streamKey string) (string, error) {
+	var existing models.PushSecret
+	err := r.collection.FindOne(
+		ctx,
+		bson.M{"stream_key": streamKey},
+		options.FindOne().SetProjection(bson.M{"_id": 1}),
+	).Decode(&existing)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return "", nil
+		}
+		return "", err
+	}
+	return existing.ID, nil
 }
 
 // FindBySecret returns the record matching `secret`, or

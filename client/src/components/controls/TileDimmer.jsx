@@ -31,6 +31,7 @@ import { useControlState } from './useControlState';
 import { useTileFontSize } from './useTileFontSize';
 import { registerControl } from './controlRegistry';
 import ControlDimmer from './ControlDimmer';
+import { resolveDeviceScale, deviceToUi } from './lightPalette';
 import './controls.scss';
 
 function TileDimmer({ control, readOnly = false, onSuccess, onError }) {
@@ -44,6 +45,9 @@ function TileDimmer({ control, readOnly = false, onSuccess, onError }) {
   const min = uiConfig.min ?? 0;
   const max = uiConfig.max ?? 100;
   const iconPath = ICON_MAP[uiConfig.icon] || mdiLightbulbOn;
+  // Must match ControlDimmer's scaling, or the tile and its own popup
+  // disagree about the same device.
+  const deviceMax = resolveDeviceScale(uiConfig, max);
 
   const { value: level } = useControlState({
     connectionId: control.connection_id,
@@ -52,14 +56,34 @@ function TileDimmer({ control, readOnly = false, onSuccess, onError }) {
     fallbackFields: ['level', 'brightness'],
     transform: (raw) => {
       const num = Number(raw);
-      return !isNaN(num) ? Math.max(min, Math.min(max, num)) : undefined;
+      return Number.isFinite(num) ? deviceToUi(num, min, max, deviceMax) : undefined;
     },
     initialValue: 0
   });
 
-  const fillPercent = ((level - min) / (max - min)) * 100;
-  const isOn = level > min;
-  const isHigh = fillPercent > 50;
+  // Zigbee keeps `brightness` as the REMEMBERED level while the light is OFF
+  // (the device reports state:OFF with brightness:109), so brightness alone
+  // cannot tell us whether the light is lit. Read `state` when the device
+  // publishes one and let it decide; fall back to the level for devices that
+  // report no state field, which is the historical behaviour.
+  const { value: rawState } = useControlState({
+    connectionId: control.connection_id,
+    target: control.control_config?.target || '',
+    stateField: 'state',
+    fallbackFields: [],
+    initialValue: undefined,
+  });
+
+  const hasState = rawState !== undefined;
+  const stateOn = typeof rawState === 'string'
+    ? rawState.toUpperCase() === 'ON'
+    : !!rawState;
+  const isOn = hasState ? stateOn : level > min;
+
+  // The bar keeps showing the remembered level while off, but the tile must
+  // not read as lit — see the is-off styling.
+  const fillPercent = isOn ? ((level - min) / (max - min)) * 100 : 0;
+  const isHigh = isOn && fillPercent > 50;
 
   const handleTileClick = useCallback(() => {
     if (popupOpen) {

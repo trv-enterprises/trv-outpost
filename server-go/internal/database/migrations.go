@@ -54,6 +54,7 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"number_chart_to_value_v1", migrateNumberChartToValue},
 		{"value_chart_size_setting_v1", migrateValueChartSizeSetting},
 		{"value_type_availability_v1", migrateValueTypeAvailability},
+		{"dimmer_device_scale_v1", migrateDimmerDeviceScale},
 	}
 
 	coll := db.Collection("migrations")
@@ -586,7 +587,7 @@ func migrateSpecDrivenChartCode(ctx context.Context, db *mongo.Database) error {
 	// spec-driven check happens in Go below (the registry is the source
 	// of truth for which chart_types are spec-driven).
 	filter := bson.M{
-		"component_type": "chart",
+		"component_type":  "chart",
 		"use_custom_code": bson.M{"$ne": true},
 		"component_code":  bson.M{"$not": bson.M{"$regex": "SpecDrivenChart"}},
 	}
@@ -682,8 +683,8 @@ func migrateRefreshTileFontSizeDescription(ctx context.Context, db *mongo.Databa
 // to the current text; no-op on a fresh DB (the seed lands the new text).
 func migratePrefixRestartRequiredDescriptions(ctx context.Context, db *mongo.Database) error {
 	descs := map[string]string{
-		"ai.enabled":                  "Server Restart Required. AI features master switch — governs BOTH the Component AI agent (Create/Edit with AI) and the Dashboard Assistant (header chat). Requires an Anthropic API key at server start; this is the admin soft kill-switch on top of that.",
-		"assistant.model":             "Server Restart Required. Anthropic model the Dashboard Assistant runs. Use the alias `sonnet` (latest Sonnet — fast + cheaper, the default and a solid all-round choice) or `opus` (latest Opus — strongest reasoning + layout/design quality, higher cost; recommended for building polished multi-panel dashboards). Aliases auto-track the newest model each release. To pin a specific snapshot (e.g. for A/B comparison), enter a full model ID like `claude-sonnet-4-20250514` instead of an alias. Per-deployment choice; not per-user.",
+		"ai.enabled":                   "Server Restart Required. AI features master switch — governs BOTH the Component AI agent (Create/Edit with AI) and the Dashboard Assistant (header chat). Requires an Anthropic API key at server start; this is the admin soft kill-switch on top of that.",
+		"assistant.model":              "Server Restart Required. Anthropic model the Dashboard Assistant runs. Use the alias `sonnet` (latest Sonnet — fast + cheaper, the default and a solid all-round choice) or `opus` (latest Opus — strongest reasoning + layout/design quality, higher cost; recommended for building polished multi-panel dashboards). Aliases auto-track the newest model each release. To pin a specific snapshot (e.g. for A/B comparison), enter a full model ID like `claude-sonnet-4-20250514` instead of an alias. Per-deployment choice; not per-user.",
 		"assistant.daily_token_budget": "Server Restart Required. Per-user daily token budget for the Dashboard Assistant. Object with `input` and `output` keys. Counted in Anthropic tokens, resets at UTC midnight. Defaults to 1M input / 250k output — generous for most workflows; lower if costs run away, raise for power users. A user past either cap is refused new turns until the next UTC day; their conversation is not lost.",
 	}
 	for key, desc := range descs {
@@ -711,6 +712,7 @@ func migratePrefixRestartRequiredDescriptions(ctx context.Context, db *mongo.Dat
 //     value, so an admin who had explicitly turned the Assistant OFF
 //     keeps AI off after the merge (and the seed then skips it).
 //   - Else (fresh DB) → do nothing; the seed creates ai.enabled=true.
+//
 // Finally removes the orphaned assistant.enabled doc.
 func migrateAssistantEnabledToAIEnabled(ctx context.Context, db *mongo.Database) error {
 	settings := db.Collection("settings")
@@ -1288,7 +1290,7 @@ func migrateSeedGlobalSnippetsV1(ctx context.Context, db *mongo.Database) error 
 //
 // Two shapes, tried in order:
 //  1. `{config?.title && ( <div ...>{config.title}</div> )}`  — the guarded form
-//  2. a bare `<div ...>{config?.title || ''}</div>` / `{config.title}` div
+//  2. a bare `<div ...>{config?.title || ”}</div>` / `{config.title}` div
 //
 // (?s) = dot matches newlines; lazy bodies keep each match to a single div.
 var (
@@ -1384,5 +1386,72 @@ func migrateRefreshIntervalMsToSeconds(ctx context.Context, db *mongo.Database) 
 		return fmt.Errorf("convert refresh_interval ms→seconds: %w", err)
 	}
 	log.Printf("  dashboards: converted refresh_interval ms→seconds on %d documents", res.ModifiedCount)
+	return nil
+}
+
+// migrateDimmerDeviceScale backfills ui_config.device_scale on dimmer
+// controls.
+//
+// Dimmers assumed the device shared their own 0-100 UI scale. Zigbee
+// brightness is 0-254, so "50%" published a raw 50 -- actually 20% -- and the
+// device's echo was read straight back as a percent. A tile_dimmer and a
+// tile_light pointed at the same bulb disagreed visibly: 48% against 19%.
+//
+// The control now scales through ui_config.device_scale, defaulting to the UI
+// max (1:1, the historical behaviour) when unset. That default is correct for
+// a device genuinely on 0-100, but wrong for the Zigbee dimmers that make up
+// every dimmer shipped so far -- hence this backfill.
+//
+// Scoped to mqtt-protocol device types so a dimmer on some other integration
+// with a real 0-100 range is left alone. Only touches records with no
+// device_scale, so an operator who has already set one keeps it.
+func migrateDimmerDeviceScale(ctx context.Context, db *mongo.Database) error {
+	// Which device types are actually 0-254? The Zigbee ones. Resolve them
+	// rather than assuming every dimmer is Zigbee.
+	cur, err := db.Collection("device_types").Find(ctx, bson.M{
+		"protocol": "mqtt",
+		"capabilities": bson.M{"$elemMatch": bson.M{
+			"name":      "brightness",
+			"value_max": 254,
+		}},
+	})
+	if err != nil {
+		return fmt.Errorf("dimmer device_scale: find device types: %w", err)
+	}
+	defer cur.Close(ctx)
+
+	var ids []string
+	for cur.Next(ctx) {
+		var dt struct {
+			ID string `bson:"_id"`
+		}
+		if err := cur.Decode(&dt); err != nil {
+			return fmt.Errorf("dimmer device_scale: decode device type: %w", err)
+		}
+		ids = append(ids, dt.ID)
+	}
+	if err := cur.Err(); err != nil {
+		return fmt.Errorf("dimmer device_scale: iterate device types: %w", err)
+	}
+	if len(ids) == 0 {
+		log.Println("  dimmer_device_scale_v1: no 0-254 device types; nothing to do")
+		return nil
+	}
+
+	res, err := db.Collection("components").UpdateMany(
+		ctx,
+		bson.M{
+			"control_config.control_type":           bson.M{"$in": []string{"dimmer", "tile_dimmer"}},
+			"control_config.device_type_id":         bson.M{"$in": ids},
+			"control_config.ui_config.device_scale": bson.M{"$exists": false},
+		},
+		bson.M{"$set": bson.M{"control_config.ui_config.device_scale": 254}},
+	)
+	if err != nil {
+		return fmt.Errorf("dimmer device_scale: update components: %w", err)
+	}
+	if res.ModifiedCount > 0 {
+		log.Printf("  dimmer_device_scale_v1: set device_scale=254 on %d dimmer(s)", res.ModifiedCount)
+	}
 	return nil
 }

@@ -9,6 +9,7 @@ import PropTypes from 'prop-types';
 import { useControlState } from './useControlState';
 import { useControlCommand } from './useControlCommand';
 import { registerControl } from './controlRegistry';
+import { resolveDeviceScale, uiToDevice, deviceToUi } from './lightPalette';
 import './controls.scss';
 
 /**
@@ -29,6 +30,9 @@ function ControlDimmer({ control, readOnly = false, onSuccess, onError }) {
   const min = uiConfig.min ?? 0;
   const max = uiConfig.max ?? 100;
   const step = uiConfig.step ?? 1;
+  // Devices rarely share the UI's 0-100 scale (Zigbee brightness is 0-254).
+  // Without this the control under-sends AND mis-reads the echo back.
+  const deviceMax = resolveDeviceScale(uiConfig, max);
 
   const { value: level, setValue: setLevel, suppress, clearSuppress } = useControlState({
     connectionId: control.connection_id,
@@ -37,7 +41,7 @@ function ControlDimmer({ control, readOnly = false, onSuccess, onError }) {
     fallbackFields: ['level', 'brightness'],
     transform: (raw) => {
       const num = Number(raw);
-      return !isNaN(num) ? Math.max(min, Math.min(max, num)) : undefined;
+      return Number.isFinite(num) ? deviceToUi(num, min, max, deviceMax) : undefined;
     },
     initialValue: 0
   });
@@ -53,9 +57,26 @@ function ControlDimmer({ control, readOnly = false, onSuccess, onError }) {
   });
 
   // The displayed level — drag value takes priority during interaction
+  // Zigbee keeps `brightness` as the REMEMBERED level while the light is OFF,
+  // so level alone cannot say whether it is lit. Prefer the device's `state`
+  // when it publishes one; fall back to the level otherwise (historical
+  // behaviour, and correct for devices with no state field). Must match
+  // TileDimmer, or the tile and its own popup disagree about one device.
+  const { value: rawState } = useControlState({
+    connectionId: control.connection_id,
+    target: control.control_config?.target || '',
+    stateField: 'state',
+    fallbackFields: [],
+    initialValue: undefined,
+  });
+
   const displayLevel = dragging && dragLevel !== null ? dragLevel : level;
   const fillPercent = ((displayLevel - min) / (max - min)) * 100;
-  const isOn = displayLevel > min;
+  const hasState = rawState !== undefined;
+  const stateOn = typeof rawState === 'string'
+    ? rawState.toUpperCase() === 'ON'
+    : !!rawState;
+  const isOn = hasState ? stateOn : displayLevel > min;
 
   // Convert a Y position within the pill to a level value
   const yToLevel = useCallback((clientY) => {
@@ -68,7 +89,9 @@ function ControlDimmer({ control, readOnly = false, onSuccess, onError }) {
   }, [min, max, step, level]);
 
   const sendLevel = (newLevel) => {
-    execute(newLevel, `${label} ${newLevel > min ? `${newLevel}%` : 'OFF'}`);
+    // Send in the device's units; the label stays in the UI's percent.
+    execute(uiToDevice(newLevel, min, max, deviceMax),
+      `${label} ${newLevel > min ? `${newLevel}%` : 'OFF'}`);
   };
 
   // Mouse/touch handlers

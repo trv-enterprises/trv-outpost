@@ -33,7 +33,7 @@ import ColorSwatchPicker from './ColorSwatchPicker';
  * render off-plot until data catches up.
  */
 // New rows escalate along the alert ramp, which is the order an author
-// almost always builds a band stack in: the BASE is the healthy colour
+// almost always builds a band stack in: the BASE is the healthy color
 // and each threshold above it is worse. Info is dropped from the default
 // rotation — it sorts to the front of a plain reverse() and made the base
 // blue, which reads as "informational" rather than "this is the good

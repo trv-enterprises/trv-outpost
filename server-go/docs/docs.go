@@ -8758,7 +8758,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "passthrough_value": {
-                    "description": "PassthroughValue publishes the control's value AS the payload, ignoring\nTemplate entirely. For controls that send a composite object rather than\na scalar -- a colour light sends\n{\"state\":\"ON\",\"brightness\":120,\"color\":{\"hex\":\"#ffd300\"}} -- where a\nkey/value template cannot express the shape.\n\nOnly meaningful when the value is an object; a scalar published this way\nwould not be a valid JSON object payload, so non-object values fall back\nto the template path.",
+                    "description": "PassthroughValue publishes the control's value AS the payload, ignoring\nTemplate entirely. For controls that send a composite object rather than\na scalar -- a color light sends\n{\"state\":\"ON\",\"brightness\":120,\"color\":{\"hex\":\"#ffd300\"}} -- where a\nkey/value template cannot express the shape.\n\nOnly meaningful when the value is an object; a scalar published this way\nwould not be a valid JSON object payload, so non-object values fall back\nto the template path.",
                     "type": "boolean"
                 },
                 "template": {

@@ -167,7 +167,7 @@
    A ~2% white wash lands on exactly #1b1b1b over the standard #161616
    canvas — a single step up from the background — while STAYING
    translucent, so a custom background or image still shows through the
-   tinted rows. An opaque #1b1b1b would hit the same colour on the default
+   tinted rows. An opaque #1b1b1b would hit the same color on the default
    canvas but block anything behind it, which is the whole point of
    transparent mode. */
 :root[data-transparent-panels='true']:not([data-panel-background='solid']) .ag-theme-quartz-dark .ag-row-even,

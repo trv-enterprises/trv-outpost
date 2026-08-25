@@ -20,6 +20,13 @@ import { deriveStateTopic, extractStateValue, SUPPRESS_DURATION_MS } from './con
  * @param {string[]} options.fallbackFields - Additional field names to try
  * @param {function} options.transform - Transform raw value before setting state (optional)
  * @param {*} options.initialValue - Initial state value
+ * @param {object} [options.sharedSuppressRef] - Share ONE suppression window
+ *   across several useControlState calls in the same control. A control that
+ *   reads more than one field (a color light reads state + brightness +
+ *   color) otherwise gets an independent window per field, and only the hook
+ *   whose `suppress` is wired to the command actually suppresses. The others
+ *   keep accepting post-command messages, so the fields drift apart and two
+ *   views of the same device disagree.
  * @returns {{ value, connected, suppressRef, stateTopic }}
  */
 export function useControlState({
@@ -28,11 +35,15 @@ export function useControlState({
   stateField = 'state',
   fallbackFields = [],
   transform,
-  initialValue = undefined
+  initialValue = undefined,
+  sharedSuppressRef
 }) {
   const [value, setValue] = useState(initialValue);
   const [connected, setConnected] = useState(false);
-  const suppressRef = useRef(0);
+  const ownSuppressRef = useRef(0);
+  // Callers that pass a shared ref suppress as one unit; everyone else keeps
+  // a private window, which is the historical behaviour.
+  const suppressRef = sharedSuppressRef || ownSuppressRef;
 
   const stateTopic = deriveStateTopic(target);
 

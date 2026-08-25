@@ -18,8 +18,11 @@ export { default as ControlDimmer } from './ControlDimmer';
 export { default as ControlGarageDoor } from './ControlGarageDoor';
 export { default as TilePlug } from './TilePlug';
 export { default as TileDimmer } from './TileDimmer';
-export { default as ControlLight, LIGHT_COLOR_PALETTE } from './ControlLight';
+export { default as ControlLight } from './ControlLight';
 export { default as TileLight } from './TileLight';
+// Palette + unit helpers live in their own module so the component files
+// export only components (a non-component export breaks Fast Refresh).
+export { LIGHT_COLOR_PALETTE, ZIGBEE_MAX_BRIGHTNESS, pctToZigbee, zigbeeToPct } from './lightPalette';
 export { default as TileGarageDoor } from './TileGarageDoor';
 export { default as ControlMqttPublish } from './ControlMqttPublish';
 export { default as ControlTextLabel } from './ControlTextLabel';

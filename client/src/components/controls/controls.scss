@@ -779,10 +779,10 @@
 }
 
 // ---------------------------------------------------------------------------
-// Light control + tile (Zigbee2MQTT colour bulbs)
+// Light control + tile (Zigbee2MQTT color bulbs)
 // ---------------------------------------------------------------------------
 
-// Full control surface: power, brightness, colour. Used standalone as a panel
+// Full control surface: power, brightness, color. Used standalone as a panel
 // control and inside TileLight's popup.
 .control-light {
   display: flex;
@@ -840,11 +840,20 @@
     bottom: 0;
     left: 0;
     right: 0;
-    // Fallback when the device has not reported a colour yet; an inline
-    // background-color from the live colour overrides this.
+    // Fallback when the device has not reported a color yet; an inline
+    // background-color from the live color overrides this.
     background-color: var(--cds-support-warning);
     transition: height 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-                background-color 0.25s ease;
+                background-color 0.25s ease,
+                opacity 0.25s ease, filter 0.25s ease;
+
+    // Zigbee reports brightness as the REMEMBERED level while state is OFF,
+    // so the bar keeps showing it — knocked back hard so an unlit light never
+    // reads as lit. The color is still legible, just clearly inactive.
+    &.is-off {
+      opacity: 0.28;
+      filter: grayscale(0.55);
+    }
   }
 
   .control-light__bar-value {
@@ -856,7 +865,7 @@
     font-weight: 600;
     font-size: 0.875rem;
     color: var(--cds-text-primary);
-    // The fill sits behind, and can be any colour the bulb is set to, so the
+    // The fill sits behind, and can be any color the bulb is set to, so the
     // readout needs its own contrast rather than trusting the backdrop.
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
     pointer-events: none;
@@ -882,7 +891,7 @@
     bottom: 0;
     left: 0;
     right: 0;
-    // Overridden inline with the light's live colour when it is on.
+    // Overridden inline with the light's live color when it is on.
     background: var(--cds-support-warning);
     border-radius: 0 0 7px 7px; // slightly less than container to avoid bleed
     transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
@@ -921,24 +930,135 @@
     }
   }
 
-  // Colour swatch on the tile face. Changing colour is a primary action for
+  // Color swatch on the tile face. Changing color is a primary action for
   // this control, so it gets one tap rather than being buried in the popup.
+  // Color indicator, not a control. The picker lives in the tile's popup:
+  // Carbon's Popover renders inline, so a picker opened from here would be
+  // clipped by this tile's overflow:hidden. Pointer events are off so the
+  // whole tile — this corner included — opens the popup on click.
   .tile-light-swatch {
     z-index: 2;
-    display: flex;
-    align-items: center;
-    padding-right: 4px;
-
-    .color-swatch-picker__trigger {
-      width: 16px;
-      height: 16px;
-      border-radius: 4px;
-    }
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+    border-radius: 3px;
+    pointer-events: none;
+    background-color: var(--cds-layer-03);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
   }
 }
 
 .tile-popup--light {
   .control-light {
     min-width: 132px;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PillToggle — on/off pill with the label inside, opposite the knob
+// ---------------------------------------------------------------------------
+//
+// Carbon's Toggle puts its label outside the pill, so the control hangs off to
+// one side and shifts as the label changes width. Keeping the label inside a
+// fixed-width pill makes it one balanced object that doesn't move when flipped.
+.pill-toggle {
+  --pill-h: 34px;
+  --pill-w: 92px;
+  --pill-pad: 4px;
+  --knob: calc(var(--pill-h) - (var(--pill-pad) * 2));
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  // Fixed size: ON and OFF must occupy exactly the same box, or the pill
+  // jumps as it flips — the imbalance this component exists to fix.
+  width: var(--pill-w);
+  height: var(--pill-h);
+  padding: var(--pill-pad);
+  border: 0;
+  border-radius: calc(var(--pill-h) / 2);
+  cursor: pointer;
+  user-select: none;
+  // The OFF pill must read as an object on BOTH surfaces it appears on: the
+  // dark panel background, and .tile-popup — which is #525252, exactly
+  // --cds-layer-03. Using layer-03 here made the pill the same color as the
+  // popup behind it, so it vanished and only appeared on hover (the
+  // brightness filter lifting it). layer-02 is distinct from both, and the
+  // border keeps it defined on any surface.
+  //
+  // (Not --cds-button-secondary: that is not a Carbon token at all, so it
+  // resolved to nothing — see carbonTokens.test.js.)
+  background-color: var(--cds-layer-02);
+  box-shadow: inset 0 0 0 1px var(--cds-border-strong-01);
+  transition: background-color 0.25s ease, box-shadow 0.25s ease;
+
+  &:focus-visible {
+    outline: 2px solid var(--cds-focus);
+    outline-offset: 2px;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  &:not(:disabled):hover {
+    filter: brightness(1.12);
+  }
+
+  .pill-toggle__knob {
+    position: absolute;
+    top: var(--pill-pad);
+    width: var(--knob);
+    height: var(--knob);
+    border-radius: 50%;
+    background-color: var(--cds-icon-on-color);
+    transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                background-color 0.25s ease;
+  }
+
+  .pill-toggle__label {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    transition: color 0.25s ease;
+  }
+
+  // OFF: knob left, label right — matching the reference.
+  &.is-off {
+    .pill-toggle__knob { left: var(--pill-pad); }
+    .pill-toggle__label {
+      right: 0;
+      // Clear the knob, plus breathing room on the outer edge.
+      padding-right: 14px;
+      left: calc(var(--pill-pad) + var(--knob));
+      justify-content: center;
+      color: var(--cds-text-on-color);
+    }
+  }
+
+  // ON: knob right, label left.
+  &.is-on {
+    background-color: var(--cds-support-success);
+    // The green carries its own contrast; the outline would only muddy it.
+    box-shadow: none;
+
+    .pill-toggle__knob {
+      left: calc(var(--pill-w) - var(--knob) - var(--pill-pad));
+      background-color: var(--cds-icon-on-color);
+    }
+
+    .pill-toggle__label {
+      left: 0;
+      padding-left: 14px;
+      right: calc(var(--pill-pad) + var(--knob));
+      justify-content: center;
+      color: var(--cds-text-on-color);
+    }
   }
 }

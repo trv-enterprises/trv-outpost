@@ -1095,10 +1095,10 @@ body.dash-resizing--corner * { cursor: nwse-resize !important; }
   }
 
   // Edit mode gives every panel a visible edge so its bounds are readable
-  // while arranging. Deliberately NEUTRAL, not blue: blue is the colour of an
+  // while arranging. Deliberately NEUTRAL, not blue: blue is the color of an
   // author-applied border, and tinting every panel blue in edit mode made it
   // impossible to tell which panels actually HAD a border. Panels carrying a
-  // real panel_border override this with the author's colour (see
+  // real panel_border override this with the author's color (see
   // `.has-panel-border` / the inline style in DashboardGrid).
   .dashboard-grid .panel-container.edit-mode {
     border-color: var(--cds-border-strong-01);
