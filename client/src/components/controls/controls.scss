@@ -979,10 +979,17 @@
   border-radius: calc(var(--pill-h) / 2);
   cursor: pointer;
   user-select: none;
-  // layer-03 (#525252 in g100), NOT --cds-button-secondary: that token does
-  // not exist in the Carbon theme, so it resolved to nothing and the OFF pill
-  // rendered with no background at all — a bare knob and floating label.
-  background-color: var(--cds-layer-03);
+  // The OFF pill must read as an object on BOTH surfaces it appears on: the
+  // dark panel background, and .tile-popup — which is #525252, exactly
+  // --cds-layer-03. Using layer-03 here made the pill the same color as the
+  // popup behind it, so it vanished and only appeared on hover (the
+  // brightness filter lifting it). layer-02 is distinct from both, and the
+  // border keeps it defined on any surface.
+  //
+  // (Not --cds-button-secondary: that is not a Carbon token at all, so it
+  // resolved to nothing — see carbonTokens.test.js.)
+  background-color: var(--cds-layer-02);
+  box-shadow: inset 0 0 0 1px var(--cds-border-strong-01);
   transition: background-color 0.25s ease, box-shadow 0.25s ease;
 
   &:focus-visible {
@@ -1038,6 +1045,8 @@
   // ON: knob right, label left.
   &.is-on {
     background-color: var(--cds-support-success);
+    // The green carries its own contrast; the outline would only muddy it.
+    box-shadow: none;
 
     .pill-toggle__knob {
       left: calc(var(--pill-w) - var(--knob) - var(--pill-pad));
