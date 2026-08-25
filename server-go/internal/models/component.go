@@ -36,10 +36,12 @@ const (
 	ControlTypeSwitch         = "switch"           // On/off switch (HomeKit-style pill)
 	ControlTypePlug           = "plug"             // Alias for switch (backward compat)
 	ControlTypeDimmer         = "dimmer"           // Light dimmer
+	ControlTypeLight          = "light"            // Colour bulb: power + brightness + colour
 	ControlTypeGarageDoor     = "garage_door"      // Full-size animated garage door status
 	ControlTypeTileSwitch     = "tile_switch"      // Compact tile switch
 	ControlTypeTilePlug       = "tile_plug"        // Alias for tile_switch (backward compat)
 	ControlTypeTileDimmer     = "tile_dimmer"      // Compact tile dimmer
+	ControlTypeTileLight      = "tile_light"       // Compact colour-bulb tile
 	ControlTypeTileGarageDoor = "tile_garage_door" // Compact garage door status tile
 	ControlTypeTextLabel      = "text_label"       // Static text/label display
 	ControlTypeMqttPublish    = "mqtt_publish"     // Fire-and-forget MQTT JSON publish
@@ -227,10 +229,10 @@ type ComponentUsageListResponse struct {
 // ComponentQueryParams defines query parameters for listing components
 // @Description Query parameters for filtering and pagination
 type ComponentQueryParams struct {
-	Namespace     string   `form:"namespace"` // Empty = all namespaces; non-empty = exact match
-	Name          string   `form:"name"`
-	ChartType     string   `form:"chart_type"`
-	ComponentType string   `form:"component_type"` // "chart", "control", "display"
+	Namespace     string `form:"namespace"` // Empty = all namespaces; non-empty = exact match
+	Name          string `form:"name"`
+	ChartType     string `form:"chart_type"`
+	ComponentType string `form:"component_type"` // "chart", "control", "display"
 	// Multi-value type filters (OR within each, AND across the union with the
 	// single-value ChartType/ComponentType above) — lets the hierarchical type
 	// picker express ANY selection server-side (mixed parents, partial subtype
@@ -247,10 +249,10 @@ type ComponentQueryParams struct {
 	ConnectionID   string   `form:"connection_id"` // Accept connection_id query param
 	Tags           []string `form:"tags"`          // Filter components with any of the given tags (OR)
 	Tag            string   `form:"tag"`           // DEPRECATED: use tags; kept for back-compat
-	Sort          string   `form:"sort"`           // Sort field (allowlisted; see ComponentSortFields). Empty = default.
-	Direction     string   `form:"direction"`      // "asc" | "desc". Empty = entity default direction.
-	Page          int      `form:"page"`
-	PageSize      int      `form:"page_size"` // 0 = all (capped at PageSizeAllCap)
+	Sort           string   `form:"sort"`          // Sort field (allowlisted; see ComponentSortFields). Empty = default.
+	Direction      string   `form:"direction"`     // "asc" | "desc". Empty = entity default direction.
+	Page           int      `form:"page"`
+	PageSize       int      `form:"page_size"` // 0 = all (capped at PageSizeAllCap)
 	// Internal (issue #4): the caller's namespace grants, stamped by the
 	// service from the authz context — never a query param.
 	NamespacesRestricted bool     `form:"-"`

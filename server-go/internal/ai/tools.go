@@ -431,7 +431,7 @@ const (
 // or the historical full list when no catalog is supplied.
 func controlTypeEnum(cat *registry.Catalog) []string {
 	if cat == nil {
-		return []string{"button", "toggle", "slider", "text_input", "switch", "dimmer", "garage_door", "tile_switch", "tile_dimmer", "tile_garage_door", "text_label"}
+		return []string{"button", "toggle", "slider", "text_input", "switch", "dimmer", "light", "garage_door", "tile_switch", "tile_dimmer", "tile_light", "tile_garage_door", "text_label"}
 	}
 	out := make([]string, 0, len(cat.ControlTypes))
 	for _, t := range cat.ControlTypes {

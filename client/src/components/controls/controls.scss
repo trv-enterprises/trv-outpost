@@ -777,3 +777,168 @@
     justify-content: center;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Light control + tile (Zigbee2MQTT colour bulbs)
+// ---------------------------------------------------------------------------
+
+// Full control surface: power, brightness, colour. Used standalone as a panel
+// control and inside TileLight's popup.
+.control-light {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: spacing.$spacing-04;
+  width: 100%;
+
+  &--compact {
+    gap: spacing.$spacing-03;
+  }
+
+  .control-light__section {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: spacing.$spacing-03;
+  }
+
+  .control-light__section--power {
+    position: relative;
+  }
+
+  .control-light__loading {
+    position: absolute;
+    right: -28px;
+    min-width: auto;
+  }
+
+  // Vertical brightness bar, mirroring the dimmer pill idiom.
+  .control-light__bar {
+    position: relative;
+    width: 56px;
+    height: 132px;
+    border-radius: 12px;
+    background-color: var(--cds-layer-02);
+    border: 1px solid var(--cds-border-subtle-01);
+    overflow: hidden;
+    cursor: ns-resize;
+    user-select: none;
+    touch-action: none;
+
+    &.is-readonly {
+      cursor: default;
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--cds-focus);
+      outline-offset: 2px;
+    }
+  }
+
+  .control-light__bar-fill {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    // Fallback when the device has not reported a colour yet; an inline
+    // background-color from the live colour overrides this.
+    background-color: var(--cds-support-warning);
+    transition: height 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                background-color 0.25s ease;
+  }
+
+  .control-light__bar-value {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--cds-text-primary);
+    // The fill sits behind, and can be any colour the bulb is set to, so the
+    // readout needs its own contrast rather than trusting the backdrop.
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
+    pointer-events: none;
+  }
+
+  .control-light__section--color {
+    gap: spacing.$spacing-03;
+  }
+
+  .control-light__color-label {
+    font-size: 0.75rem;
+    color: var(--cds-text-secondary);
+  }
+}
+
+// Compact tile.
+.tile-light {
+  @extend %tile-base;
+  background-color: #393939;
+
+  .tile-light-fill {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    // Overridden inline with the light's live colour when it is on.
+    background: var(--cds-support-warning);
+    border-radius: 0 0 7px 7px; // slightly less than container to avoid bleed
+    transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                background-color 0.3s ease;
+  }
+
+  &.tile-light-off {
+    .tile-icon, .tile-name, .tile-state, .tile-value {
+      color: #8d8d8d;
+    }
+  }
+
+  &.tile-light-on {
+    .tile-name, .tile-state, .tile-value {
+      color: #ffffff;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+    }
+  }
+
+  // Read-only motion indicator. Rendered only when the device reports
+  // occupancy at all — a plain bulb has no dot.
+  .tile-light-motion {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    z-index: 2;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--cds-icon-disabled);
+    transition: background-color 0.2s ease;
+
+    &.is-active {
+      background-color: var(--cds-support-success);
+      box-shadow: 0 0 6px var(--cds-support-success);
+    }
+  }
+
+  // Colour swatch on the tile face. Changing colour is a primary action for
+  // this control, so it gets one tap rather than being buried in the popup.
+  .tile-light-swatch {
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    padding-right: 4px;
+
+    .color-swatch-picker__trigger {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+    }
+  }
+}
+
+.tile-popup--light {
+  .control-light {
+    min-width: 132px;
+  }
+}

@@ -172,6 +172,52 @@ func init() {
 	})
 
 	RegisterComponentType(ComponentTypeInfo{
+		TypeID:      "control.light",
+		Category:    CategoryControl,
+		Subtype:     "light",
+		DisplayName: "Light",
+		Description: "Colour bulb control: power, brightness, and colour. Colour is written as hex and read back from the device as CIE xy.",
+		Icon:        "mdiLightbulbOn",
+		UICategory:  "carbon",
+		Capabilities: ComponentCapabilities{
+			CanRead:            true,
+			CanWrite:           true,
+			RequiresDeviceType: true,
+			RequiresConnection: true,
+			SupportsStreaming:  true,
+		},
+		DefaultConfig: map[string]interface{}{
+			"label":           "Light",
+			"state_field":     "state",
+			"show_brightness": true,
+			"show_color":      true,
+		},
+	})
+
+	RegisterComponentType(ComponentTypeInfo{
+		TypeID:      "control.tile_light",
+		Category:    CategoryControl,
+		Subtype:     "tile_light",
+		DisplayName: "Tile Light",
+		Description: "Compact tile for a colour bulb. Fill height is brightness and the fill takes the light's live colour; the colour swatch sits on the tile face. Shows a motion dot when the device reports occupancy.",
+		Icon:        "mdiLightbulbNight",
+		UICategory:  "tile",
+		Capabilities: ComponentCapabilities{
+			CanRead:            true,
+			CanWrite:           true,
+			RequiresDeviceType: true,
+			RequiresConnection: true,
+			SupportsStreaming:  true,
+		},
+		DefaultConfig: map[string]interface{}{
+			"label":              "Light",
+			"icon":               "lightbulb-on",
+			"state_field":        "state",
+			"show_color_on_tile": true,
+		},
+	})
+
+	RegisterComponentType(ComponentTypeInfo{
 		TypeID:      "control.tile_switch",
 		Category:    CategoryControl,
 		Subtype:     "tile_switch",
@@ -257,14 +303,14 @@ func init() {
 	})
 
 	RegisterComponentType(ComponentTypeInfo{
-		TypeID:      "control.text_label",
-		Category:    CategoryControl,
-		Subtype:     "text_label",
-		DisplayName: "Text Label",
-		Description: "Static text display for section headers, date/time, or dashboard titles. No connection needed. Replaced by native text panels — kept for backward compat.",
-		Icon:        "mdiFormatText",
-		UICategory:  "decorative",
-		Hidden:      true,
+		TypeID:       "control.text_label",
+		Category:     CategoryControl,
+		Subtype:      "text_label",
+		DisplayName:  "Text Label",
+		Description:  "Static text display for section headers, date/time, or dashboard titles. No connection needed. Replaced by native text panels — kept for backward compat.",
+		Icon:         "mdiFormatText",
+		UICategory:   "decorative",
+		Hidden:       true,
 		Capabilities: ComponentCapabilities{},
 		DefaultConfig: map[string]interface{}{
 			"display_content": "title",

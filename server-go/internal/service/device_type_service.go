@@ -321,6 +321,76 @@ func getBuiltInDeviceTypes() []models.DeviceType {
 			IsBuiltIn: true,
 		},
 		{
+			ID:          "zigbee-color-light",
+			Name:        "Zigbee Colour Light",
+			Description: "Colour-capable bulb controlled via Zigbee2MQTT (state, brightness, colour)",
+			Category:    models.DeviceCategoryLight,
+			Subtype:     "light",
+			Protocol:    "mqtt",
+			Capabilities: []models.DeviceCapability{
+				{
+					Name:      "state",
+					Type:      "binary",
+					StatePath: "$.state",
+				},
+				{
+					Name:      "brightness",
+					Type:      "numeric",
+					ValueMin:  ptr(0),
+					ValueMax:  ptr(254),
+					StatePath: "$.brightness",
+				},
+				{
+					Name: "color",
+					Type: "object",
+					// Z2M reports colour as {x, y} regardless of the format it
+					// was written in; the client converts for display.
+					StatePath: "$.color",
+				},
+			},
+			SupportedTypes: []string{
+				models.ControlUITypeToggle,
+				models.ControlUITypePlug,
+				models.ControlUITypeButton,
+				models.ControlUITypeScalar,
+				models.ControlUITypeDimmer,
+				models.ControlUITypeLight,
+				models.ControlUITypeTileLight,
+			},
+			Commands: map[string]models.CommandDef{
+				models.ControlUITypeToggle: {
+					Template: map[string]interface{}{"state": "{{value}}"},
+					ValueMap: map[string]interface{}{"true": "ON", "false": "OFF"},
+				},
+				models.ControlUITypePlug: {
+					Template: map[string]interface{}{"state": "{{value}}"},
+					ValueMap: map[string]interface{}{"true": "ON", "false": "OFF"},
+				},
+				models.ControlUITypeButton: {
+					Template: map[string]interface{}{"state": "TOGGLE"},
+				},
+				models.ControlUITypeScalar: {
+					Template: map[string]interface{}{"brightness": "{{value}}"},
+				},
+				models.ControlUITypeDimmer: {
+					Template: map[string]interface{}{"brightness": "{{value}}"},
+				},
+				// The light controls send a composite object rather than a
+				// scalar -- {"state":"ON","brightness":120,"color":{"hex":"#ffd300"}}
+				// -- so there is no template: a nil Template means the value
+				// IS the payload and is published as-is (see
+				// interpolateSchemaTemplate). Z2M accepts hex directly and
+				// converts on the way in, so nothing is converted on the
+				// command path.
+				models.ControlUITypeLight:     {PassthroughValue: true},
+				models.ControlUITypeTileLight: {PassthroughValue: true},
+			},
+			Response: &models.ResponseDef{
+				StatePath: "$.state",
+			},
+			IsBuiltIn: true,
+		},
+		{
 			ID:          "caseta-switch",
 			Name:        "Caseta Switch",
 			Description: "On/off light switch controlled via Lutron Caseta bridge over MQTT",

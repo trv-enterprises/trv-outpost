@@ -18,6 +18,8 @@ export { default as ControlDimmer } from './ControlDimmer';
 export { default as ControlGarageDoor } from './ControlGarageDoor';
 export { default as TilePlug } from './TilePlug';
 export { default as TileDimmer } from './TileDimmer';
+export { default as ControlLight, LIGHT_COLOR_PALETTE } from './ControlLight';
+export { default as TileLight } from './TileLight';
 export { default as TileGarageDoor } from './TileGarageDoor';
 export { default as ControlMqttPublish } from './ControlMqttPublish';
 export { default as ControlTextLabel } from './ControlTextLabel';

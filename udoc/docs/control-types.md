@@ -32,6 +32,7 @@ grouped in the component-editor picker.
 |------|-------------|----------|-----------|
 | **Switch** | Pill-shaped on/off control (formerly "Plug") | Yes | Yes |
 | **Dimmer** | Vertical light dimmer with brightness slider | Yes | Yes |
+| **Light** | Colour bulb: power, brightness, and a colour picker | Yes | Yes |
 | **Garage Door** | Garage-door indicator + open/close action | Yes | Yes |
 
 ### Tiles (compact)
@@ -40,6 +41,7 @@ grouped in the component-editor picker.
 |------|-------------|----------|-----------|
 | **Tile Switch** | Compact switch tile with popup for details | Yes | Yes |
 | **Tile Dimmer** | Compact dimmer tile with popup for brightness | Yes | Yes |
+| **Tile Light** | Compact colour-bulb tile; colour swatch on the tile face | Yes | Yes |
 | **Tile Garage Door** | Compact garage-door tile | Yes | Yes |
 
 ### Legacy / hidden
@@ -77,12 +79,78 @@ capability.
 
 ## Compact Tile Controls
 
-Tile Switch, Tile Dimmer, and Tile Garage Door are compact versions
-designed for dense dashboards:
+Tile Switch, Tile Dimmer, Tile Light, and Tile Garage Door are compact
+versions designed for dense dashboards:
 
 - Small footprint (minimum 2x3 grid cells)
 - Show basic state (on/off, brightness level, door position)
 - Click to open a popup with the full control interface
 - Ideal for home-automation dashboards with many devices
+
+---
+
+## Light and Tile Light
+
+**Light** and **Tile Light** drive a colour-capable bulb over
+Zigbee2MQTT. Both offer power, brightness, and colour; the tile is the
+compact form.
+
+### Setting colour
+
+Colour is a first-class action, not something buried in a settings
+panel. On **Tile Light** the colour swatch sits on the tile face, so
+changing colour is a single tap: pick from the light palette (warm
+whites through to saturated accents) or open the custom picker for any
+hex your palette doesn't cover.
+
+Behind the scenes the control publishes the hex directly — for example:
+
+```json
+{"state": "ON", "color": {"hex": "#ffd300"}}
+```
+
+Zigbee2MQTT accepts hex and converts it on the way in, so nothing is
+converted on the command path. Setting a colour also turns the light on.
+
+### Why the swatch sometimes differs from what you picked
+
+Zigbee bulbs report their colour back as CIE `{x, y}` coordinates, never
+as the hex that was written. The dashboard converts those coordinates
+back to a colour for display, and the bulb clamps any colour to what its
+LEDs can physically produce — so a very saturated pick may read back a
+shade off.
+
+To keep the swatch from visibly shifting the instant you set a colour,
+the control shows the hex you picked and only yields to the device's
+reported colour once that colour changes materially. This matters when
+an automation drives the same bulb: if a rule recolours the light, the
+swatch follows the light rather than continuing to show your pick.
+
+### Brightness and motion
+
+Brightness is a 0–100% bar in the UI and is sent as Zigbee's native
+0–254 range. On the tile, fill height is brightness and the fill takes
+the bulb's live colour.
+
+If the device also reports `occupancy` — a motion nightlight, for
+instance — a small motion dot appears in the tile corner. This is a
+read-only indicator. Making motion actually *switch the light on* is an
+automation concern handled outside the dashboard, not something the
+control does.
+
+### Configuration
+
+| Setting | Applies to | Description |
+|---------|-----------|-------------|
+| `show_brightness` | Light | Show the brightness bar |
+| `show_color` | Light | Show the colour picker |
+| `show_color_on_tile` | Tile Light | Put the colour swatch on the tile face |
+| `icon` | Tile Light | MDI icon (`lightbulb-on`, `floor-lamp`, `lamp`, …) |
+| `state_field` | Both | State field to read (default `state`) |
+
+Both require a device type whose command uses **passthrough** — the
+built-in **Zigbee Colour Light** device type does this. Passthrough
+publishes the control's whole object as the payload, which a
+placeholder-substitution template cannot express.
 
 ---

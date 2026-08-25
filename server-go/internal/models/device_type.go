@@ -10,12 +10,12 @@ import (
 
 // Device category constants
 const (
-	DeviceCategorySwitch    = "switch"
-	DeviceCategoryLight     = "light"
-	DeviceCategorySensor    = "sensor"
+	DeviceCategorySwitch     = "switch"
+	DeviceCategoryLight      = "light"
+	DeviceCategorySensor     = "sensor"
 	DeviceCategoryThermostat = "thermostat"
-	DeviceCategoryCover     = "cover"
-	DeviceCategoryOther     = "other"
+	DeviceCategoryCover      = "cover"
+	DeviceCategoryOther      = "other"
 )
 
 // ValidDeviceCategories returns the list of valid device categories
@@ -49,6 +49,8 @@ const (
 	ControlUITypeSwitch         = "switch"           // On/off switch, sends boolean
 	ControlUITypePlug           = "plug"             // Alias for switch (backward compat)
 	ControlUITypeDimmer         = "dimmer"           // Vertical slider with on/off, sends number (0=off)
+	ControlUITypeLight          = "light"            // Colour bulb, sends a composite object (state/brightness/color)
+	ControlUITypeTileLight      = "tile_light"       // Compact colour-bulb tile
 	ControlUITypeGarageDoor     = "garage_door"      // Read-only full-size garage door contact sensor
 	ControlUITypeTileSwitch     = "tile_switch"      // Compact tile switch
 	ControlUITypeTilePlug       = "tile_plug"        // Alias for tile_switch (backward compat)
@@ -65,6 +67,8 @@ func ValidControlUITypes() []string {
 		ControlUITypeSwitch,
 		ControlUITypePlug,
 		ControlUITypeDimmer,
+		ControlUITypeLight,
+		ControlUITypeTileLight,
 		ControlUITypeGarageDoor,
 		ControlUITypeTileSwitch,
 		ControlUITypeTilePlug,
@@ -85,8 +89,19 @@ func IsValidControlUIType(controlType string) bool {
 // CommandDef defines how to format a command message for a specific control type
 // @Description Template for formatting control commands
 type CommandDef struct {
-	Template map[string]interface{} `json:"template" bson:"template"`               // Message template with {value}, {target} placeholders
-	ValueMap map[string]interface{} `json:"value_map,omitempty" bson:"value_map"`   // Optional value mapping (e.g., true -> "ON", false -> "OFF")
+	Template map[string]interface{} `json:"template" bson:"template"`             // Message template with {value}, {target} placeholders
+	ValueMap map[string]interface{} `json:"value_map,omitempty" bson:"value_map"` // Optional value mapping (e.g., true -> "ON", false -> "OFF")
+
+	// PassthroughValue publishes the control's value AS the payload, ignoring
+	// Template entirely. For controls that send a composite object rather than
+	// a scalar -- a colour light sends
+	// {"state":"ON","brightness":120,"color":{"hex":"#ffd300"}} -- where a
+	// key/value template cannot express the shape.
+	//
+	// Only meaningful when the value is an object; a scalar published this way
+	// would not be a valid JSON object payload, so non-object values fall back
+	// to the template path.
+	PassthroughValue bool `json:"passthrough_value,omitempty" bson:"passthrough_value,omitempty"`
 }
 
 // StateQueryDef defines how to request current state from a connection
@@ -99,9 +114,9 @@ type StateQueryDef struct {
 // ResponseDef defines how to parse responses from a connection
 // @Description Configuration for parsing connection responses
 type ResponseDef struct {
-	SuccessPath string                 `json:"success_path" bson:"success_path"` // JSONPath to success flag (e.g., "$.success")
-	StatePath   string                 `json:"state_path" bson:"state_path"`     // JSONPath to current state value (e.g., "$.state")
-	ErrorPath   string                 `json:"error_path" bson:"error_path"`     // JSONPath to error message (e.g., "$.error")
+	SuccessPath string                 `json:"success_path" bson:"success_path"`     // JSONPath to success flag (e.g., "$.success")
+	StatePath   string                 `json:"state_path" bson:"state_path"`         // JSONPath to current state value (e.g., "$.state")
+	ErrorPath   string                 `json:"error_path" bson:"error_path"`         // JSONPath to error message (e.g., "$.error")
 	ValueMap    map[string]interface{} `json:"value_map,omitempty" bson:"value_map"` // Reverse mapping (e.g., "ON" -> true, "OFF" -> false)
 }
 
@@ -129,14 +144,14 @@ type DeviceType struct {
 // @Description A capability that a device type supports (e.g., state, brightness)
 type DeviceCapability struct {
 	Name        string   `json:"name" bson:"name"`
-	Type        string   `json:"type" bson:"type"`                             // "binary", "numeric", "enum", "text"
+	Type        string   `json:"type" bson:"type"` // "binary", "numeric", "enum", "text"
 	Description string   `json:"description,omitempty" bson:"description"`
 	ValueMin    *float64 `json:"value_min,omitempty" bson:"value_min"`
 	ValueMax    *float64 `json:"value_max,omitempty" bson:"value_max"`
 	ValueStep   *float64 `json:"value_step,omitempty" bson:"value_step"`
-	Values      []string `json:"values,omitempty" bson:"values"`               // For enum type
+	Values      []string `json:"values,omitempty" bson:"values"` // For enum type
 	Unit        string   `json:"unit,omitempty" bson:"unit"`
-	StatePath   string   `json:"state_path,omitempty" bson:"state_path"`       // JSONPath in state message
+	StatePath   string   `json:"state_path,omitempty" bson:"state_path"` // JSONPath in state message
 }
 
 // CreateDeviceTypeRequest represents a request to create a device type

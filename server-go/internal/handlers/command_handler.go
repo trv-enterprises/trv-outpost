@@ -313,8 +313,16 @@ func (h *CommandHandler) buildCommandFromDeviceType(c *gin.Context, controlConfi
 		}
 	}
 
-	// Interpolate the template with {{value}} and {{target}}
-	payload := interpolateSchemaTemplate(commandDef.Template, mappedValue, controlConfig.Target)
+	// Interpolate the template with {{value}} and {{target}}, unless the
+	// command publishes the value as the payload verbatim (composite-object
+	// controls such as a colour light, whose shape a key/value template
+	// cannot express).
+	var payload map[string]interface{}
+	if obj, ok := passthroughPayload(commandDef, mappedValue); ok {
+		payload = obj
+	} else {
+		payload = interpolateSchemaTemplate(commandDef.Template, mappedValue, controlConfig.Target)
+	}
 
 	// Extract action from payload if present, otherwise use a default
 	action := "execute"
@@ -332,6 +340,23 @@ func (h *CommandHandler) buildCommandFromDeviceType(c *gin.Context, controlConfi
 }
 
 // interpolateSchemaTemplate replaces {{value}} and {{target}} placeholders in a schema template
+// passthroughPayload returns the control value as the whole MQTT payload when
+// the command definition asks for it and the value is actually an object.
+//
+// A scalar cannot be a JSON object payload, so a misconfigured passthrough on
+// a scalar control falls back to the template path rather than publishing
+// something malformed.
+func passthroughPayload(commandDef models.CommandDef, value interface{}) (map[string]interface{}, bool) {
+	if !commandDef.PassthroughValue {
+		return nil, false
+	}
+	obj, ok := value.(map[string]interface{})
+	if !ok || len(obj) == 0 {
+		return nil, false
+	}
+	return obj, true
+}
+
 func interpolateSchemaTemplate(template map[string]interface{}, value interface{}, target string) map[string]interface{} {
 	if template == nil {
 		return map[string]interface{}{"value": value}
