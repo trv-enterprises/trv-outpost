@@ -15,7 +15,7 @@ vi.mock('../../api/client', () => ({
 }));
 
 import ControlRenderer from './ControlRenderer';
-import './index';
+import * as controlsBarrel from './index';
 
 const mk = (type, extra = {}) => ({
   id: 'c1', name: 'Nightlight', title: 'Nightlight',
@@ -61,5 +61,26 @@ describe('light controls', () => {
   it('renders OFF state before any device message arrives', () => {
     render(<ControlRenderer control={mk('tile_light')} />);
     expect(screen.getByText('OFF')).toBeTruthy();
+  });
+});
+
+// Regression guard: the palette moved out of ControlLight.jsx into its own
+// module (a non-component export breaks Fast Refresh), and the barrel kept
+// re-exporting it from the old location. That resolves fine in tests that
+// import the components directly, but breaks the app at load time with
+// "doesn't provide an export named". Assert every name the barrel claims.
+describe('controls barrel exports', () => {
+  it('resolves every light-related name it re-exports', () => {
+    for (const name of [
+      'ControlLight', 'TileLight',
+      'LIGHT_COLOR_PALETTE', 'ZIGBEE_MAX_BRIGHTNESS', 'pctToZigbee', 'zigbeeToPct',
+    ]) {
+      expect(controlsBarrel[name], name).toBeDefined();
+    }
+  });
+
+  it('has no undefined exports at all', () => {
+    const dead = Object.keys(controlsBarrel).filter((k) => controlsBarrel[k] === undefined);
+    expect(dead).toEqual([]);
   });
 });
