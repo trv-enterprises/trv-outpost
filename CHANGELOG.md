@@ -6,7 +6,7 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.59.0] — 2026-08-25
 
 ### Added
 
@@ -39,6 +39,58 @@ This project adheres to [Semantic Versioning](https://semver.org/).
     trip is lossy, the swatch holds the hex you picked until the device
     reports a materially different color, so an automation recoloring the
     bulb is reflected rather than masked.
+
+### Fixed
+
+- **ts-store push registration 503'd on every channel after the first**
+  (v0.58.1 regression). Re-registering a push connection failed with
+  `mint inbound push secret: … the (immutable) field '_id' was found to have
+  been altered`, taking the stream and the subscribe that triggered it down.
+  The push-secret upsert minted a fresh UUID on every call, then asked Mongo
+  to replace an existing document with a different `_id`. It now reuses the
+  stored record's `_id`, minting one only for a genuinely new channel; the
+  secret still rotates per registration. **Anyone running v0.58.1 with
+  ts-store push connections wants this.**
+
+- **Dimmers assumed the device shared their 0–100 scale.** Zigbee brightness
+  is 0–254, so a dimmer set to "50%" published a raw 50 — actually 20% — and
+  read the device's echo back as a percent. A dimmer and a light tile on the
+  same bulb visibly disagreed (48% against 19%). Scaling now goes through
+  `ui_config.device_scale`, defaulting to the UI maximum so devices genuinely
+  on 0–100 are unaffected; migration `dimmer_device_scale_v1` backfills
+  existing records for device types that declare a 0–254 brightness range.
+
+- **An off light rendered as lit.** Zigbee reports `brightness` as the
+  *remembered* level while `state` is OFF, so a non-zero brightness made
+  dimmer tiles show ON for a light that was off. Controls now prefer the
+  device's `state` when it publishes one, falling back to level for devices
+  that don't.
+
+- **Adjusting brightness turned an off light on without saying so.** Testing
+  against real hardware showed the bulb lights up when sent brightness alone,
+  and discards a level sent alongside `state:"OFF"` — so "set the level
+  without lighting it" isn't achievable there. The control now sends
+  `state:"ON"` explicitly and the toggle follows, instead of reporting OFF
+  while the light turns on.
+
+- **The color palette was clipped by its container.** Dashboard panels and
+  tiles set `overflow: hidden`, cutting the palette off at the edge.
+  `ColorSwatchPicker` gained an opt-in `float` mode that renders the palette
+  outside the clipping ancestor; existing chart and threshold pickers are
+  unchanged.
+
+- **The power toggle's OFF state was invisible**, first from a CSS variable
+  naming a token that doesn't exist, then from matching the popup background
+  exactly. `controls.scss` is now covered by a test asserting every
+  `--cds-*` variable resolves to a real Carbon token and that the toggle
+  contrasts with the surface behind it.
+
+- **The app failed to load** after a palette constant moved modules while the
+  barrel kept re-exporting it from its old home.
+
+### Changed
+
+- Color-related UI text and code comments use American spelling (`color`).
 
 ## [0.58.1] — 2026-08-24
 
