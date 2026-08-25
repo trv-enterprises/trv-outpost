@@ -923,30 +923,19 @@
 
   // Colour swatch on the tile face. Changing colour is a primary action for
   // this control, so it gets one tap rather than being buried in the popup.
-  // The swatch wrapper deliberately hugs the trigger: any wrapper area that
-  // is not the picker itself would look clickable but belong to the tile.
-  // Clicks there DO fall through to the tile (see TileLight's targeted
-  // stopPropagation), and keeping the box tight makes the two hit targets
-  // match what the user sees.
+  // Colour indicator, not a control. The picker lives in the tile's popup:
+  // Carbon's Popover renders inline, so a picker opened from here would be
+  // clipped by this tile's overflow:hidden. Pointer events are off so the
+  // whole tile — this corner included — opens the popup on click.
   .tile-light-swatch {
     z-index: 2;
-    display: flex;
-    align-items: center;
-    margin-right: 4px;
-
-    .color-swatch-picker,
-    .color-swatch-picker__trigger {
-      display: block;
-    }
-
-    .color-swatch-picker__trigger {
-      width: 16px;
-      height: 16px;
-      border-radius: 4px;
-      // A larger tap target than the visual swatch, without growing the
-      // wrapper box — matters on the kiosk touchscreen.
-      box-shadow: 0 0 0 3px transparent;
-    }
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+    border-radius: 3px;
+    pointer-events: none;
+    background-color: var(--cds-layer-03);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
   }
 }
 

@@ -42,9 +42,11 @@ describe('light controls', () => {
     expect(container.querySelector('.tile-light-swatch')).toBeTruthy();
   });
 
-  it('hides the tile swatch when the user cannot control', () => {
+  it('still shows the colour indicator for a view-only user', () => {
+    // It is a read-only indicator, not a control, so capability gating does
+    // not hide it — the popup's picker is what respects readOnly.
     const { container } = render(<ControlRenderer control={mk('tile_light')} canControl={false} />);
-    expect(container.querySelector('.tile-light-swatch')).toBeFalsy();
+    expect(container.querySelector('.tile-light-swatch')).toBeTruthy();
   });
 
   it('hides the tile swatch when configured off', () => {
@@ -85,36 +87,43 @@ describe('controls barrel exports', () => {
   });
 });
 
-// The swatch sits inside the tile, which opens a popup on click. Stopping
-// propagation on the whole wrapper made its padding/gap a dead zone: clicks
-// there were swallowed but hit no handler, so that corner of the tile did
-// nothing at all instead of opening the popup like everywhere else.
-describe('tile swatch click handling', () => {
+// Carbon's Popover renders inline, so a picker opened from the tile face was
+// clipped by the tile's overflow:hidden — the palette got cut off at the
+// bottom edge. The swatch is now a plain indicator and the tile's popup (which
+// portals to document.body) carries the picker, so the whole tile — that
+// corner included — opens the popup.
+describe('tile click handling', () => {
   const mkTile = () => ({
     id: 'c1', name: 'Nightlight', title: 'Nightlight',
     connection_id: 'conn1',
     control_config: { control_type: 'tile_light', target: 'zigbee2mqtt/lamp/set', ui_config: {} },
   });
 
-  it('opens the picker (not the tile popup) when the swatch itself is clicked', async () => {
+  it('renders the swatch as an indicator, not a picker trigger', () => {
     const { container } = render(<ControlRenderer control={mkTile()} />);
-    fireEvent.click(container.querySelector('.tile-light-swatch button'));
-    expect(await screen.findByLabelText('Amber')).toBeTruthy();
-    expect(document.querySelector('.tile-popup')).toBeFalsy();
+    const sw = container.querySelector('.tile-light-swatch');
+    expect(sw).toBeTruthy();
+    expect(sw.querySelector('button')).toBeFalsy();
+    expect(sw.querySelector('.color-swatch-picker')).toBeFalsy();
   });
 
-  it('opens the tile popup when the wrapper AROUND the swatch is clicked', () => {
+  it('opens the popup when the swatch corner is clicked', () => {
     const { container } = render(<ControlRenderer control={mkTile()} />);
-    const wrapper = container.querySelector('.tile-light-swatch');
-    // A click landing on the wrapper but not on the picker must fall through
-    // to the tile rather than being silently swallowed.
-    fireEvent.click(wrapper, { bubbles: true });
+    fireEvent.click(container.querySelector('.tile-light-swatch'), { bubbles: true });
     expect(document.querySelector('.tile-popup')).toBeTruthy();
   });
 
-  it('opens the tile popup from the tile body', () => {
+  it('opens the popup from the tile body', () => {
     const { container } = render(<ControlRenderer control={mkTile()} />);
     fireEvent.click(container.querySelector('.tile-light'));
     expect(document.querySelector('.tile-popup')).toBeTruthy();
+  });
+
+  it('offers the colour picker inside the popup', async () => {
+    const { container } = render(<ControlRenderer control={mkTile()} />);
+    fireEvent.click(container.querySelector('.tile-light'));
+    const popup = document.querySelector('.tile-popup');
+    fireEvent.click(popup.querySelector('.color-swatch-picker__trigger'));
+    expect(await screen.findByLabelText('Amber')).toBeTruthy();
   });
 });

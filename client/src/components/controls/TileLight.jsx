@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from '@mdi/react';
 import PropTypes from 'prop-types';
@@ -12,13 +12,11 @@ import {
 } from '@mdi/js';
 import { formatTitle } from './controlUtils';
 import { useControlState } from './useControlState';
-import { useControlCommand } from './useControlCommand';
 import { useTileFontSize } from './useTileFontSize';
 import { registerControl } from './controlRegistry';
-import ColorSwatchPicker from '../shared/ColorSwatchPicker';
-import { colorFieldToHex, holdWrittenHex } from '../../utils/colorXY';
+import { colorFieldToHex } from '../../utils/colorXY';
 import ControlLight from './ControlLight';
-import { LIGHT_COLOR_PALETTE, zigbeeToPct } from './lightPalette';
+import { zigbeeToPct } from './lightPalette';
 import './controls.scss';
 
 const ICON_MAP = {
@@ -59,7 +57,6 @@ const ICON_MAP = {
 function TileLight({ control, readOnly = false, onSuccess, onError }) {
   const [popupOpen, setPopupOpen] = useState(false);
   const [popupStyle, setPopupStyle] = useState({});
-  const [writtenHex, setWrittenHex] = useState('');
   const tileRef = useRef(null);
   const fontSize = useTileFontSize();
 
@@ -68,7 +65,7 @@ function TileLight({ control, readOnly = false, onSuccess, onError }) {
   const iconPath = ICON_MAP[uiConfig.icon] || mdiLightbulbOn;
   const showColorOnTile = uiConfig.show_color_on_tile !== false;
 
-  const { value: rawState, setValue: setRawState, suppress, clearSuppress } = useControlState({
+  const { value: rawState } = useControlState({
     connectionId: control.connection_id,
     target: control.control_config?.target || '',
     stateField: uiConfig.state_field || 'state',
@@ -109,33 +106,10 @@ function TileLight({ control, readOnly = false, onSuccess, onError }) {
   });
 
   const isOn = typeof rawState === 'string' ? rawState.toUpperCase() === 'ON' : !!rawState;
-  const displayHex = holdWrittenHex(writtenHex, deviceHex);
+  // The tile only reads, so there is no written hex to hold against — that
+  // belongs to ControlLight, which does the writing. Show the device's colour.
+  const displayHex = deviceHex;
   const fillPercent = isOn ? (brightnessPct || 0) : 0;
-
-  useEffect(() => {
-    if (writtenHex && deviceHex && holdWrittenHex(writtenHex, deviceHex) === deviceHex) {
-      setWrittenHex('');
-    }
-  }, [deviceHex, writtenHex]);
-
-  const { execute, loading } = useControlCommand({
-    controlId: control.id,
-    label: displayName,
-    target: control.control_config?.target || '',
-    onSuppress: suppress,
-    onClearSuppress: clearSuppress,
-    onSuccess,
-    onError,
-  });
-
-  const handleColor = useCallback((hex) => {
-    if (readOnly || loading || !hex) return;
-    setWrittenHex(hex);
-    // Setting a colour also turns the light on, so reflect that immediately
-    // rather than waiting for the device to echo it back.
-    setRawState('ON');
-    execute({ state: 'ON', color: { hex } }, `${displayName} colour ${hex}`);
-  }, [readOnly, loading, execute, displayName, setRawState]);
 
   const handleTileClick = useCallback(() => {
     if (popupOpen) {
@@ -207,34 +181,19 @@ function TileLight({ control, readOnly = false, onSuccess, onError }) {
 
         <div className="tile-bottom-row">
           <span className="tile-state">{isOn ? 'ON' : 'OFF'}</span>
-          {showColorOnTile && !readOnly ? (
-            // Stop propagation so opening the picker doesn't also open the
-            // tile popup behind it.
+          {showColorOnTile ? (
+            // A swatch, deliberately NOT a picker. Carbon's Popover renders
+            // inline, so a picker opened here is clipped by the tile's
+            // overflow:hidden — the palette got cut off at the tile edge.
+            // The swatch shows the live colour and the tile's own popup (which
+            // portals to document.body) carries the actual picker, so this
+            // stays one tap and the whole tile behaves the same way.
             <span
               className="tile-light-swatch"
-              // Only swallow clicks that actually land ON the picker (its
-              // trigger button, or the popover it renders). A blanket
-              // stopPropagation here also ate clicks on this element's own
-              // padding and the flex gap around the 16px button — those hit
-              // no handler, so that corner of the tile silently did nothing
-              // instead of opening the popup like the rest of the tile.
-              onClick={(e) => {
-                if (e.target.closest('.color-swatch-picker')) e.stopPropagation();
-              }}
-              onKeyDown={(e) => {
-                if (e.target.closest('.color-swatch-picker')) e.stopPropagation();
-              }}
-              role="presentation"
-            >
-              <ColorSwatchPicker
-                value={displayHex}
-                onChange={handleColor}
-                label={`${displayName} colour`}
-                palette={LIGHT_COLOR_PALETTE}
-                allowAuto={false}
-                allowCustom
-              />
-            </span>
+              style={displayHex ? { backgroundColor: displayHex } : undefined}
+              title={displayHex ? `Colour ${displayHex}` : 'Colour'}
+              aria-hidden="true"
+            />
           ) : (
             <span className="tile-value">{isOn ? `${fillPercent}%` : ''}</span>
           )}

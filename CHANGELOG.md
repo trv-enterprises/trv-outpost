@@ -13,12 +13,11 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 - **Colour bulb controls: `light` and `tile_light`** (#292). A control for
   Zigbee2MQTT colour-capable bulbs, offering power, brightness, and colour.
 
-  Colour is a first-class action rather than a buried setting: on the tile,
-  the colour swatch sits **on the tile face**, so changing colour is a single
-  tap. Pick from a light-oriented palette (warm whites through saturated
-  accents) or open the custom picker for any hex. The control publishes the
-  hex directly — Zigbee2MQTT accepts hex and converts on the way in, so
-  nothing is converted on the command path.
+  The tile face shows the light's live colour, and one tap anywhere on the
+  tile opens its popup to pick a new one — from a light-oriented palette (warm
+  whites through saturated accents) or the custom picker for any hex. The
+  control publishes the hex directly: Zigbee2MQTT accepts hex and converts on
+  the way in, so nothing is converted on the command path.
 
   On the tile, fill height is brightness and the fill takes the bulb's live
   colour. When the device also reports `occupancy`, a read-only motion dot

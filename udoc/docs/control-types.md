@@ -41,7 +41,7 @@ grouped in the component-editor picker.
 |------|-------------|----------|-----------|
 | **Tile Switch** | Compact switch tile with popup for details | Yes | Yes |
 | **Tile Dimmer** | Compact dimmer tile with popup for brightness | Yes | Yes |
-| **Tile Light** | Compact colour-bulb tile; colour swatch on the tile face | Yes | Yes |
+| **Tile Light** | Compact colour-bulb tile; live colour shown on the tile face | Yes | Yes |
 | **Tile Garage Door** | Compact garage-door tile | Yes | Yes |
 
 ### Legacy / hidden
@@ -98,10 +98,15 @@ compact form.
 ### Setting colour
 
 Colour is a first-class action, not something buried in a settings
-panel. On **Tile Light** the colour swatch sits on the tile face, so
-changing colour is a single tap: pick from the light palette (warm
-whites through to saturated accents) or open the custom picker for any
-hex your palette doesn't cover.
+panel. On **Tile Light** the tile face shows the light's current colour
+as a small swatch, and a single tap anywhere on the tile opens its
+control popup, where you pick from the light palette (warm whites
+through to saturated accents) or open the custom picker for any hex the
+palette doesn't cover.
+
+The swatch on the tile is an indicator rather than a button: the palette
+needs more room than a tile has, so it opens with the popup instead of
+being clipped at the tile edge.
 
 Behind the scenes the control publishes the hex directly — for example:
 
@@ -144,7 +149,7 @@ control does.
 |---------|-----------|-------------|
 | `show_brightness` | Light | Show the brightness bar |
 | `show_color` | Light | Show the colour picker |
-| `show_color_on_tile` | Tile Light | Put the colour swatch on the tile face |
+| `show_color_on_tile` | Tile Light | Show the live colour swatch on the tile face (percentage shown instead when off) |
 | `icon` | Tile Light | MDI icon (`lightbulb-on`, `floor-lamp`, `lamp`, …) |
 | `state_field` | Both | State field to read (default `state`) |
 

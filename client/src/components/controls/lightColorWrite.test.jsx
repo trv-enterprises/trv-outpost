@@ -29,20 +29,21 @@ const control = {
   },
 };
 
-describe('setting colour from the tile face', () => {
+describe('setting colour from the tile', () => {
   beforeEach(() => executeControlCommand.mockClear());
 
   it('publishes hex directly, with no conversion on the command path', async () => {
     const { container } = render(<ControlRenderer control={control} />);
 
-    // The swatch trigger lives on the tile itself — one tap, not via the popup.
-    const trigger = container.querySelector('.tile-light-swatch button');
-    expect(trigger).toBeTruthy();
-    fireEvent.click(trigger);
+    // One tap on the tile opens the popup, which carries the picker. (The
+    // picker cannot live on the tile face: Carbon's Popover renders inline
+    // and the tile clips it.)
+    fireEvent.click(container.querySelector('.tile-light'));
+    const popup = document.querySelector('.tile-popup');
+    expect(popup).toBeTruthy();
 
-    // Pick amber from the light palette.
-    const amber = await screen.findByLabelText('Amber');
-    fireEvent.click(amber);
+    fireEvent.click(popup.querySelector('.color-swatch-picker__trigger'));
+    fireEvent.click(await screen.findByLabelText('Amber'));
 
     await waitFor(() => expect(executeControlCommand).toHaveBeenCalledTimes(1));
     const [id, value] = executeControlCommand.mock.calls[0];
@@ -52,11 +53,12 @@ describe('setting colour from the tile face', () => {
     expect(value).toEqual({ state: 'ON', color: { hex: '#FFD300' } });
   });
 
-  it('does not open the tile popup when the swatch is used', async () => {
+  it('reaches the picker in one tap from the tile', async () => {
     const { container } = render(<ControlRenderer control={control} />);
-    fireEvent.click(container.querySelector('.tile-light-swatch button'));
-    await screen.findByLabelText('Amber');
-    // The popup hosts the full control; it must not be behind the picker.
-    expect(document.querySelector('.tile-popup')).toBeFalsy();
+    fireEvent.click(container.querySelector('.tile-light'));
+    const popup = document.querySelector('.tile-popup');
+    fireEvent.click(popup.querySelector('.color-swatch-picker__trigger'));
+    // The palette is portalled with the popup, so nothing clips it.
+    expect(await screen.findByLabelText('Amber')).toBeTruthy();
   });
 });
