@@ -11906,7 +11906,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "from": {
-                    "description": "From is the starting timestamp in nanoseconds (0 = oldest data, -1 = current time/realtime only)",
+                    "description": "From is the starting timestamp in nanoseconds (0 = oldest data, -1 = current time/realtime only).\nPushFrom (not a bare int64) so a record written by a non-Go driver as a\n{high, low, unsigned} Long document still decodes — see tsstore_push_from.go.",
                     "type": "integer"
                 }
             }
