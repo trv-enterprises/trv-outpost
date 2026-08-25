@@ -104,9 +104,18 @@ export const COMPONENT_MIN_SIZES = {
   switch:     { w: 4, h: 8 },
   plug:       { w: 4, h: 8 },  // Backward compatibility
   dimmer:     { w: 4, h: 8 },
+  // Full-size animated door SVG — needs comparable room to the other
+  // full-size controls. (Its tile counterpart is 3x3, below.)
+  garage_door:  { w: 4, h: 6 },
+  // Fire-and-forget button; same footprint as `button`.
+  mqtt_publish: { w: 4, h: 2 },
+  // Full-size light: power toggle + brightness bar + color row stacked
+  // vertically, so it needs the same headroom as the dimmer.
+  light:      { w: 4, h: 8 },
   tile_switch:{ w: 3, h: 3 },
   tile_plug:  { w: 3, h: 3 },  // Backward compatibility
   tile_dimmer:{ w: 3, h: 3 },
+  tile_light: { w: 3, h: 3 },
   tile_garage_door: { w: 3, h: 3 },
   text_label: { w: 2, h: 1 },
 

@@ -55,6 +55,7 @@ func RunMigrations(ctx context.Context, db *mongo.Database) error {
 		{"value_chart_size_setting_v1", migrateValueChartSizeSetting},
 		{"value_type_availability_v1", migrateValueTypeAvailability},
 		{"dimmer_device_scale_v1", migrateDimmerDeviceScale},
+		{"tsstore_push_from_long_object_v1", migrateTSStorePushFromLongObject},
 	}
 
 	coll := db.Collection("migrations")
@@ -1452,6 +1453,75 @@ func migrateDimmerDeviceScale(ctx context.Context, db *mongo.Database) error {
 	}
 	if res.ModifiedCount > 0 {
 		log.Printf("  dimmer_device_scale_v1: set device_scale=254 on %d dimmer(s)", res.ModifiedCount)
+	}
+	return nil
+}
+
+// migrateTSStorePushFromLongObject normalizes config.tsstore.push.from when
+// it was stored as an embedded document instead of an int64.
+//
+// Found on prod: three ts-store connections carried
+// `from: {high: 0, low: 0, unsigned: false}` — a JavaScript Long that a
+// non-Go driver serialized structurally. Go's decoder refused it with
+// "cannot decode embedded document into an integer type", and because the
+// connections list decodes every record in one pass, ONE bad document 500'd
+// the entire /api/connections response rather than just its own connection.
+//
+// Nothing in this codebase writes that shape; it arrives from an external
+// tool. PushFrom's decoder now tolerates it on read, but stored records are
+// repaired here so the tolerance stays a safety net rather than the mechanism.
+func migrateTSStorePushFromLongObject(ctx context.Context, db *mongo.Database) error {
+	cur, err := db.Collection("connections").Find(ctx, bson.M{
+		"config.tsstore.push.from": bson.M{"$type": "object"},
+	})
+	if err != nil {
+		return fmt.Errorf("tsstore push.from: find: %w", err)
+	}
+	defer cur.Close(ctx)
+
+	type longDoc struct {
+		High *int32 `bson:"high"`
+		Low  *int32 `bson:"low"`
+	}
+	var repaired int
+	for cur.Next(ctx) {
+		var rec struct {
+			ID     interface{} `bson:"_id"`
+			Config struct {
+				TSStore struct {
+					Push struct {
+						From longDoc `bson:"from"`
+					} `bson:"push"`
+				} `bson:"tsstore"`
+			} `bson:"config"`
+		}
+		if err := cur.Decode(&rec); err != nil {
+			return fmt.Errorf("tsstore push.from: decode: %w", err)
+		}
+
+		// Reassemble the 64-bit value. `low` is unsigned 32-bit carried in a
+		// signed field, so mask before combining.
+		var high, low int64
+		if rec.Config.TSStore.Push.From.High != nil {
+			high = int64(*rec.Config.TSStore.Push.From.High)
+		}
+		if rec.Config.TSStore.Push.From.Low != nil {
+			low = int64(uint32(*rec.Config.TSStore.Push.From.Low))
+		}
+		value := high<<32 | low
+
+		if _, err := db.Collection("connections").UpdateByID(ctx, rec.ID, bson.M{
+			"$set": bson.M{"config.tsstore.push.from": value},
+		}); err != nil {
+			return fmt.Errorf("tsstore push.from: update: %w", err)
+		}
+		repaired++
+	}
+	if err := cur.Err(); err != nil {
+		return fmt.Errorf("tsstore push.from: iterate: %w", err)
+	}
+	if repaired > 0 {
+		log.Printf("  tsstore_push_from_long_object_v1: normalized %d push.from value(s) to int64", repaired)
 	}
 	return nil
 }
