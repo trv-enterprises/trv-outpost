@@ -160,9 +160,14 @@ function ControlLight({ control, readOnly = false, onSuccess, onError, compact =
     // Hold it immediately so the swatch shows what was picked, not the
     // round-tripped approximation that arrives a moment later.
     setWrittenHex(hex);
+    // Setting a color turns the light on — that is what the command below
+    // does — so reflect the power change locally too, exactly as the
+    // brightness path does. Without it the toggle reads OFF while the light
+    // is coming on, until the device echo arrives.
+    setRawState('ON');
     // Z2M takes hex directly — no conversion on the command path.
     execute({ state: 'ON', color: { hex } }, `${label} color ${hex}`);
-  }, [readOnly, loading, execute, label]);
+  }, [readOnly, loading, execute, label, setRawState]);
 
   // --- brightness bar drag ---------------------------------------------
   const yToPct = useCallback((clientY) => {

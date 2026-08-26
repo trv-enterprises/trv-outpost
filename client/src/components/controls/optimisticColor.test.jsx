@@ -73,4 +73,25 @@ describe('a picked color shows immediately', () => {
       expect(swatch(container), 'never yielded to the device').not.toBe('rgb(84, 124, 255)');
     });
   });
+
+  it('turns the toggle on when a color is picked while off', async () => {
+    // The command sends state:'ON' — setting a color turns the light on — so
+    // the toggle must reflect that immediately rather than reading OFF until
+    // the device echoes back. Brightness already did this; color did not.
+    subs = [];
+    const { container } = render(<ControlRenderer control={control} />);
+    // Put the light in the OFF state first.
+    push({ state: 'OFF', brightness: 100, color: { x: 0.5, y: 0.44 } });
+    const toggle = () => container.querySelector('.control-light__toggle');
+    expect(toggle().getAttribute('aria-checked')).toBe('false');
+
+    fireEvent.click(container.querySelector('.color-swatch-picker__trigger'));
+    fireEvent.click(document.querySelector('[aria-label="Blue"]'));
+    await waitFor(() => expect(executeControlCommand).toHaveBeenCalled());
+
+    // The command turns it on...
+    expect(executeControlCommand.mock.calls[0][1].state).toBe('ON');
+    // ...and so must the UI, before any device echo.
+    expect(toggle().getAttribute('aria-checked'), 'toggle did not follow the command').toBe('true');
+  });
 });
