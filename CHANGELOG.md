@@ -6,6 +6,35 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.59.2] — 2026-08-26
+
+### Fixed
+
+- **A color picked on a light control didn't appear until the device echoed
+  it back.** The control held the color you picked only while it *matched*
+  what the device reported — but immediately after a write those always
+  differ, so the optimistic update was discarded at exactly the moment it
+  existed to cover. A locally-picked color now shows at once and yields to
+  the device when the hold expires.
+
+- **Picking a color on a light that was off left the toggle reading OFF.**
+  Setting a color turns the light on, and the UI now says so immediately, as
+  the brightness control already did.
+
+- **Dragging the OS color wheel published a command per mouse movement**,
+  resetting the bulb continuously while choosing a custom color. Custom-color
+  changes are now rate-limited, with a trailing send so the color you settle
+  on is the one applied. Palette clicks are unaffected.
+
+- **Control state could silently stop updating.** The MQTT subscription tore
+  down and re-subscribed on every render, so an update arriving mid-teardown
+  was lost. Affected every control type.
+
+- **A control that had just sent a command ignored device updates for three
+  seconds**, so it lagged behind passive controls watching the same device.
+  Updates arriving in that window are now applied when it closes instead of
+  being discarded.
+
 ## [0.59.1] — 2026-08-25
 
 ### Fixed
