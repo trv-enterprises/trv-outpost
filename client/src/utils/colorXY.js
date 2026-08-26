@@ -23,8 +23,11 @@
  *
  * Accuracy caveat: xy covers a wider gamut than sRGB, and these matrices are
  * Hue-tuned, so a round trip (pick hex → device → read xy → hex) lands near
- * but not exactly on the original. Callers that display a color the user just
- * picked should prefer the written hex — see holdWrittenHex below.
+ * but not exactly on the original. A caller displaying a color the user just
+ * picked should show the written hex outright for the round trip, then fall
+ * back to the device's report — a DIFFERENCE test cannot do that job, because
+ * right after a write the two always differ (the device has not caught up),
+ * so it discards the optimistic value at exactly the wrong moment.
  */
 
 /** Clamp to [0, 1]. */
@@ -131,46 +134,4 @@ export function hexDistance(a, b) {
     Math.abs(ca.g - cb.g),
     Math.abs(ca.b - cb.b),
   );
-}
-
-/**
- * Per-channel tolerance (0–255) within which a device-reported color is
- * considered "the same color we wrote, round-tripped through xy".
- *
- * Empirical, and deliberately loose: the xy round trip is lossy in the
- * awkward direction (wider gamut, Hue-tuned matrices), so an exact match
- * never happens. The homelab nightlight rule writes #ffd300 and the lamp
- * reports back xy ~0.4995/0.4697 after clamping to its gamut, which is the
- * worked example this was sized against.
- *
- * NOT verified against a broad range of colors on real hardware — see the
- * "Not yet verified" note on issue #292.
- */
-export const HEX_HOLD_TOLERANCE = 40;
-
-/**
- * Decide which color a swatch should show.
- *
- * The problem this solves: after a user picks a color, the device echoes it
- * back through the lossy xy round trip, so the swatch would visibly shift the
- * instant the color is set — looking like a bug.
- *
- * The naive fix ("always show what we last wrote") is wrong, because an
- * automation engine can recolor the light out from under us. On this
- * deployment the nightlight rule sets color on EVERY motion trigger, so a
- * held hex would keep showing a color the light is no longer displaying.
- *
- * So the hold is bounded: keep showing the written hex only while the device
- * still reports something close to it, and yield the moment it moves outside
- * tolerance.
- *
- * @param {string} writtenHex - the last hex this client wrote ('' if none)
- * @param {string} deviceHex - hex derived from the device's reported xy ('' if none)
- * @param {number} [tolerance]
- * @returns {string} the hex to display ('' when neither is known)
- */
-export function holdWrittenHex(writtenHex, deviceHex, tolerance = HEX_HOLD_TOLERANCE) {
-  if (!writtenHex) return deviceHex || '';
-  if (!deviceHex) return writtenHex;
-  return hexDistance(writtenHex, deviceHex) <= tolerance ? writtenHex : deviceHex;
 }

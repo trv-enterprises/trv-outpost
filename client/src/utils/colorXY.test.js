@@ -7,8 +7,6 @@ import {
   xyToHex,
   colorFieldToHex,
   hexDistance,
-  holdWrittenHex,
-  HEX_HOLD_TOLERANCE,
 } from './colorXY';
 
 // The xy values below are not invented — they are what the real device
@@ -91,34 +89,5 @@ describe('hexDistance', () => {
   it('treats unparseable input as maximally distant', () => {
     expect(hexDistance('', '#ffd300')).toBe(Infinity);
     expect(hexDistance('nonsense', '#ffd300')).toBe(Infinity);
-  });
-});
-
-describe('holdWrittenHex', () => {
-  it('holds the written hex while the device agrees', () => {
-    // Guards against the swatch visibly shifting the instant a color is set.
-    const deviceHex = xyToHex(0.4995, 0.4697);
-    expect(holdWrittenHex('#ffd300', deviceHex)).toBe('#ffd300');
-  });
-
-  it('yields to the device when an automation recolors the light', () => {
-    // The engine sets color on EVERY motion trigger, so a user-picked color
-    // gets replaced. Holding it would show a color the light is not emitting.
-    const engineAmber = xyToHex(0.4995, 0.4697);
-    expect(holdWrittenHex('#547cff', engineAmber)).toBe(engineAmber);
-  });
-
-  it('falls back cleanly when either side is unknown', () => {
-    expect(holdWrittenHex('', '#123456')).toBe('#123456');
-    expect(holdWrittenHex('#123456', '')).toBe('#123456');
-    expect(holdWrittenHex('', '')).toBe('');
-  });
-
-  it('honours the tolerance boundary', () => {
-    const near = '#ffd300';
-    const off = `#${(0xffd300 + 0x000000 + HEX_HOLD_TOLERANCE - 1).toString(16).padStart(6, '0')}`;
-    expect(holdWrittenHex(near, off, HEX_HOLD_TOLERANCE)).toBe(near);
-    // A clearly different color is never held.
-    expect(holdWrittenHex(near, '#0000ff', HEX_HOLD_TOLERANCE)).toBe('#0000ff');
   });
 });

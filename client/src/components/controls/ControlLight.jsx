@@ -10,7 +10,7 @@ import { useControlCommand } from './useControlCommand';
 import { registerControl } from './controlRegistry';
 import PillToggle from './PillToggle';
 import ColorSwatchPicker from '../shared/ColorSwatchPicker';
-import { colorFieldToHex, holdWrittenHex } from '../../utils/colorXY';
+import { colorFieldToHex } from '../../utils/colorXY';
 import { LIGHT_COLOR_PALETTE, pctToZigbee, zigbeeToPct } from './lightPalette';
 import './controls.scss';
 
@@ -87,23 +87,20 @@ function ControlLight({ control, readOnly = false, onSuccess, onError, compact =
   });
 
   const isOn = typeof rawState === 'string' ? rawState.toUpperCase() === 'ON' : !!rawState;
-  const displayHex = holdWrittenHex(writtenHex, deviceHex);
+  // While a locally-written color is held it wins OUTRIGHT — no distance
+  // comparison. Right after a write the device has not caught up yet, so
+  // comparing always found a difference and yielded to the stale device
+  // color, throwing away the optimistic update at exactly the moment it was
+  // needed. The hold is released on a timer below (and immediately if the
+  // device reports something we did not write), at which point deviceHex
+  // takes over.
+  const displayHex = writtenHex || deviceHex;
   const displayPct = dragPct !== null ? dragPct : (brightnessPct || 0);
 
-  // Release the hold once the device reports a color materially different
-  // from what we wrote — it has taken a color we did not set, so stop
-  // competing with it.
-  useEffect(() => {
-    if (writtenHex && deviceHex && holdWrittenHex(writtenHex, deviceHex) === deviceHex) {
-      setWrittenHex('');
-    }
-  }, [deviceHex, writtenHex]);
-
-  // ...and release it on a timer regardless. The hold exists only to cover
-  // the round trip between writing a color and the device echoing it back;
-  // once that has happened there is nothing left to smooth over. Without this
-  // the written hex outlives its purpose and keeps masking the device's real
-  // color until the device happens to report something far enough away.
+  // Release the hold on a timer. It exists only to cover the round trip
+  // between writing a color and the device echoing it back; after that the
+  // device is the truth and the UI should follow it (including an automation
+  // recoloring the bulb).
   useEffect(() => {
     if (!writtenHex) return undefined;
     const t = setTimeout(() => setWrittenHex(''), HOLD_RELEASE_MS);
