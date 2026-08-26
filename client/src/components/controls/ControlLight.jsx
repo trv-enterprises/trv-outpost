@@ -10,9 +10,15 @@ import { useControlCommand } from './useControlCommand';
 import { registerControl } from './controlRegistry';
 import PillToggle from './PillToggle';
 import ColorSwatchPicker from '../shared/ColorSwatchPicker';
-import { colorFieldToHex, holdWrittenHex } from '../../utils/colorXY';
+import { colorFieldToHex } from '../../utils/colorXY';
 import { LIGHT_COLOR_PALETTE, pctToZigbee, zigbeeToPct } from './lightPalette';
 import './controls.scss';
+
+// How long a locally-written color keeps precedence over the device's report.
+// Long enough to cover the write -> broker -> device -> echo round trip
+// (SUPPRESS_DURATION_MS is 3s), short enough that the UI returns to showing
+// device truth promptly.
+const HOLD_RELEASE_MS = 4000;
 
 /**
  * ControlLight
@@ -81,16 +87,25 @@ function ControlLight({ control, readOnly = false, onSuccess, onError, compact =
   });
 
   const isOn = typeof rawState === 'string' ? rawState.toUpperCase() === 'ON' : !!rawState;
-  const displayHex = holdWrittenHex(writtenHex, deviceHex);
+  // While a locally-written color is held it wins OUTRIGHT — no distance
+  // comparison. Right after a write the device has not caught up yet, so
+  // comparing always found a difference and yielded to the stale device
+  // color, throwing away the optimistic update at exactly the moment it was
+  // needed. The hold is released on a timer below (and immediately if the
+  // device reports something we did not write), at which point deviceHex
+  // takes over.
+  const displayHex = writtenHex || deviceHex;
   const displayPct = dragPct !== null ? dragPct : (brightnessPct || 0);
 
-  // Once the device reports a color materially different from what we wrote,
-  // the hold has expired — drop it so we stop competing with the device.
+  // Release the hold on a timer. It exists only to cover the round trip
+  // between writing a color and the device echoing it back; after that the
+  // device is the truth and the UI should follow it (including an automation
+  // recoloring the bulb).
   useEffect(() => {
-    if (writtenHex && deviceHex && holdWrittenHex(writtenHex, deviceHex) === deviceHex) {
-      setWrittenHex('');
-    }
-  }, [deviceHex, writtenHex]);
+    if (!writtenHex) return undefined;
+    const t = setTimeout(() => setWrittenHex(''), HOLD_RELEASE_MS);
+    return () => clearTimeout(t);
+  }, [writtenHex]);
 
   const { execute, loading } = useControlCommand({
     controlId: control.id,
@@ -145,9 +160,14 @@ function ControlLight({ control, readOnly = false, onSuccess, onError, compact =
     // Hold it immediately so the swatch shows what was picked, not the
     // round-tripped approximation that arrives a moment later.
     setWrittenHex(hex);
+    // Setting a color turns the light on — that is what the command below
+    // does — so reflect the power change locally too, exactly as the
+    // brightness path does. Without it the toggle reads OFF while the light
+    // is coming on, until the device echo arrives.
+    setRawState('ON');
     // Z2M takes hex directly — no conversion on the command path.
     execute({ state: 'ON', color: { hex } }, `${label} color ${hex}`);
-  }, [readOnly, loading, execute, label]);
+  }, [readOnly, loading, execute, label, setRawState]);
 
   // --- brightness bar drag ---------------------------------------------
   const yToPct = useCallback((clientY) => {
@@ -244,6 +264,12 @@ function ControlLight({ control, readOnly = false, onSuccess, onError, compact =
             palette={LIGHT_COLOR_PALETTE}
             allowAuto={false}
             allowCustom
+            // The OS color wheel fires continuously while dragged, and every
+            // change here is an MQTT command to the bulb. Rate-limit it, with
+            // a trailing send so the color the user settles on is the one
+            // that lands. Live enough to preview on the wall, without
+            // flooding the broker or the device.
+            customThrottleMs={250}
             // Dashboard panels and the tile popup both clip their content, so
             // the palette has to render outside them or it is cut off at the
             // edge.
