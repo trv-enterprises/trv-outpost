@@ -41,6 +41,15 @@ export function useControlState({
   const [value, setValue] = useState(initialValue);
   const [connected, setConnected] = useState(false);
   const ownSuppressRef = useRef(0);
+
+  // Callers pass `transform` as an inline arrow, so its identity changes on
+  // every render. With it in the effect's dependency array the subscription
+  // tore down and re-subscribed continuously — a device message arriving
+  // mid-teardown landed on a callback that was about to be discarded, so the
+  // value silently stopped updating. Hold it in a ref and read through that,
+  // so the effect depends only on what actually identifies the subscription.
+  const transformRef = useRef(transform);
+  transformRef.current = transform;
   // Callers that pass a shared ref suppress as one unit; everyone else keeps
   // a private window, which is the historical behaviour.
   const suppressRef = sharedSuppressRef || ownSuppressRef;
@@ -69,7 +78,8 @@ export function useControlState({
       const raw = extractStateValue(record, stateField, fallbackFields);
       if (raw === undefined) return;
 
-      const final = transform ? transform(raw) : raw;
+      const fn = transformRef.current;
+      const final = fn ? fn(raw) : raw;
       setValue(final);
     }, {
       topics: stateTopic,
@@ -78,7 +88,9 @@ export function useControlState({
     });
 
     return () => unsubscribe();
-  }, [connectionId, stateTopic, stateField, fallbackFields.join(','), transform]);
+    // `transform` is deliberately NOT a dependency — see transformRef above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectionId, stateTopic, stateField, fallbackFields.join(',')]);
 
   return { value, setValue, connected, suppress, clearSuppress, stateTopic };
 }

@@ -14,6 +14,12 @@ import { colorFieldToHex, holdWrittenHex } from '../../utils/colorXY';
 import { LIGHT_COLOR_PALETTE, pctToZigbee, zigbeeToPct } from './lightPalette';
 import './controls.scss';
 
+// How long a locally-written color keeps precedence over the device's report.
+// Long enough to cover the write -> broker -> device -> echo round trip
+// (SUPPRESS_DURATION_MS is 3s), short enough that the UI returns to showing
+// device truth promptly.
+const HOLD_RELEASE_MS = 4000;
+
 /**
  * ControlLight
  *
@@ -84,13 +90,25 @@ function ControlLight({ control, readOnly = false, onSuccess, onError, compact =
   const displayHex = holdWrittenHex(writtenHex, deviceHex);
   const displayPct = dragPct !== null ? dragPct : (brightnessPct || 0);
 
-  // Once the device reports a color materially different from what we wrote,
-  // the hold has expired — drop it so we stop competing with the device.
+  // Release the hold once the device reports a color materially different
+  // from what we wrote — it has taken a color we did not set, so stop
+  // competing with it.
   useEffect(() => {
     if (writtenHex && deviceHex && holdWrittenHex(writtenHex, deviceHex) === deviceHex) {
       setWrittenHex('');
     }
   }, [deviceHex, writtenHex]);
+
+  // ...and release it on a timer regardless. The hold exists only to cover
+  // the round trip between writing a color and the device echoing it back;
+  // once that has happened there is nothing left to smooth over. Without this
+  // the written hex outlives its purpose and keeps masking the device's real
+  // color until the device happens to report something far enough away.
+  useEffect(() => {
+    if (!writtenHex) return undefined;
+    const t = setTimeout(() => setWrittenHex(''), HOLD_RELEASE_MS);
+    return () => clearTimeout(t);
+  }, [writtenHex]);
 
   const { execute, loading } = useControlCommand({
     controlId: control.id,
