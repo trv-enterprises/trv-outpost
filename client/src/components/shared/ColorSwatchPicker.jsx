@@ -35,6 +35,12 @@ import './ColorSwatchPicker.scss';
  *        panel content has to stay inside its cell), which cut the palette
  *        off at the panel edge. Off by default: the chart/threshold editors
  *        are not inside a clipping box and don't need it.
+ * @param {number}   [customThrottleMs] rate-limit the custom (OS) color
+ *        input's onChange. React maps onChange to the native `input` event,
+ *        which fires continuously while the OS color wheel is dragged — for a
+ *        caller that turns each change into a device command that is a flood.
+ *        0 (default) keeps every change, which is right for editors where
+ *        onChange only sets local state.
  */
 export default function ColorSwatchPicker({
   value = '',
@@ -44,10 +50,51 @@ export default function ColorSwatchPicker({
   allowAuto = true,
   allowCustom = false,
   float = false,
+  customThrottleMs = 0,
 }) {
   const [open, setOpen] = useState(false);
   const [floatStyle, setFloatStyle] = useState({});
   const ref = useRef(null);
+
+  // Throttle state for the custom color input. `lastSentRef` is the last time
+  // a value was forwarded; `trailingRef` holds the most recent value that was
+  // rate-limited away, so the final position of a drag is never lost.
+  const lastSentRef = useRef(0);
+  const trailingRef = useRef(null);
+  const trailingTimerRef = useRef(null);
+
+  // Cancel any pending trailing send on unmount.
+  useEffect(() => () => {
+    if (trailingTimerRef.current) clearTimeout(trailingTimerRef.current);
+  }, []);
+
+  const handleCustomChange = useCallback((hex) => {
+    if (!customThrottleMs) {
+      onChange?.(hex);
+      return;
+    }
+    const now = Date.now();
+    const since = now - lastSentRef.current;
+    if (since >= customThrottleMs) {
+      lastSentRef.current = now;
+      onChange?.(hex);
+      return;
+    }
+    // Too soon — remember it and schedule a trailing send so the value the
+    // user actually settles on is the one that lands.
+    trailingRef.current = hex;
+    if (!trailingTimerRef.current) {
+      trailingTimerRef.current = setTimeout(() => {
+        trailingTimerRef.current = null;
+        const pending = trailingRef.current;
+        trailingRef.current = null;
+        if (pending !== null) {
+          lastSentRef.current = Date.now();
+          onChange?.(pending);
+        }
+      }, customThrottleMs - since);
+    }
+  }, [customThrottleMs, onChange]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -141,7 +188,7 @@ export default function ColorSwatchPicker({
             type="color"
             className="color-swatch-picker__custom"
             value={value || '#000000'}
-            onChange={(e) => onChange?.(e.target.value)}
+            onChange={(e) => handleCustomChange(e.target.value)}
             aria-label={`${label} — custom`}
           />
         </label>
@@ -215,4 +262,5 @@ ColorSwatchPicker.propTypes = {
   allowAuto: PropTypes.bool,
   allowCustom: PropTypes.bool,
   float: PropTypes.bool,
+  customThrottleMs: PropTypes.number,
 };

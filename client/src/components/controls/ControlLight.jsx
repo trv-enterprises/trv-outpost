@@ -264,6 +264,12 @@ function ControlLight({ control, readOnly = false, onSuccess, onError, compact =
             palette={LIGHT_COLOR_PALETTE}
             allowAuto={false}
             allowCustom
+            // The OS color wheel fires continuously while dragged, and every
+            // change here is an MQTT command to the bulb. Rate-limit it, with
+            // a trailing send so the color the user settles on is the one
+            // that lands. Live enough to preview on the wall, without
+            // flooding the broker or the device.
+            customThrottleMs={250}
             // Dashboard panels and the tile popup both clip their content, so
             // the palette has to render outside them or it is cut off at the
             // edge.
