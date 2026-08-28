@@ -7,7 +7,12 @@ import {
   xyToHex,
   colorFieldToHex,
   hexDistance,
+  textColorOn,
+  relativeLuminance,
+  TEXT_ON_LIGHT,
+  TEXT_ON_DARK,
 } from './colorXY';
+import { LIGHT_COLOR_PALETTE } from '../components/controls/lightPalette';
 
 // The xy values below are not invented — they are what the real device
 // reported back after each hex was written to it (recorded on issue #292),
@@ -89,5 +94,65 @@ describe('hexDistance', () => {
   it('treats unparseable input as maximally distant', () => {
     expect(hexDistance('', '#ffd300')).toBe(Infinity);
     expect(hexDistance('nonsense', '#ffd300')).toBe(Infinity);
+  });
+});
+
+describe('textColorOn', () => {
+  // The regression this exists for: the tile hardcoded white text, so the
+  // pale end of the light palette (Candle, Warm white, Cool white) rendered
+  // the light's name and level as white-on-near-white.
+  it('picks dark text on the pale end of the light palette', () => {
+    for (const hex of ['#FFF6E5', '#FFE8C4', '#FFFFFF', '#7CFF6B', '#00E5B0']) {
+      expect(textColorOn(hex), hex).toBe(TEXT_ON_LIGHT);
+    }
+  });
+
+  it('still picks dark text on the deepest colors a bulb can show', () => {
+    // Counterintuitive but measured: bulb colors are emissive and skew
+    // bright, so even the deep end of the palette out-contrasts dark text.
+    // Blue is the closest call at 4.9:1 dark vs 3.4:1 light.
+    for (const hex of ['#FF3B30', '#547CFF', '#B388FF', '#FF6B35']) {
+      expect(textColorOn(hex), hex).toBe(TEXT_ON_LIGHT);
+    }
+  });
+
+  it('picks light text on a genuinely dark fill', () => {
+    // Not reachable from LIGHT_COLOR_PALETTE, but the OS color wheel
+    // (allowCustom) can produce one.
+    for (const hex of ['#000000', '#1a1a2e', '#4a0072']) {
+      expect(textColorOn(hex), hex).toBe(TEXT_ON_DARK);
+    }
+  });
+
+  it('gives every color in the light palette a readable partner', () => {
+    // Contrast ratio per WCAG 2.x. 4.5:1 is the AA threshold for body text;
+    // these are short bold labels, so AA-large (3:1) is the honest bar, but
+    // assert the stricter one where the palette clears it.
+    const ratio = (a, b) => {
+      const la = relativeLuminance(a);
+      const lb = relativeLuminance(b);
+      return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+    };
+    for (const { hex, name } of LIGHT_COLOR_PALETTE) {
+      expect(ratio(hex, textColorOn(hex)), `${name} ${hex}`).toBeGreaterThan(4.5);
+    }
+  });
+
+  it('returns null for an unusable color so callers keep their default', () => {
+    expect(textColorOn('')).toBeNull();
+    expect(textColorOn(undefined)).toBeNull();
+    expect(textColorOn('nonsense')).toBeNull();
+  });
+});
+
+describe('relativeLuminance', () => {
+  it('anchors at the sRGB endpoints', () => {
+    expect(relativeLuminance('#000000')).toBe(0);
+    expect(relativeLuminance('#ffffff')).toBeCloseTo(1, 5);
+  });
+
+  it('ranks the palette the way the eye does', () => {
+    // Candle is the palest, Blue among the deepest.
+    expect(relativeLuminance('#FFF6E5')).toBeGreaterThan(relativeLuminance('#547CFF'));
   });
 });
