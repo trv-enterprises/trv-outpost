@@ -6,6 +6,28 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.59.3] — 2026-08-28
+
+### Fixed
+
+- **A lit light tile's name and level were unreadable when the bulb was set
+  to a pale color.** The tile drew its text in white whenever the light was
+  on, but the background behind that text is the bulb's own color — so a warm
+  white or candle setting left the text effectively invisible. Tile text now
+  takes its color from the measured contrast against the actual fill, and the
+  choice is made per element, since the fill rises from the bottom and can
+  cover the level readout while the name is still over the tile background.
+
+### Changed
+
+- **Tile titles now match every other component title** — same size, weight,
+  and color as chart and panel titles, and they follow the `title_font_size`
+  admin setting in step with them. Previously a tile's name was styled as part
+  of the tile's state text: it scaled with `tile_font_size` and dimmed along
+  with the icon whenever the device was off. The dimmed treatment still marks
+  a device as off, but through the icon and the state readout — a light is
+  still called "Kitchen" when it's off.
+
 ## [0.59.2] — 2026-08-26
 
 ### Fixed
