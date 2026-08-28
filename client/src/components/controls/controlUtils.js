@@ -53,9 +53,39 @@ export function extractStateValue(record, stateField, fallbacks = []) {
 }
 
 /**
+ * Does the fill cover more than half of an element?
+ *
+ * Tiles whose fill grows from the bottom (light, dimmer) put their text on a
+ * split background at mid levels. The text should take its color from
+ * whichever background covers MORE of it, so it flips when the majority of
+ * the glyphs change background.
+ *
+ * Measure the element, never a percentage of tile height. `.tile-name` is
+ * `flex: 1` with its text vertically centred, so its glyphs sit well below
+ * the tile's own midpoint — testing `fillPercent > 50` called a nearly
+ * covered name "uncovered" and left it white on a pale fill, and put the
+ * flip point right where the text is, so two tiles a hair apart in
+ * brightness disagreed.
+ *
+ * The element's box works directly for both callers here: the bottom row is
+ * text-sized, and the name's single line is centred in its box, so the line
+ * and the box share a midpoint and cross the fill together.
+ *
+ * @param {{top:number, height:number, bottom:number}} rect element box
+ * @param {number} fillTop  y of the fill's top edge, same coord space
+ * @returns {boolean}
+ */
+export function isTextMostlyOnFill(rect, fillTop) {
+  if (!rect || !rect.height) return false;
+  const covered = Math.max(0, rect.bottom - Math.max(rect.top, fillTop));
+  return covered > rect.height / 2;
+}
+
+/**
  * Format a title string, converting `|` to newline for line breaks.
  * Pair with `white-space: pre-line` in CSS.
  */
+
 export function formatTitle(text) {
   if (!text) return text;
   return text.replaceAll('|', '\n');

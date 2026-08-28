@@ -121,6 +121,63 @@ function hexToRgb(hex) {
 }
 
 /**
+ * sRGB relative luminance (WCAG 2.x) of a hex color, 0 (black) to 1 (white).
+ * Returns null when the hex is unparseable.
+ *
+ * @param {string} hex
+ * @returns {number|null}
+ */
+export function relativeLuminance(hex) {
+  const c = hexToRgb(hex);
+  if (!c) return null;
+  const lin = (v) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b);
+}
+
+// Carbon gray100 / gray10. Exported so callers can tell the two cases apart
+// (e.g. to swap a text-shadow that only works under light text) without
+// re-deriving luminance or hardcoding the hex a second time.
+export const TEXT_ON_LIGHT = '#161616';
+export const TEXT_ON_DARK = '#f4f4f4';
+
+/** WCAG 2.x contrast ratio between two luminances, 1:1 to 21:1. */
+function contrastRatio(l1, l2) {
+  return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+}
+
+/**
+ * The text color to draw on top of a given fill.
+ *
+ * Light bulbs are the motivating case: the palette runs from Candle (#FFF6E5)
+ * to Blue (#547CFF), so a single hardcoded text color fails at one end.
+ * White-on-Candle in particular read as nothing at all.
+ *
+ * Rather than threshold the luminance, this measures the contrast ratio both
+ * ways and returns whichever wins. That avoids picking a crossover point by
+ * feel, and it turned out to matter: bulb colors are emissive and skew bright,
+ * so *every* color in LIGHT_COLOR_PALETTE reads better under dark text —
+ * including ones a 0.5 threshold would have sent the other way (Blue scores
+ * 4.9:1 dark vs 3.4:1 light). A threshold would have quietly kept the bug on
+ * the mid-luminance colors.
+ *
+ * Returns Carbon's gray100 / gray10 rather than pure black/white so the tiles
+ * stay on-palette.
+ *
+ * @param {string} hex background fill
+ * @returns {string|null} text hex, or null when the fill is unparseable
+ */
+export function textColorOn(hex) {
+  const L = relativeLuminance(hex);
+  if (L === null) return null;
+  const onLight = contrastRatio(L, relativeLuminance(TEXT_ON_LIGHT));
+  const onDark = contrastRatio(L, relativeLuminance(TEXT_ON_DARK));
+  return onLight >= onDark ? TEXT_ON_LIGHT : TEXT_ON_DARK;
+}
+
+/**
  * How far apart two hex colors are, as the largest per-channel difference
  * in 0–255. Returns Infinity when either side is unparseable, so callers
  * treat "unknown" as "different".

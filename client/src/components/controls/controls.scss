@@ -542,7 +542,22 @@
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 100%;
-    font-weight: 500;
+    // Match the chart title band (chart-spec/ChartTitleBand.jsx): 0.875rem at
+    // weight 600, scaled by the admin `title_font_size` setting. A tile's name
+    // IS its title, so it should read like every other component title on the
+    // dashboard rather than like the tile's own state text.
+    //
+    // Set explicitly rather than inherited: the tile root carries an inline
+    // font-size from `tile_font_size`, which still governs the state/value
+    // readouts below.
+    font-size: calc(0.875rem * var(--title-scale, 1));
+    font-weight: 600;
+    // Title colour, not state colour. The dimmed treatment each tile applies
+    // when its device is off belongs to the ICON and the state readout — a
+    // light is still called "Kitchen" when it's off, and a chart title doesn't
+    // dim with its data. Tiles that draw the name over a coloured fill
+    // override this per state (see .tile-plug-on, .tile-light-on, etc.).
+    color: var(--cds-text-primary);
     line-height: 1.2;
     flex: 1;
     display: flex;
@@ -585,7 +600,7 @@
   &.tile-plug-off {
     background-color: #393939;
 
-    .tile-icon, .tile-name, .tile-state {
+    .tile-icon, .tile-state {
       color: #8d8d8d;
     }
   }
@@ -615,7 +630,7 @@
   }
 
   &.tile-dimmer-low {
-    .tile-icon, .tile-name, .tile-state, .tile-value {
+    .tile-icon, .tile-state, .tile-value {
       color: #8d8d8d;
     }
   }
@@ -652,7 +667,7 @@
   &.tile-garage-door--closed {
     background-color: #393939;
 
-    .tile-icon, .tile-name, .tile-state {
+    .tile-icon, .tile-state {
       color: #8d8d8d;
     }
   }
@@ -899,15 +914,35 @@
   }
 
   &.tile-light-off {
-    .tile-icon, .tile-name, .tile-state, .tile-value {
+    .tile-icon, .tile-state, .tile-value {
       color: #8d8d8d;
     }
   }
 
   &.tile-light-on {
-    .tile-name, .tile-state, .tile-value {
+    // The bulb's color is arbitrary, so the readable text color can only be
+    // decided at render time from its luminance — TileLight sets it inline on
+    // .tile-name and .tile-bottom-row (the fill rises from the bottom, so at a
+    // given brightness those two can sit on different backgrounds and need
+    // different answers). White here is the fallback for the cases TileLight
+    // leaves alone: the fill hasn't reached that element yet, or the device
+    // hasn't reported a color.
+    .tile-name, .tile-bottom-row {
       color: #ffffff;
       text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+    }
+
+    // Inherit, so the inline color on the row reaches its children. Without
+    // this their own `color` would win over the parent's inline style.
+    .tile-bottom-row .tile-state,
+    .tile-bottom-row .tile-value {
+      color: inherit;
+      text-shadow: inherit;
+    }
+
+    // A dark-shadow halo under DARK text just muddies it; swap to a light one.
+    .on-light-fill {
+      text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
     }
   }
 

@@ -2,7 +2,7 @@
 // Licensed under Apache 2.0
 // See LICENSE file for details.
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from '@mdi/react';
 import PropTypes from 'prop-types';
@@ -10,11 +10,11 @@ import {
   mdiLightbulbOn, mdiLightbulbOutline, mdiLightbulbNight,
   mdiCeilingFanLight, mdiFloorLamp, mdiLamp, mdiTrackLight, mdiWallSconce,
 } from '@mdi/js';
-import { formatTitle } from './controlUtils';
+import { formatTitle, isTextMostlyOnFill } from './controlUtils';
 import { useControlState } from './useControlState';
 import { useTileFontSize } from './useTileFontSize';
 import { registerControl } from './controlRegistry';
-import { colorFieldToHex } from '../../utils/colorXY';
+import { colorFieldToHex, textColorOn, TEXT_ON_LIGHT } from '../../utils/colorXY';
 import ControlLight from './ControlLight';
 import { zigbeeToPct } from './lightPalette';
 import './controls.scss';
@@ -118,6 +118,58 @@ function TileLight({ control, readOnly = false, onSuccess, onError }) {
   const displayHex = deviceHex;
   const fillPercent = isOn ? (brightnessPct || 0) : 0;
 
+  // Text has to contrast with whatever is actually behind it, and on this tile
+  // that differs per element: the fill rises from the bottom, so a given
+  // brightness can leave the name on the dark tile background while the level
+  // readout is already on a pale bulb color. A single text color for the whole
+  // tile is wrong at one end or the other — Candle (#FFF6E5) at full
+  // brightness made white text vanish entirely.
+  //
+  // The decision has to be made against where the text ACTUALLY is, not
+  // against the tile's midpoint. `.tile-name` is `flex: 1` with its text
+  // vertically centred, so the glyphs sit well below the tile's 50% line —
+  // comparing the fill to 50% called a nearly-covered name "uncovered" and
+  // left it white on yellow. Measure instead: whichever background covers
+  // more of the text's height wins, so the color flips when the majority of
+  // the glyphs change background rather than at an arbitrary percentage.
+  const [nameOnFill, setNameOnFill] = useState(false);
+  const [rowOnFill, setRowOnFill] = useState(false);
+  const nameRef = useRef(null);
+  const rowRef = useRef(null);
+
+  useLayoutEffect(() => {
+    const tileEl = tileRef.current?.querySelector('.tile-light');
+    if (!tileEl) return undefined;
+
+    const remeasure = () => {
+      const tileRect = tileEl.getBoundingClientRect();
+      // A detached or not-yet-laid-out tile measures 0; leave the last answer
+      // in place rather than flipping the text to a guess.
+      if (!tileRect.height) return;
+      // Top edge of the fill, in viewport coords. The fill grows from the
+      // bottom, so a taller fill means a HIGHER top edge.
+      const fillTop = tileRect.bottom - (tileRect.height * fillPercent) / 100;
+      const measure = (el) => (el ? isTextMostlyOnFill(el.getBoundingClientRect(), fillTop) : false);
+      setNameOnFill(measure(nameRef.current));
+      setRowOnFill(measure(rowRef.current));
+    };
+
+    remeasure();
+
+    // Panels are resizable on the dashboard grid, and a resize moves the text
+    // relative to the fill without changing any of this effect's inputs.
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(remeasure);
+    ro.observe(tileEl);
+    return () => ro.disconnect();
+  }, [fillPercent, displayName, fontSize, showColorOnTile]);
+
+  // Only a lit tile with a known color needs the override; the off and
+  // unknown-color cases keep the stylesheet's defaults.
+  const fillTextColor = isOn && displayHex ? textColorOn(displayHex) : null;
+  const nameColor = nameOnFill ? fillTextColor : null;
+  const bottomRowColor = rowOnFill ? fillTextColor : null;
+
   const handleTileClick = useCallback(() => {
     if (popupOpen) {
       setPopupOpen(false);
@@ -184,9 +236,19 @@ function TileLight({ control, readOnly = false, onSuccess, onError }) {
           />
         )}
 
-        <span className="tile-name">{formatTitle(displayName)}</span>
+        <span
+          ref={nameRef}
+          className={`tile-name ${nameColor === TEXT_ON_LIGHT ? 'on-light-fill' : ''}`}
+          style={nameColor ? { color: nameColor } : undefined}
+        >
+          {formatTitle(displayName)}
+        </span>
 
-        <div className="tile-bottom-row">
+        <div
+          ref={rowRef}
+          className={`tile-bottom-row ${bottomRowColor === TEXT_ON_LIGHT ? 'on-light-fill' : ''}`}
+          style={bottomRowColor ? { color: bottomRowColor } : undefined}
+        >
           <span className="tile-state">{isOn ? 'ON' : 'OFF'}</span>
           {showColorOnTile ? (
             // A swatch, deliberately NOT a picker. Carbon's Popover renders
