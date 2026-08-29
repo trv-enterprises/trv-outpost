@@ -10,9 +10,14 @@ import { Modal, Checkbox, InlineLoading } from '@carbon/react';
  * component when removing the panel would orphan it.
  *
  * Deleting a panel is cheap and reversible (cancel the dashboard edit and it
- * comes back). Deleting a COMPONENT is neither — it's a separate record that
- * disappears from the library. So the component checkbox defaults to OFF: the
- * user has to ask for the destructive half deliberately.
+ * comes back). Deleting a COMPONENT is a separate record disappearing from the
+ * library, so the checkbox defaults to OFF: the user has to ask for the
+ * destructive half deliberately.
+ *
+ * The component delete is DEFERRED to the dashboard save. It cannot run at
+ * confirm time — the panel removal is local until then, so the server still
+ * sees this dashboard referencing the component and refuses (#301). The upside
+ * is that cancelling the edit now backs out both halves together.
  *
  * The dialog only appears when there is something to decide. A panel with no
  * component, or one whose component is still used elsewhere, deletes straight
@@ -74,7 +79,7 @@ export default function PanelDeleteModal({
           />
           <p style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>
             {alsoDelete
-              ? 'The component is deleted from the library as soon as you confirm — this is not undone by cancelling the dashboard edit.'
+              ? 'The component is deleted from the library when you save the dashboard. Cancelling the edit keeps both the panel and the component.'
               : 'The component stays in the library and can be placed on a panel again later.'}
           </p>
         </>

@@ -50,7 +50,7 @@ import ResetFiltersButton from '../components/shared/ResetFiltersButton';
 import SortMenu from '../components/shared/SortMenu';
 import CountListPopover from '../components/shared/CountListPopover';
 import { toUsageItems } from '../utils/usageRefs';
-import { buildComponentCopy } from '../utils/duplicateEntity';
+import { buildComponentCopy, fetchTakenCopyNames } from '../utils/duplicateEntity';
 import './ComponentsListPage.scss';
 import '../components/shared/FilterOverflowMenu.scss';
 
@@ -290,7 +290,15 @@ function ComponentsListPage() {
     setDuplicatingId(chart.id);
     try {
       const full = await apiClient.getComponent(chart.id);
-      const existingNames = new Set((charts || []).map((c) => c?.name).filter(Boolean));
+      // `charts` is only the current PAGE, so a "(copy)" on another page (or on
+      // no page, filtered out) would be missed and the create would 409 (#303).
+      // Ask the server for the real collision set, seeded with this page.
+      const existingNames = await fetchTakenCopyNames(
+        apiClient,
+        full?.name,
+        full?.namespace,
+        (charts || []).map((c) => c?.name).filter(Boolean),
+      );
       await apiClient.createComponent(buildComponentCopy(full, existingNames));
       refetch();
     } catch (err) {
