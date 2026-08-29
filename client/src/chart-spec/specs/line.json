@@ -117,18 +117,25 @@
               "type": "boolean",
               "label": "Dual Y-axis",
               "default": false,
-              "helperText": "Off: all series on one axis (N allowed). On: split across left/right axes (capped at 2 series). Dual axes have no axis labels \u2014 the legend and axis colors identify each side."
+              "helperText": "Off: all series on one axis (N allowed). On: split across left/right axes (capped at 2 series). Each axis can carry its own label."
             },
             {
               "id": "y_axis_label",
               "binds": "data_mapping.y_axis_label",
               "type": "text",
-              "label": "Y-axis label",
+              "label": "Y-axis label (left)",
+              "helperText": "Shown at the top of the axis. Distinct from series labels, which name each value-set in the legend \u2014 useful when the legend is off and nothing else identifies the axis."
+            },
+            {
+              "id": "y_axis_label_right",
+              "binds": "data_mapping.y_axis_label_right",
+              "type": "text",
+              "label": "Y-axis label (right)",
               "visibleWhen": {
                 "field": "multipleYAxis",
-                "operator": "falsy"
+                "operator": "truthy"
               },
-              "helperText": "Rendered vertically along the axis. Distinct from series labels, which name each value-set in the legend."
+              "helperText": "Shown at the top of the right axis."
             },
             {
               "id": "y_axis_columns",

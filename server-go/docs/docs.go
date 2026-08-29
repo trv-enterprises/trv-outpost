@@ -8652,7 +8652,11 @@ const docTemplate = `{
                     }
                 },
                 "y_axis_label": {
-                    "description": "AXIS label rendered along the Y axis (single-axis charts only; dual-axis charts render no axis labels). Series/legend labels live in YAxisLabels. The old save-path mirror (YAxisLabels[0] copied here) was removed; strip_y_axis_label_mirror cleaned stored copies.",
+                    "description": "AXIS label for the LEFT y axis, rendered at the top of it. Optional on single- AND dual-axis charts (dual used to suppress axis labels entirely, which left a legend-less dual chart with nothing to identify either side). Series/legend labels live in YAxisLabels. The old save-path mirror (YAxisLabels[0] copied here) was removed; strip_y_axis_label_mirror cleaned stored copies.",
+                    "type": "string"
+                },
+                "y_axis_label_right": {
+                    "description": "AXIS label for the RIGHT y axis of a dual-axis chart. Ignored when the chart is single-axis (there is no right axis to name).",
                     "type": "string"
                 },
                 "y_axis_labels": {
