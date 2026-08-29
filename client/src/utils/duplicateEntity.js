@@ -36,6 +36,44 @@ export function buildCopyName(base, existingNames = []) {
 }
 
 /**
+ * Names already taken in a namespace that could collide with a copy of `base`.
+ *
+ * Component names are unique per (namespace, name), but a caller usually knows
+ * only the subset it has loaded — the dashboard editor, for instance, sees just
+ * the components on the open dashboard. Building a copy name from that subset
+ * produces "<base> (copy)" even when that name exists elsewhere in the
+ * namespace, and the create then fails with a 409 the user can do nothing about
+ * (#303).
+ *
+ * The server's `name` filter is a case-insensitive word-prefix match, so
+ * filtering by the base name returns the original plus every "(copy N)" of it.
+ * Falls back to the caller's local set if the lookup fails — a best-effort name
+ * beats blocking the duplicate outright.
+ *
+ * @param {object} apiClient  the shared API client
+ * @param {string} base       source record name
+ * @param {string} namespace  namespace the copy will live in
+ * @param {Iterable<string>} [localNames] names the caller already knows about
+ * @returns {Promise<Set<string>>}
+ */
+export async function fetchTakenCopyNames(apiClient, base, namespace, localNames = []) {
+  const taken = new Set(localNames);
+  if (!base) return taken;
+  try {
+    const res = await apiClient.getComponents({
+      name: base,
+      ...(namespace ? { namespace } : {}),
+    });
+    (res?.components || []).forEach((c) => { if (c?.name) taken.add(c.name); });
+  } catch (err) {
+    // Non-fatal: fall back to whatever the caller knew. Worst case is the
+    // pre-existing behaviour — a 409 the caller surfaces.
+    console.error('[duplicateEntity] copy-name lookup failed:', err);
+  }
+  return taken;
+}
+
+/**
  * Strip identity, version, draft-session, timestamp and usage fields from a
  * component record so what remains can be POSTed as a brand-new component.
  * Field names track `models.Component`'s json tags.

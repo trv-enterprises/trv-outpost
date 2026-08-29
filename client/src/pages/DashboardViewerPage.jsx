@@ -87,7 +87,7 @@ import DashboardExportModal from '../components/DashboardExportModal';
 import NameErrorBadge from '../components/NameErrorBadge';
 import DiscardChangesModal from '../components/shared/DiscardChangesModal';
 import PanelDeleteModal from '../components/shared/PanelDeleteModal';
-import { buildComponentCopy } from '../utils/duplicateEntity';
+import { buildComponentCopy, fetchTakenCopyNames } from '../utils/duplicateEntity';
 import useIsMobile from '../hooks/useIsMobile';
 import { useMobileViewModeContext, MOBILE_VIEW_FLOW } from '../context/MobileViewModeContext';
 import { useModeGuard } from '../context/ModeGuardContext';
@@ -1980,6 +1980,11 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   const enterEditMode = () => {
     const panelsCopy = (dashboard?.panels || []).map(p => ({ ...p }));
     setEditablePanels(panelsCopy);
+    // Re-seeding restores the panels as last saved, so any component queued
+    // for deletion alongside a now-restored panel must NOT be deleted. This
+    // runs on entering the editor and on Discard (a revert-in-place), which
+    // are exactly the two moments the queue stops being valid (#301).
+    pendingComponentDeletesRef.current = [];
     // Re-seeding replaces every panel, so any selection now points at the
     // pre-revert set. Clear it — this runs on entering the editor and on
     // Discard (which is a revert-in-place), and a stale selection there would
@@ -2515,6 +2520,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       if (isNewDashboard) {
         const created = await apiClient.createDashboard(payload);
         invalidateTagsCache();
+        // Panels are persisted now, so any component the user asked to delete
+        // alongside its panel is finally free of references (#301).
+        await flushPendingComponentDeletes();
         // Clear dirty regardless of who navigates next.
         setEditHasChanges(false);
         if (stayInEdit) {
@@ -2552,6 +2560,9 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         // stale-`dashboard` spread underneath can never win over them.
         await apiClient.updateDashboard(id, { ...dashboard, ...payload });
         invalidateTagsCache();
+        // Panels are persisted now, so any component the user asked to delete
+        // alongside its panel is finally free of references (#301).
+        await flushPendingComponentDeletes();
         setEditHasChanges(false);
         if (stayInEdit) {
           // Saved, keep editing — same session, no network reload. But we
@@ -2798,10 +2809,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       if (src.component_id) {
         const source = chartsMap[src.component_id]
           || await apiClient.getComponent(src.component_id);
-        // Collision set is the components already loaded for this dashboard —
-        // a server-side (namespace, name) clash still surfaces as an error.
-        const existingNames = new Set(
-          Object.values(chartsMap).map(c => c?.name).filter(Boolean)
+        // Names are unique per (namespace, name) across the whole library, so
+        // the components on THIS dashboard are not a sufficient collision set —
+        // an orphaned "(copy)" living on no dashboard is invisible here and the
+        // create 409s (#303). Ask the server, seeded with what we already know.
+        const existingNames = await fetchTakenCopyNames(
+          apiClient,
+          source?.name,
+          source?.namespace,
+          Object.values(chartsMap).map(c => c?.name).filter(Boolean),
         );
         const created = await apiClient.createComponent(
           buildComponentCopy(source, existingNames)
@@ -2860,6 +2876,15 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // every panel delete would be pure friction.
   const [panelDeleteTarget, setPanelDeleteTarget] = useState(null); // {panelId, componentId, componentName}
   const [panelDeleteChecking, setPanelDeleteChecking] = useState(false);
+  // Components the user asked to delete along with their panel, held until the
+  // dashboard save persists the panel removal.
+  //
+  // The delete CANNOT run at click time: deletePanel only edits local state, so
+  // until a save lands the server still has a panel pointing at the component
+  // and its in-use guard (correctly) refuses with 409. Queue the ids here and
+  // drain them after the save. A ref rather than state — nothing renders from
+  // it, and saveEditMode must see the current value without a re-render.
+  const pendingComponentDeletesRef = useRef([]);
   const requestDeletePanel = async (panelId) => {
     const panel = editablePanels.find(p => p.id === panelId);
     const componentId = panel?.component_id;
@@ -2897,35 +2922,69 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
     return undefined;
   };
 
-  const confirmDeletePanel = async (alsoDeleteComponent) => {
+  const confirmDeletePanel = (alsoDeleteComponent) => {
     const target = panelDeleteTarget;
     setPanelDeleteTarget(null);
     if (!target) return;
     deletePanel(target.panelId);
     if (!alsoDeleteComponent) return;
-    try {
-      await apiClient.deleteComponent(target.componentId);
+    // Queue rather than delete now — the panel removal above is local, so the
+    // server would still see this dashboard referencing the component and
+    // refuse. flushPendingComponentDeletes() runs once the save has persisted
+    // the removal. Cancelling the edit discards the queue along with the panel
+    // removal that motivated it, which keeps the two consistent.
+    pendingComponentDeletesRef.current = [
+      ...pendingComponentDeletesRef.current.filter(p => p.componentId !== target.componentId),
+      { componentId: target.componentId, componentName: target.componentName },
+    ];
+  };
+
+  // Delete the components queued by confirmDeletePanel. Called after a
+  // successful dashboard save, when the panels referencing them are gone from
+  // the server's copy too.
+  //
+  // Failures are reported but not retried: by this point the panel really is
+  // gone, so the dashboard is in the state the user asked for and the only
+  // casualty is a component left in the library.
+  const flushPendingComponentDeletes = async () => {
+    const queued = pendingComponentDeletesRef.current;
+    if (queued.length === 0) return;
+    pendingComponentDeletesRef.current = [];
+
+    const deleted = [];
+    const failed = [];
+    for (const item of queued) {
+      try {
+        // Sequential on purpose: these are rare (usually one) and a burst of
+        // parallel deletes buys nothing but a noisier server log.
+        // eslint-disable-next-line no-await-in-loop
+        await apiClient.deleteComponent(item.componentId);
+        deleted.push(item);
+      } catch (err) {
+        console.error('[DashboardViewerPage] component delete failed:', err);
+        failed.push({ ...item, message: err.message });
+      }
+    }
+
+    if (deleted.length > 0) {
       setChartsMap(prev => {
         const next = { ...prev };
-        delete next[target.componentId];
+        deleted.forEach(d => { delete next[d.componentId]; });
         return next;
       });
       pushToast({
         kind: 'success',
-        title: 'Component deleted',
-        subtitle: `"${target.componentName}" was removed from the library.`,
-      });
-    } catch (err) {
-      // The panel is already gone (local, undone by cancelling the edit). Say
-      // plainly that the component itself survived rather than implying the
-      // whole delete failed.
-      console.error('[DashboardViewerPage] component delete failed:', err);
-      pushToast({
-        kind: 'error',
-        title: 'Component not deleted',
-        subtitle: `The panel was removed, but "${target.componentName}" could not be deleted: ${err.message}`,
+        title: deleted.length === 1 ? 'Component deleted' : 'Components deleted',
+        subtitle: deleted.length === 1
+          ? `"${deleted[0].componentName}" was removed from the library.`
+          : `${deleted.length} components were removed from the library.`,
       });
     }
+    failed.forEach(f => pushToast({
+      kind: 'error',
+      title: 'Component not deleted',
+      subtitle: `The panel was removed, but "${f.componentName}" could not be deleted: ${f.message}`,
+    }));
   };
 
   // Delete a panel
