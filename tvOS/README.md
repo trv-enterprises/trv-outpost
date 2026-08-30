@@ -46,20 +46,58 @@ The web UI's click targets, hover states, and dense grids do not translate —
 this app needs its own screen designs built around focus traversal, not a port
 of the dashboard layout.
 
-**The API requires authentication.** `GET /api/*` returns
-`{"error":"Authentication required"}` without a token. The app needs a
-credential path, and the tvOS constraint is that there is no comfortable text
-entry — typing a token on a D-pad keyboard is miserable. Options to weigh:
+**Auth: an API key, and nothing more elaborate.** `GET /api/*` returns
+`{"error":"Authentication required"}` unauthenticated, and the tvOS constraint
+is that there is no comfortable text entry — typing a token on a D-pad keyboard
+is miserable.
 
-- a device-pairing flow (TV shows a short code, the user approves it from the
-  web UI on a phone/laptop), or
-- the existing system-user / kiosk-token pattern already used for
-  `trv-kiosk-001`, which was built for exactly this "no human at the keyboard"
-  problem.
+Resolved: the server already has an API-key IdP
+(`server-go/internal/auth/idp/apikey.go`) accepting
+`Authorization: Bearer trve_<base32>`. Verified against a running server — 200,
+full dashboard list. So no device-pairing flow and no on-screen token entry
+are needed; the key is supplied once and stored.
 
-The second is likely the quicker path and reuses a solved problem. Note the
-open caveat in the parent repo: kiosk auth needs sorting **before** Clerk is
-enabled on any deployment this app talks to.
+Two constraints on that:
+
+- **Mint a SEPARATE key for the TV.** It lives on a device in a shared room, so
+  it should not reuse a personal/admin key, and it should be read-only until
+  control interaction is deliberately added.
+- The open caveat in the parent repo still applies: kiosk auth needs sorting
+  **before** Clerk is enabled on any deployment this app talks to.
+
+**The model is the MOBILE viewer, not the desktop one.** tvOS and a phone face
+the same problem from opposite ends: the author's 32×32-cell grid, scaled to
+fit, is illegible on a small screen and equally wrong across a room. Both want
+a restricted, non-authoring, read-oriented rendering of the same dashboard.
+
+So `client/src/pages/MobileDashboardViewer.jsx` is the reference, and its
+central decision carries over: **discard the author's grid geometry and stack
+panels one per row in reading order**, so any existing dashboard works with no
+re-authoring.
+
+Reading order is worth porting properly rather than reimplementing. The web
+version is `client/src/utils/mobilePanelOrder.js`: sort by (y, x), except a
+rect `border` adornment groups the panels it encloses so they flow as a unit
+instead of interleaving with a neighbouring cluster, nesting arbitrarily deep
+(#180). That logic is pure and geometry-only — it is the piece to translate to
+Swift first, and it is independently testable without any UI.
+
+**Two things the mobile viewer has that tvOS deliberately does NOT get:**
+
+1. **No stacked↔fit mode toggle.** The phone offers `FitToScreen` to fall back
+   to the scaled canvas (`MobileDashboardViewer.jsx:311-312`, via
+   `MobileViewModeContext`). On a TV the scaled canvas is never the better
+   answer, and a mode the user can reach but should never pick is a trap.
+   Stacked is the only mode; the whole `MOBILE_VIEW_FLOW`/`MOBILE_VIEW_FIT`
+   mechanism has no tvOS equivalent.
+2. **No dashboard-canvas flow.** Nothing renders the author's absolute panel
+   geometry. Order is all that survives from the layout, exactly as on mobile.
+
+**Where tvOS diverges from mobile even so:** a phone scrolls by touch, with no
+concept of focus. A TV moves a focus ring with the D-pad, so a stack of panels
+needs each row to be focusable and the list to scroll as focus advances. That
+is the one part with no web counterpart to copy — the ordering and the panel
+rendering port over, the traversal does not.
 
 **Read-first.** Displaying dashboards is the valuable 80%. Control interaction
 (toggles, dimmers) is the interesting part but needs the focus model settled
