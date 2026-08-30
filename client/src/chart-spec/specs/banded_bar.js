@@ -133,7 +133,11 @@ function baseOption(categories, yMin, yMax, legendPos, opts = {}, extra = {}) {
   // for a bottom legend).
   const gridBottomBase = opts.chartShowZoomSlider ? 43 : 8;
   const gridBottom = legendPos === 'bottom' ? gridBottomBase + 26 : gridBottomBase;
-  const gridLeft = legendPos === 'left' ? 135 : 50;
+  // containLabel:true (below) already reserves the y-axis label width and adds
+  // grid.left on top of it, so the old flat 50 was dead space (#305).
+  // banded_bar renders no y-axis name, so nothing else needs the room — a
+  // small flush gap is all that's left to reserve.
+  const gridLeft = legendPos === 'left' ? 135 : 8;
   const gridRight = legendPos === 'right' ? 135 : 20;
 
   // Y-axis range override: opts.yAxisRange.left can pin min/max + log

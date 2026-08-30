@@ -264,7 +264,18 @@ export function buildOption(values, data, helpers = {}) {
   const option = {
     backgroundColor: TRANSPARENT_BG,
     tooltip,
-    grid: { top: 30, left: 50, right: 20, bottom: gridBottom, containLabel: true },
+    // grid.left: containLabel:true already reserves the y-axis label width and
+    // ADDS grid.left on top of it, so a flat 50 was ~50px of dead space (#305).
+    // Scatter keeps its rotated `nameLocation: 'middle'` y-axis name, though,
+    // which IS drawn in grid.left — so the budget is only needed when a name
+    // is actually set (nameGap 45 + room for the glyphs).
+    grid: {
+      top: 30,
+      left: dm.y_axis_label ? 58 : 8,
+      right: 20,
+      bottom: gridBottom,
+      containLabel: true,
+    },
     xAxis: withAxisName(buildValueAxis(opts.xAxisRange, xLabelFormatter || xSiFormatter, opts.xAxisLabelRotate), dm.x_axis_label || '', true),
     yAxis: withAxisName(buildValueAxis(opts.yAxisRange?.left, ySiFormatter), dm.y_axis_label || '', false),
     series,

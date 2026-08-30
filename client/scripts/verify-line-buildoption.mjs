@@ -625,7 +625,10 @@ const data = {
     { formatCellValue, chartType: 'line' },
   );
   check('case 21: single-axis yAxis.name from y_axis_label', single.yAxis?.name === 'Utilization (%)');
-  check('case 21: single-axis nameLocation middle', single.yAxis?.nameLocation === 'middle');
+  // Names render at the TOP of the axis ('end'), not rotated up the middle.
+  // Top placement reads horizontally and costs no horizontal grid budget,
+  // which matters because grid.right is only 20px without a legend (#305).
+  check('case 21: single-axis nameLocation end', single.yAxis?.nameLocation === 'end');
 
   // Single-axis, no label → no name key forced on.
   const bare = buildOption(
@@ -635,24 +638,71 @@ const data = {
   );
   check('case 21: no y_axis_label → no yAxis.name', bare.yAxis?.name === undefined);
 
-  // Dual-axis: NO axis names at all — the legend + axis colors identify
-  // each side; a name would duplicate the series label. The explicit
-  // y_axis_label is ignored too.
+  // Dual-axis: BOTH axes can carry a name (#305). This used to suppress names
+  // entirely, on the grounds that the legend plus the axis colours identify
+  // each side — but that only holds while the legend is ON, and turning the
+  // legend off to reclaim space on a small panel is exactly when a two-scale
+  // chart most needs its axes named.
   const dual = buildOption(
     {
       data_mapping: {
         x_axis: 'ts',
         multiple_y_axis: true,
         y_axis: [{ column: 'cpu', label: 'CPU %', axis: 'left' }, { column: 'mem', axis: 'right' }],
-        y_axis_label: 'SHOULD NOT RENDER',
+        y_axis_label: 'Utilization (%)',
+        y_axis_label_right: 'Memory (GB)',
       },
       options: {},
     },
     data,
     { formatCellValue, chartType: 'line' },
   );
-  check('case 21: dual left axis has no name', dual.yAxis?.[0]?.name === undefined);
-  check('case 21: dual right axis has no name', dual.yAxis?.[1]?.name === undefined);
+  check('case 21: dual left axis name from y_axis_label', dual.yAxis?.[0]?.name === 'Utilization (%)');
+  check('case 21: dual right axis name from y_axis_label_right', dual.yAxis?.[1]?.name === 'Memory (GB)');
+  check('case 21: dual names sit at the axis top', dual.yAxis?.[0]?.nameLocation === 'end');
+  // Each name aligns to its own side so it can't drift over the plot.
+  check('case 21: dual left name aligns left', dual.yAxis?.[0]?.nameTextStyle?.align === 'left');
+  check('case 21: dual right name aligns right', dual.yAxis?.[1]?.nameTextStyle?.align === 'right');
+
+  // Names stay optional in both modes — an unnamed dual axis forces no key on.
+  const dualBare = buildOption(
+    {
+      data_mapping: {
+        x_axis: 'ts',
+        multiple_y_axis: true,
+        y_axis: [{ column: 'cpu', axis: 'left' }, { column: 'mem', axis: 'right' }],
+      },
+      options: {},
+    },
+    data,
+    { formatCellValue, chartType: 'line' },
+  );
+  check('case 21: dual with no labels has no names', dualBare.yAxis?.[0]?.name === undefined
+    && dualBare.yAxis?.[1]?.name === undefined);
+
+  // A right-axis label on a SINGLE-axis chart is ignored — there is no right
+  // axis to name, so the field must not leak onto the one axis that exists.
+  const singleWithRight = buildOption(
+    {
+      data_mapping: {
+        x_axis: 'ts',
+        y_axis: [{ column: 'cpu' }],
+        y_axis_label_right: 'SHOULD NOT RENDER',
+      },
+      options: {},
+    },
+    data,
+    { formatCellValue, chartType: 'line' },
+  );
+  check('case 21: single-axis ignores y_axis_label_right', singleWithRight.yAxis?.name === undefined);
+
+  // grid.left must NOT re-reserve the tick-label width. `containLabel: true`
+  // already reserves it and ADDS grid.left on top, so a flat 50 put ~50px of
+  // dead space left of the plot — very visible on a small panel (#305).
+  check('case 21: grid.left is a flush gap, not label room', single.grid?.left <= 12);
+  check('case 21: containLabel still on', single.grid?.containLabel === true);
+  // A top-placed name needs headroom instead, taken from grid.top.
+  check('case 21: named axis gets top headroom', single.grid?.top > bare.grid?.top);
 }
 
 // --- Case 22: bar orientation + bar width (bar shares this buildOption) ---

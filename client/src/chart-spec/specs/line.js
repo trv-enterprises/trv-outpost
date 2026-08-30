@@ -245,24 +245,40 @@ function buildYAxisDefs(dualAxis, range, si = {}, names = {}) {
     if (r.max != null) def.max = Number(r.max);
     return def;
   };
-  // Axis name (label rendered along the axis) — scatter's convention
-  // (nameLocation middle / nameGap 45). Single-axis only: the explicit
-  // data_mapping.y_axis_label. Dual-axis renders no axis names — the
-  // legend + axis colors already identify each side, so a name would
-  // just duplicate the series label.
-  const withName = (def, name) => {
+  // Axis name, drawn at the TOP of the axis (`nameLocation: 'end'`).
+  //
+  // Top placement rather than the rotated, centred `middle` convention for
+  // two reasons: it reads horizontally, and it costs no horizontal budget —
+  // a rotated name has to be paid for in grid.left/grid.right, and grid.right
+  // is only 20px without a legend, which is exactly the layout this feature
+  // exists to serve.
+  //
+  // Available on BOTH axes, single- or dual-axis, and optional in every case.
+  // Dual-axis used to suppress names entirely on the grounds that the legend
+  // plus the axis colours already identify each side — but that only holds
+  // while the legend is ON. Turning the legend off to reclaim space is
+  // common on small panels, and it takes the colour cue's only key with it.
+  // A short name at the top of each axis carries the same information for far
+  // less vertical space (#305).
+  //
+  // `align` pins the name to its own side so it can't drift over the plot.
+  const withName = (def, name, side) => {
     if (!name) return def;
     return {
       ...def,
       name,
-      nameLocation: 'middle',
-      nameGap: 45,
-      nameTextStyle: { color: COLOR_TEXT_SECONDARY },
+      nameLocation: 'end',
+      // Clear the tick labels without stealing plot height.
+      nameGap: 12,
+      nameTextStyle: {
+        color: COLOR_TEXT_SECONDARY,
+        align: side === 'right' ? 'right' : 'left',
+      },
     };
   };
   if (dualAxis) {
-    const left = fromRange('left');
-    const right = fromRange('right');
+    const left = withName(fromRange('left'), names.left, 'left');
+    const right = withName(fromRange('right'), names.right, 'right');
     return [
       { ...left, axisLabel: { color: LEFT_AXIS_COLOR, ...(si.left ? { formatter: si.left } : {}) }, axisLine: { show: true, lineStyle: { color: LEFT_AXIS_COLOR } } },
       { ...right, axisLabel: { color: RIGHT_AXIS_COLOR, ...(si.right ? { formatter: si.right } : {}) }, axisLine: { show: true, lineStyle: { color: RIGHT_AXIS_COLOR } } },
@@ -270,7 +286,7 @@ function buildYAxisDefs(dualAxis, range, si = {}, names = {}) {
   }
   const def = fromRange('left');
   if (si.left) def.axisLabel = { formatter: si.left };
-  return withName(def, names.left);
+  return withName(def, names.left, 'left');
 }
 
 /**
@@ -855,13 +871,17 @@ export function buildOption(values, data, helpers = {}) {
     };
   }
 
-  // Y-axis name. Single-axis only: the explicit y_axis_label field (the
-  // Series/axis-label split — series labels feed the legend, this labels
-  // the axis itself). Dual-axis renders NO axis names: with two series
-  // the legend already names both, and mirroring those names onto the
-  // axes just duplicates them — the legend plus the left/right axis
-  // colors carry side identity.
-  const axisNames = { left: dualAxis ? '' : (values?.data_mapping?.y_axis_label || '') };
+  // Y-axis names — the Series/axis-label split: series labels feed the
+  // legend, these label the axes themselves. Optional on both sides in
+  // both single- and dual-axis mode (#305).
+  //
+  // `y_axis_label` keeps meaning "the left axis" so existing single-axis
+  // components are unchanged; `y_axis_label_right` is the second side and
+  // only renders when the chart actually has a right axis.
+  const axisNames = {
+    left: values?.data_mapping?.y_axis_label || '',
+    right: dualAxis ? (values?.data_mapping?.y_axis_label_right || '') : '',
+  };
   const yAxis = buildYAxisDefs(dualAxis, opts.yAxisRange, siAxis, axisNames);
 
   // Dual-axis dead-axis hide. When the user toggles off the only series
@@ -926,7 +946,11 @@ export function buildOption(values, data, helpers = {}) {
   // default and the recommended position; the AI agent prompt should
   // steer toward top unless the user explicitly asks otherwise.
   const legendPos = legend ? (opts?.legend?.position || 'top') : null;
-  const gridTop = legendPos === 'top' ? 36 : 10;
+  // Axis names sit at the TOP of their axis (nameLocation 'end'), so they need
+  // headroom the plot would otherwise use. A top legend already provides it.
+  const hasAxisName = !!(axisNames.left || axisNames.right);
+  const gridTopBase = hasAxisName ? 24 : 10;
+  const gridTop = legendPos === 'top' ? 36 : gridTopBase;
   // grid.bottom is the gap BELOW the x-axis labels (containLabel:true
   // auto-reserves the label height on top of this). Without a slider,
   // only a small flush gap (8px) so the labels sit at the bottom of the
@@ -935,14 +959,24 @@ export function buildOption(values, data, helpers = {}) {
   // slider top (a little breathing room). 50 left an ~18px dead band.
   const gridBottomBase = opts.chartShowZoomSlider ? 43 : 8;
   const gridBottom = legendPos === 'bottom' ? gridBottomBase + 26 : gridBottomBase;
-  // Base left margin (no left legend) = room for the y-axis tick labels.
-  const yAxisLabelRoom = 50;
-  // Reserve the legend column's computed width (auto-fit to labels or the
-  // author's manual width, INCLUDING the legend↔plot gap) when the legend sits
-  // on the left — PLUS the y-axis-label room, because the y-axis is drawn
-  // inside grid.left too. Without adding it, the axis numbers (1.2/0.8/…)
-  // overlapped the legend. Replaces the old flat 135px reservation.
-  const gridLeft = legendPos === 'left' ? legendReservedWidth + yAxisLabelRoom : yAxisLabelRoom;
+  // Base left margin (no left legend) = a small flush gap, NOT room for the
+  // tick labels.
+  //
+  // `containLabel: true` below already reserves the rendered width of the
+  // y-axis labels, and it does so IN ADDITION to grid.left — it does not
+  // absorb it. Measured against the bundled ECharts (400×300, y 0–100):
+  // grid.left 0 → plot starts at x=28; grid.left 50 → x=78. So the old flat
+  // 50 was pure dead space on top of the 28px the labels actually take,
+  // which is very visible on a small panel (#305).
+  //
+  // Axis names no longer need horizontal budget either — they render at the
+  // top of the axis, paid for in gridTop above.
+  const yAxisFlushGap = 8;
+  // A LEFT legend still needs its column reserved. The y-axis and its labels
+  // are drawn inside grid.left too, so the label room must be added on top or
+  // the axis numbers overlap the legend — but containLabel supplies that part
+  // now, so only the legend width plus the flush gap belongs here.
+  const gridLeft = legendPos === 'left' ? legendReservedWidth + yAxisFlushGap : yAxisFlushGap;
   // Right edge: the legend column's width (incl. gap) when the legend sits on
   // the right, else a small 20px flush gap. When threshold labels render at the
   // line's end (right edge), widen the gutter to fit the widest label so it
