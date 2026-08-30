@@ -9709,7 +9709,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "h": {
-                    "type": "integer"
+                    "type": "number"
                 },
                 "id": {
                     "type": "string"
@@ -9727,18 +9727,18 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "w": {
-                    "type": "integer"
+                    "type": "number"
                 },
                 "width": {
                     "description": "Width is the line width in px — must be one of the values returned by\nWidthsForAdornmentKind for this adornment's Kind.",
                     "type": "integer"
                 },
                 "x": {
-                    "description": "X/Y/W/H position a \"border\". Unused (and omitted) for \"panel_border\",\nwhich derives its geometry from the panel it is bound to.",
-                    "type": "integer"
+                    "description": "X/Y/W/H position a \"border\". Unused (and omitted) for \"panel_border\",\nwhich derives its geometry from the panel it is bound to.\n\nFLOAT, not int, because a border edge can land on a THIRD of a cell as\nwell as a cell boundary (#309) — the author can box a region that\ndoesn't align to the 32x32 grid. Panels remain integer-only; only these\nfree-drawn boxes are fractional.\n\nNo migration was needed for the int-\u003efloat64 change: a stored ` + "`" + `5` + "`" + `\ndecodes into float64 from both JSON and BSON, and whole-number borders\nstill marshal back as ` + "`" + `5` + "`" + `, so existing dashboards round-trip unchanged.",
+                    "type": "number"
                 },
                 "y": {
-                    "type": "integer"
+                    "type": "number"
                 }
             }
         },

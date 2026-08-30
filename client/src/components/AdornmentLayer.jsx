@@ -74,11 +74,33 @@ export function adornmentRect(a) {
   // Two things must stay true together, or the line lands back on the panel:
   // this offset, and `content-box` (with `border-box` the width would absorb
   // the border instead of adding to it).
+  // An edge on a CELL BOUNDARY grows outward into the gutter (see above). An
+  // edge on a 1/3 or 2/3 mark has no gutter to grow into — it sits inside a
+  // cell, over panel content — so it CENTERS on the mark instead, growing
+  // equally both ways (#309).
+  //
+  // Centering is also what makes a pair of fractional edges read as parallel:
+  // both lines straddle their mark by line/2, so a box drawn between the 1/3
+  // and 2/3 marks is symmetric. With an even line width (2 or 4) each half is
+  // a whole pixel and the two sides match exactly; an odd width lands on a
+  // half-pixel and one side renders a hair thicker.
+  const onBoundary = (v) => Number.isInteger(v);
+  // Leading edges: shift out by the full line on a boundary, half inside a cell.
+  const leadX = onBoundary(a.x) ? line : line / 2;
+  const leadY = onBoundary(a.y) ? line : line / 2;
+  // Trailing edges: a boundary box ends GAP short (the gutter is outside the
+  // content box); a fractional end has no gutter, and gives back the half-line
+  // the leading edge no longer consumed.
+  const trailX = onBoundary(a.x + a.w) ? GAP : -line / 2;
+  const trailY = onBoundary(a.y + a.h) ? GAP : -line / 2;
+
   return {
-    left: a.x * stride - line,
-    top: a.y * strideY - line,
-    width: a.w * stride - GAP,
-    height: a.h * strideY - GAP,
+    left: a.x * stride - leadX,
+    top: a.y * strideY - leadY,
+    // width/height span from the (shifted) leading edge to the trailing edge,
+    // so a mixed box — boundary on one side, third on the other — stays closed.
+    width: a.w * stride - trailX + (leadX - line),
+    height: a.h * strideY - trailY + (leadY - line),
   };
 }
 

@@ -5,6 +5,7 @@
 package service
 
 import (
+	"math"
 	"testing"
 
 	"github.com/trv-enterprises/trve-dashboard/internal/models"
@@ -86,14 +87,52 @@ func TestSanitizeAdornmentsCoercesLineStyle(t *testing.T) {
 
 func TestSanitizeAdornmentsClampsGeometry(t *testing.T) {
 	// Negative origins and zero/negative extents would render inverted or
-	// invisible boxes; clamp to a legal 1x1 at worst.
+	// invisible boxes; clamp to the smallest legal box at worst.
+	//
+	// That floor is a THIRD of a cell, not a whole one (#309): border edges
+	// snap to the 1/3 and 2/3 marks inside a cell, so a third-wide box is a
+	// legitimate thing to draw and clamping to 1 would silently widen it.
 	a := []models.DashboardAdornment{{ID: "x", X: -5, Y: -2, W: 0, H: -3}}
 	sanitizeAdornments(a)
 	if a[0].X != 0 || a[0].Y != 0 {
-		t.Errorf("origin not clamped: got (%d,%d), want (0,0)", a[0].X, a[0].Y)
+		t.Errorf("origin not clamped: got (%g,%g), want (0,0)", a[0].X, a[0].Y)
 	}
-	if a[0].W != 1 || a[0].H != 1 {
-		t.Errorf("extent not clamped: got %dx%d, want 1x1", a[0].W, a[0].H)
+	if a[0].W != minBorderExtent || a[0].H != minBorderExtent {
+		t.Errorf("extent not clamped: got %gx%g, want %gx%g",
+			a[0].W, a[0].H, minBorderExtent, minBorderExtent)
+	}
+}
+
+func TestSanitizeAdornmentsKeepsFractionalGeometry(t *testing.T) {
+	// A border edge on a 1/3 mark must survive the round trip untouched —
+	// the whole point of #309. Previously x/y/w/h were ints and any
+	// fraction was lost.
+	const third = 1.0 / 3.0
+	a := []models.DashboardAdornment{{ID: "x", X: 4 + third, Y: 2, W: 3 + 2*third, H: 1}}
+	sanitizeAdornments(a)
+	if a[0].X != 4+third {
+		t.Errorf("fractional X was altered: got %g, want %g", a[0].X, 4+third)
+	}
+	if a[0].W != 3+2*third {
+		t.Errorf("fractional W was altered: got %g, want %g", a[0].W, 3+2*third)
+	}
+}
+
+func TestSanitizeAdornmentsRejectsNonFiniteGeometry(t *testing.T) {
+	// NaN fails EVERY comparison, so a stored NaN can never be clamped,
+	// moved, or deleted by any later check — the border becomes permanently
+	// stuck. Reject it at the write boundary rather than persist it.
+	nan := math.NaN()
+	inf := math.Inf(1)
+	a := []models.DashboardAdornment{{ID: "x", X: nan, Y: inf, W: nan, H: math.Inf(-1)}}
+	sanitizeAdornments(a)
+	for _, tc := range []struct {
+		name string
+		got  float64
+	}{{"X", a[0].X}, {"Y", a[0].Y}, {"W", a[0].W}, {"H", a[0].H}} {
+		if math.IsNaN(tc.got) || math.IsInf(tc.got, 0) {
+			t.Errorf("%s survived as non-finite: %v", tc.name, tc.got)
+		}
 	}
 }
 

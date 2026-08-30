@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"slices"
 	"strings"
 
@@ -1249,6 +1250,13 @@ func ensurePanelIDs(panels []models.DashboardPanel) {
 // with a minimum 1x1 extent; the client clamps to the grid budget, and the
 // grid itself tolerates an over-wide rect by extending its extent.
 // Mutates the slice in place.
+// minBorderExtent is the smallest width/height a free-drawn border may have,
+// in cells. A third of a cell: border edges snap to the 1/3 and 2/3 marks
+// inside a cell as well as to cell boundaries (#309), so the narrowest box an
+// author can legitimately draw is one third wide. Clamping to a whole cell
+// would silently widen it.
+const minBorderExtent = 1.0 / 3.0
+
 func sanitizeAdornments(adornments []models.DashboardAdornment) {
 	seen := make(map[string]bool, len(adornments))
 	for i := range adornments {
@@ -1269,17 +1277,35 @@ func sanitizeAdornments(adornments []models.DashboardAdornment) {
 			// a future reader might trust.
 			a.X, a.Y, a.W, a.H = 0, 0, 0, 0
 		} else {
+			// Non-finite geometry is unrecoverable once stored: NaN fails every
+			// comparison, so a corrupted border can never be clamped, moved or
+			// deleted by any later check. Reject it at the boundary.
+			if math.IsNaN(a.X) || math.IsInf(a.X, 0) {
+				a.X = 0
+			}
+			if math.IsNaN(a.Y) || math.IsInf(a.Y, 0) {
+				a.Y = 0
+			}
+			if math.IsNaN(a.W) || math.IsInf(a.W, 0) {
+				a.W = minBorderExtent
+			}
+			if math.IsNaN(a.H) || math.IsInf(a.H, 0) {
+				a.H = minBorderExtent
+			}
 			if a.X < 0 {
 				a.X = 0
 			}
 			if a.Y < 0 {
 				a.Y = 0
 			}
-			if a.W < 1 {
-				a.W = 1
+			// Minimum extent is a THIRD of a cell, not a whole one: a border
+			// edge can land on a 1/3 mark (#309), so a legitimately narrow box
+			// is now a third wide. Clamping to 1 would silently widen it.
+			if a.W < minBorderExtent {
+				a.W = minBorderExtent
 			}
-			if a.H < 1 {
-				a.H = 1
+			if a.H < minBorderExtent {
+				a.H = minBorderExtent
 			}
 			// A rect-positioned border has no panel to bind to.
 			a.PanelID = ""
