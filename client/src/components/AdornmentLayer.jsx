@@ -74,33 +74,75 @@ export function adornmentRect(a) {
   // Two things must stay true together, or the line lands back on the panel:
   // this offset, and `content-box` (with `border-box` the width would absorb
   // the border instead of adding to it).
-  // An edge on a CELL BOUNDARY grows outward into the gutter (see above). An
-  // edge on a 1/3 or 2/3 mark has no gutter to grow into — it sits inside a
-  // cell, over panel content — so it CENTERS on the mark instead, growing
-  // equally both ways (#309).
+  // A fractional (1/3 or 2/3) edge grows OUTWARD from the region the box
+  // encloses, exactly as a boundary edge grows outward into the gutter (#309).
+  // The mark itself belongs to the line: the leading line's LAST pixel is the
+  // mark, the trailing line's FIRST pixel is the mark.
   //
-  // Centering is also what makes a pair of fractional edges read as parallel:
-  // both lines straddle their mark by line/2, so a box drawn between the 1/3
-  // and 2/3 marks is symmetric. With an even line width (2 or 4) each half is
-  // a whole pixel and the two sides match exactly; an odd width lands on a
-  // half-pixel and one side renders a hair thicker.
+  // Why outward rather than centred on the mark. Centring seems natural but
+  // makes the enclosed region shrink as the line thickens, so the three gaps
+  // drift apart. Growing outward keeps the enclosed area FIXED and thickens
+  // the frame around it, so for a box on the 1/3..2/3 marks of one cell
+  // (true marks 10.67 and 21.33, which round to pixels 11 and 21):
+  //
+  //     width   left line   right line   outerL | inner | outerR
+  //       1px     11..11      21..21         11 |   9   |  10
+  //       2px     10..11      21..22         10 |   9   |   9
+  //       3px      9..11      21..23          9 |   9   |   8
+  //       4px      8..11      21..24          8 |   9   |   7
+  //
+  // The three gaps stay within a pixel or two of each other at every width,
+  // which is as even as a 32px cell allows — it does not divide into three
+  // equal parts. Landing ON the thirds is the priority; the leftover 1px of
+  // outer asymmetry is arithmetic, not something to "fix" by nudging a mark
+  // off its third. 2px is the sweetest spot (10, 9, 9).
   const onBoundary = (v) => Number.isInteger(v);
-  // Leading edges: shift out by the full line on a boundary, half inside a cell.
-  const leadX = onBoundary(a.x) ? line : line / 2;
-  const leadY = onBoundary(a.y) ? line : line / 2;
-  // Trailing edges: a boundary box ends GAP short (the gutter is outside the
-  // content box); a fractional end has no gutter, and gives back the half-line
-  // the leading edge no longer consumed.
-  const trailX = onBoundary(a.x + a.w) ? GAP : -line / 2;
-  const trailY = onBoundary(a.y + a.h) ? GAP : -line / 2;
+
+  // Pixel position of a cell coordinate.
+  //
+  // A whole coordinate is a cell boundary and maps by the full stride. A
+  // FRACTION, though, is a fraction of the CELL BODY, not of the stride — the
+  // 4px gutter is dead space between cells, so putting a mark a third of the
+  // way through the stride lands it a third of the way through "cell plus
+  // gutter", which is visibly off-centre inside the cell the author is
+  // looking at.
+  //
+  // Thirds of the 32px body give marks at 10.67 and 21.33, which mirror about
+  // the cell's centre (15.5). Thirds of the 36px stride give 12 and 24, which
+  // do not — the box would sit noticeably left of centre and the two outer
+  // gaps could never match.
+  const toPx = (v, cellStride, cellSize) => {
+    const k = Math.floor(v);
+    const frac = v - k;
+    return k * cellStride + frac * cellSize;
+  };
+
+  // Leading edge: a boundary edge sits fully outside the content box; a
+  // fractional edge keeps its last pixel ON the mark, so it starts one pixel
+  // later than a full line-width back.
+  const leadX = onBoundary(a.x) ? line : line - 1;
+  const leadY = onBoundary(a.y) ? line : line - 1;
+  // Trailing edge: a boundary box stops GAP short, because the gutter sits
+  // outside its content box. A fractional end has no gutter to leave room
+  // for, and under `content-box` the trailing border is already drawn OUTSIDE
+  // left+width — so the content box ends exactly ON the mark and the border
+  // grows outward from it. Subtracting anything here would pull the line a
+  // pixel inside the mark and break the symmetry below.
+  const trailX = onBoundary(a.x + a.w) ? GAP : 0;
+  const trailY = onBoundary(a.y + a.h) ? GAP : 0;
+
+  const x0 = toPx(a.x, stride, CELL_WIDTH);
+  const y0 = toPx(a.y, strideY, CELL_HEIGHT);
+  const x1 = toPx(a.x + a.w, stride, CELL_WIDTH);
+  const y1 = toPx(a.y + a.h, strideY, CELL_HEIGHT);
 
   return {
-    left: a.x * stride - leadX,
-    top: a.y * strideY - leadY,
-    // width/height span from the (shifted) leading edge to the trailing edge,
-    // so a mixed box — boundary on one side, third on the other — stays closed.
-    width: a.w * stride - trailX + (leadX - line),
-    height: a.h * strideY - trailY + (leadY - line),
+    left: x0 - leadX,
+    top: y0 - leadY,
+    // Span from the (shifted) leading edge to the trailing edge, so a mixed
+    // box — boundary on one side, third on the other — still closes cleanly.
+    width: (x1 - x0) - trailX + (leadX - line),
+    height: (y1 - y0) - trailY + (leadY - line),
   };
 }
 
