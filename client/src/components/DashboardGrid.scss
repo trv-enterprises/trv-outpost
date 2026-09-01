@@ -345,10 +345,17 @@
         background-color: #1a1a1a;
         border-bottom: 1px solid #393939;
         flex-shrink: 0;
-        // Height scales with --title-scale (admin title_font_size) to
-        // match the spec title bands' calc(2.5rem * scale) ≈ 40px base.
-        // The .with-header height deduction below uses the same calc so
-        // the body still fits exactly.
+        // Height scales with --title-scale (admin title_font_size). The
+        // .with-header height deduction below uses the same calc so the body
+        // still fits exactly.
+        //
+        // This is the DATATABLE header — a real bar with a background and a
+        // bottom border — and it is mutually exclusive with the in-canvas
+        // ChartTitleBand (see PanelContent: the header renders only for
+        // chart_type 'datatable'). The two no longer share a height: the band
+        // is now top-weighted padding rather than a fixed 2.5rem, so it is
+        // ~7px shorter. That divergence is invisible because the two never
+        // render on the same panel.
         height: calc(40px * var(--title-scale, 1));
 
         .chart-name {
