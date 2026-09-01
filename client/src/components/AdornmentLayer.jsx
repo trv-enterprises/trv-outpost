@@ -74,62 +74,84 @@ export function adornmentRect(a) {
   // Two things must stay true together, or the line lands back on the panel:
   // this offset, and `content-box` (with `border-box` the width would absorb
   // the border instead of adding to it).
-  // A fractional (1/3 or 2/3) edge grows OUTWARD from the region the box
-  // encloses, exactly as a boundary edge grows outward into the gutter (#309).
-  // The mark itself belongs to the line: the leading line's LAST pixel is the
-  // mark, the trailing line's FIRST pixel is the mark.
+  // A fractional (1/3 or 2/3) edge anchors on a whole PIXEL and straddles it,
+  // splitting the line as evenly as the width allows (#309).
   //
-  // Why outward rather than centred on the mark. Centring seems natural but
-  // makes the enclosed region shrink as the line thickens, so the three gaps
-  // drift apart. Growing outward keeps the enclosed area FIXED and thickens
-  // the frame around it, so for a box on the 1/3..2/3 marks of one cell
-  // (true marks 10.67 and 21.33, which round to pixels 11 and 21):
+  // The anchor is floor(fraction * CELL) — pixel 10 for 1/3, pixel 21 for
+  // 2/3. An even-width line cannot sit centred on a single pixel, so the tie
+  // is broken AWAY FROM THE BOX'S OWN INTERIOR: a border that thickens grows
+  // back toward the panels it surrounds, never further into its neighbour's
+  // space.
+  //
+  //     leading  (left/top)     edge: anchor - floor(width / 2)
+  //     trailing (right/bottom) edge: anchor - floor((width - 1) / 2)
+  //
+  // For a single box spanning the 1/3..2/3 marks of one cell (body px 0..31):
   //
   //     width   left line   right line   outerL | inner | outerR
-  //       1px     11..11      21..21         11 |   9   |  10
-  //       2px     10..11      21..22         10 |   9   |   9
-  //       3px      9..11      21..23          9 |   9   |   8
-  //       4px      8..11      21..24          8 |   9   |   7
+  //       1px     10..10      21..21         10 |  10   |  10
+  //       2px      9..10      21..22          9 |  10   |   9
+  //       3px      9..11      20..22          9 |   8   |   9
+  //       4px      8..11      20..23          8 |   8   |   8
   //
-  // The three gaps stay within a pixel or two of each other at every width,
-  // which is as even as a 32px cell allows — it does not divide into three
-  // equal parts. Landing ON the thirds is the priority; the leftover 1px of
-  // outer asymmetry is arithmetic, not something to "fix" by nudging a mark
-  // off its third. 2px is the sweetest spot (10, 9, 9).
+  // The two OUTER gaps are equal at every width and the inner gap stays
+  // close, which is the property that matters: those outer gaps are what
+  // separate the border from the panels it surrounds.
+  //
+  // The case this is really for is TWO borders sharing one cell — a box
+  // around a left group whose right edge is at 1/3, and a box around a right
+  // group whose left edge is at 2/3. Each border's distance from its OWN
+  // panels must look identical, and under this rule it is (10/10, 10/10,
+  // 9/9, 9/9 across the four widths).
+  //
+  // Rejected alternatives, each of which looks reasonable:
+  //   - CENTRING on the true third (10.67 / 21.33) rather than a whole pixel.
+  //     Sub-pixel positions round unpredictably and the gaps drift as the
+  //     line thickens.
+  //   - Anchoring on the ROUNDED third (pixel 11). Symmetric too, but the
+  //     gaps spread wider — 11/8/11 at 1px against 10/10/10 here.
+  //   - One rule for both edge kinds, so a mark renders on identical pixels
+  //     whichever edge it is. Tidy in principle, but it breaks the equal-
+  //     distance-from-own-panels property above, which is the visible one.
   const onBoundary = (v) => Number.isInteger(v);
 
   // Pixel position of a cell coordinate.
   //
   // A whole coordinate is a cell boundary and maps by the full stride. A
-  // FRACTION, though, is a fraction of the CELL BODY, not of the stride — the
-  // 4px gutter is dead space between cells, so putting a mark a third of the
-  // way through the stride lands it a third of the way through "cell plus
-  // gutter", which is visibly off-centre inside the cell the author is
-  // looking at.
+  // FRACTION is a fraction of the CELL BODY, not of the stride — the 4px
+  // gutter is dead space between cells, so a third of the stride lands a
+  // third of the way through "cell plus gutter", which is visibly off-centre
+  // inside the cell the author is looking at. Thirds of the 32px body give
+  // 10.67 and 21.33, which mirror about the cell's centre; thirds of the
+  // 36px stride give 12 and 24, which do not.
   //
-  // Thirds of the 32px body give marks at 10.67 and 21.33, which mirror about
-  // the cell's centre (15.5). Thirds of the 36px stride give 12 and 24, which
-  // do not — the box would sit noticeably left of centre and the two outer
-  // gaps could never match.
+  // The fraction is floored to a whole pixel so the line has a definite
+  // anchor to grow from, rather than straddling a sub-pixel boundary.
   const toPx = (v, cellStride, cellSize) => {
     const k = Math.floor(v);
     const frac = v - k;
-    return k * cellStride + frac * cellSize;
+    return k * cellStride + Math.floor(frac * cellSize);
   };
 
-  // Leading edge: a boundary edge sits fully outside the content box; a
-  // fractional edge keeps its last pixel ON the mark, so it starts one pixel
-  // later than a full line-width back.
-  const leadX = onBoundary(a.x) ? line : line - 1;
-  const leadY = onBoundary(a.y) ? line : line - 1;
-  // Trailing edge: a boundary box stops GAP short, because the gutter sits
-  // outside its content box. A fractional end has no gutter to leave room
-  // for, and under `content-box` the trailing border is already drawn OUTSIDE
-  // left+width — so the content box ends exactly ON the mark and the border
-  // grows outward from it. Subtracting anything here would pull the line a
-  // pixel inside the mark and break the symmetry below.
-  const trailX = onBoundary(a.x + a.w) ? GAP : 0;
-  const trailY = onBoundary(a.y + a.h) ? GAP : 0;
+  // Leading edge (the box's left/top side): a boundary edge sits fully
+  // outside the content box. A fractional edge straddles its anchor, with the
+  // tie-break pixel going LEFT/UP — away from the box's interior.
+  const leadX = onBoundary(a.x) ? line : Math.floor(line / 2);
+  const leadY = onBoundary(a.y) ? line : Math.floor(line / 2);
+  // Trailing edge (the box's right/bottom side): a boundary box stops GAP
+  // short, because the gutter sits outside its content box.
+  //
+  // A fractional end straddles its anchor too, but the tie-break pixel goes
+  // RIGHT/DOWN — again away from the box's interior, which is the mirror of
+  // the leading edge. Under `content-box` the trailing border draws outside
+  // left+width, so pulling the content box back by floor((line-1)/2) puts the
+  // line at `anchor - floor((line-1)/2)`.
+  //
+  // The asymmetry with leadX is deliberate: it is what makes a thickening
+  // border grow toward its own panels rather than across the gap into the
+  // neighbouring group.
+  const trailX = onBoundary(a.x + a.w) ? GAP : Math.floor((line - 1) / 2);
+  const trailY = onBoundary(a.y + a.h) ? GAP : Math.floor((line - 1) / 2);
 
   const x0 = toPx(a.x, stride, CELL_WIDTH);
   const y0 = toPx(a.y, strideY, CELL_HEIGHT);

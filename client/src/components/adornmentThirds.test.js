@@ -9,20 +9,28 @@ import { adornmentRect } from './AdornmentLayer';
  * Border edges can land on the 1/3 and 2/3 marks inside a cell, not just on
  * cell boundaries (#309).
  *
- * Two rules make a fractional border look right, and both are easy to get
- * wrong in ways that only show up on screen:
+ * The motivating layout: two independent borders sharing one cell — a box
+ * around a left group of panels ending at the 1/3 mark, and a box around a
+ * right group starting at the 2/3 mark. Each border must sit the SAME
+ * distance from its own panels, or one group looks more tightly boxed than
+ * the other. That is the property these tests protect.
+ *
+ * Three rules make it work, each arrived at by rejecting something that
+ * seemed reasonable first:
  *
  *  1. A fraction is a fraction of the CELL BODY (32px), not of the stride
  *     (36px). The 4px gutter is dead space between cells, so a third of the
- *     stride lands a third of the way through "cell plus gutter" — visibly
- *     off-centre inside the cell the author is looking at, and the two outer
- *     gaps can then never match.
+ *     stride lands a third of the way through "cell plus gutter".
  *
- *  2. The line grows OUTWARD from the enclosed region, with the mark pixel
- *     belonging to the line — same idea as a boundary edge growing outward
- *     into the gutter. Centring the line ON the mark instead makes the
- *     enclosed area shrink as the line thickens, so the three gaps drift
- *     apart as the author changes width.
+ *  2. The line straddles a whole-pixel anchor at floor(fraction * CELL) —
+ *     pixel 10 for 1/3, 21 for 2/3 — rather than centring on the true
+ *     sub-pixel third (10.67 / 21.33).
+ *
+ *  3. An even-width line can't be centred on one pixel, so the tie is broken
+ *     AWAY from the box's own interior: a thickening border grows back toward
+ *     the panels it surrounds, never further across the gap into its
+ *     neighbour. This makes the leading and trailing rules deliberately
+ *     asymmetric.
  */
 
 const CELL = 32;
@@ -62,71 +70,97 @@ describe('adornmentRect — whole-cell boxes are unchanged', () => {
   });
 });
 
-describe('adornmentRect — fractions are of the cell body, not the stride', () => {
-  it('places the 1/3 and 2/3 marks symmetrically within the cell', () => {
-    // 1/3 of the 32px body is 10.67, which mirrors 21.33 about the cell's
-    // centre (15.5). A third of the 36px STRIDE would be 12 and 24, which do
-    // NOT mirror — the box would sit left of centre and the outer gaps could
-    // never match.
-    //
-    // Measured on the marks themselves (a 1px line whose single pixel IS the
-    // mark), not on the rect's outer bounds, so the line-growth rule doesn't
-    // muddy what this is asserting.
-    const oneThird = adornmentRect({ x: THIRD, y: 0, w: THIRD, h: 1, width: 1 });
-    const markLeft = oneThird.left;
-    const markRight = oneThird.left + 1 + oneThird.width;
+describe('adornmentRect — two borders sharing a cell sit equally off their panels', () => {
+  // THE case this feature exists for. A box around a left group of panels
+  // ends its RIGHT edge at the 1/3 mark; a box around a right group starts
+  // its LEFT edge at the 2/3 mark. They share one 32px cell.
+  //
+  // What must look identical is each border's distance from ITS OWN panels —
+  // the left border's gap back to the cell start, and the right border's gap
+  // on to the cell end. If those differ, one group looks more tightly boxed
+  // than the other.
+  [1, 2, 3, 4].forEach((line) => {
+    it(`${line}px: each border sits the same distance from its own panels`, () => {
+      // Left group's box: runs up to the 1/3 mark.
+      const leftBorder = lineColumns({ x: 0, y: 0, w: THIRD, h: 1, width: line });
+      // Right group's box: starts at the 2/3 mark.
+      const rightBorder = lineColumns({ x: 2 * THIRD, y: 0, w: 1 - 2 * THIRD, h: 1, width: line });
 
-    expect(markLeft).toBeCloseTo(THIRD * CELL, 6);
-    // The two marks must be equidistant from the cell's own centre.
-    const centre = CELL / 2;
-    expect(centre - markLeft).toBeCloseTo(markRight - centre, 0);
+      const leftGap = leftBorder.rightStart;          // cell start -> its line
+      const rightGap = (CELL - 1) - rightBorder.leftEnd; // its line -> cell end
+      expect(leftGap).toBe(rightGap);
+    });
   });
 
-  it('offsets a fraction in a later cell by whole strides', () => {
-    // Cell 2's 1/3 mark is 2 full strides along, then a third of the body.
-    const r = adornmentRect({ x: 2 + THIRD, y: 0, w: THIRD, h: 1, width: 1 });
-    expect(r.left).toBeCloseTo(2 * STRIDE + THIRD * CELL, 6);
+  it('grows a thickening border toward its own panels, not across the gap', () => {
+    // The tie-break direction. As the line thickens, the centre gap between
+    // the two borders must not be eaten into faster on one side.
+    const centreGaps = [1, 2, 3, 4].map((line) => {
+      const l = lineColumns({ x: 0, y: 0, w: THIRD, h: 1, width: line });
+      const r = lineColumns({ x: 2 * THIRD, y: 0, w: 1 - 2 * THIRD, h: 1, width: line });
+      return r.leftStart - l.rightEnd - 1;
+    });
+    // Monotonically non-increasing: thicker lines never widen the gap.
+    centreGaps.forEach((g, i) => {
+      if (i > 0) expect(g).toBeLessThanOrEqual(centreGaps[i - 1]);
+    });
   });
 });
 
-describe('adornmentRect — the frame grows outward, keeping the gaps symmetric', () => {
-  // A box spanning the 1/3..2/3 marks of one cell. As the line thickens the
-  // two OUTER gaps must stay equal to each other and the INNER gap must not
-  // move — that is what reads as a symmetric frame.
-  // The lines sit as close to the true thirds as whole pixels allow — that is
-  // the priority. A 32px cell does not divide into three equal parts: the
-  // true marks are 10.67 and 21.33, which round to pixels 11 and 21, leaving
-  // 11px outside on the left and 10px on the right.
-  //
-  // That 1px difference is arithmetic, not a bug, and it is deliberately NOT
-  // "corrected" by nudging a mark off its third — being on the third matters
-  // more than the last pixel of outer symmetry. What must hold is that the
-  // difference never GROWS as the line thickens.
-  [1, 2, 3, 4].forEach((line) => {
-    it(`keeps the outer gaps within a pixel of each other at ${line}px`, () => {
-      const cols = lineColumns({ x: THIRD, y: 0, w: THIRD, h: 1, width: line });
-      const outerLeft = cols.leftStart;
-      const outerRight = (CELL - 1) - cols.rightEnd;
-      expect(Math.abs(outerLeft - outerRight)).toBeLessThanOrEqual(1);
-    });
-  });
+describe('adornmentRect — a single 1/3..2/3 box lands on the agreed pixels', () => {
+  //   width   left line   right line   outerL | inner | outerR
+  //     1px     10..10      21..21         10 |  10   |  10
+  //     2px      9..10      21..22          9 |  10   |   9
+  //     3px      9..11      20..22          9 |   8   |   9
+  //     4px      8..11      20..23          8 |   8   |   8
+  const spec = [
+    { line: 1, left: [10, 10], right: [21, 21], gaps: [10, 10, 10] },
+    { line: 2, left: [9, 10], right: [21, 22], gaps: [9, 10, 9] },
+    { line: 3, left: [9, 11], right: [20, 22], gaps: [9, 8, 9] },
+    { line: 4, left: [8, 11], right: [20, 23], gaps: [8, 8, 8] },
+  ];
 
-  it('puts the lines on the rounded thirds themselves', () => {
-    // The marks are what the author is aiming at, so pin them explicitly:
-    // the leading line's LAST pixel and the trailing line's FIRST pixel.
-    const cols = lineColumns({ x: THIRD, y: 0, w: THIRD, h: 1, width: 2 });
-    expect(cols.leftEnd).toBe(Math.round(THIRD * CELL));
-    expect(cols.rightStart).toBe(Math.round(2 * THIRD * CELL));
-  });
-
-  it('pins the inner faces so the enclosed area does not shrink', () => {
-    // The whole point of growing outward: thickening the line must not eat
-    // into the region the box encloses.
-    const inner = [1, 2, 3, 4].map((line) => {
+  spec.forEach(({ line, left, right, gaps }) => {
+    it(`${line}px lines occupy ${left.join('..')} and ${right.join('..')}`, () => {
       const c = lineColumns({ x: THIRD, y: 0, w: THIRD, h: 1, width: line });
-      return c.rightStart - c.leftEnd - 1;
+      expect([c.leftStart, c.leftEnd]).toEqual(left);
+      expect([c.rightStart, c.rightEnd]).toEqual(right);
     });
-    expect(new Set(inner).size).toBe(1);
+
+    it(`${line}px gives gaps ${gaps.join('/')} with the outer two equal`, () => {
+      const c = lineColumns({ x: THIRD, y: 0, w: THIRD, h: 1, width: line });
+      const outerLeft = c.leftStart;
+      const inner = c.rightStart - c.leftEnd - 1;
+      const outerRight = (CELL - 1) - c.rightEnd;
+      expect([outerLeft, inner, outerRight]).toEqual(gaps);
+      // The outer gaps separate the border from the panels it surrounds, so
+      // they are the pair that must match.
+      expect(outerLeft).toBe(outerRight);
+      expect(outerLeft + line + inner + line + outerRight).toBe(CELL);
+    });
+  });
+
+  it('keeps the inner gap close to the outer ones', () => {
+    // A 32px cell can't split into three equal parts; the centre is allowed
+    // to differ, but only slightly.
+    spec.forEach(({ gaps }) => {
+      expect(Math.max(...gaps) - Math.min(...gaps)).toBeLessThanOrEqual(1);
+    });
+  });
+});
+
+describe('adornmentRect — fractions are of the cell body, not the stride', () => {
+  it('anchors 1/3 at floor(32/3), not floor(36/3)', () => {
+    // Thirds of the 36px stride would put the anchor at pixel 12, which sits
+    // left of centre inside the 0..31 cell the author is looking at.
+    const c = lineColumns({ x: THIRD, y: 0, w: THIRD, h: 1, width: 1 });
+    expect(c.leftStart).toBe(Math.floor(THIRD * CELL));
+    expect(c.leftStart).not.toBe(Math.floor(THIRD * STRIDE));
+  });
+
+  it('offsets a fraction in a later cell by whole strides', () => {
+    const c = lineColumns({ x: 2 + THIRD, y: 0, w: THIRD, h: 1, width: 1 });
+    expect(c.leftStart).toBe(2 * STRIDE + Math.floor(THIRD * CELL));
   });
 });
 
@@ -140,10 +174,7 @@ describe('adornmentRect — mixed boxes stay closed', () => {
   });
 
   it('handles a fractional start with a boundary end', () => {
-    const line = 2;
-    const r = adornmentRect({ x: 2 * THIRD, y: 0, w: 1 - 2 * THIRD, h: 1, width: line });
-    // The leading line's last pixel sits on the mark, so it starts line-1 back.
-    expect(r.left).toBeCloseTo(2 * THIRD * CELL - (line - 1), 6);
+    const r = adornmentRect({ x: 2 * THIRD, y: 0, w: 1 - 2 * THIRD, h: 1, width: 2 });
     expect(r.width).toBeGreaterThan(0);
   });
 
