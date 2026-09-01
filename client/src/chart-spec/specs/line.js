@@ -268,8 +268,15 @@ function buildYAxisDefs(dualAxis, range, si = {}, names = {}) {
       ...def,
       name,
       nameLocation: 'end',
-      // Clear the tick labels without stealing plot height.
-      nameGap: 12,
+      // Small POSITIVE gap. `nameLocation: 'end'` anchors the name at the
+      // axis's end point (grid.top) and nameGap lifts it from there, so the
+      // name needs grid.top to be large enough to hold it — see gridTopBase
+      // below, which is sized for exactly this.
+      //
+      // Do NOT make this negative to "reclaim" the band: that pulls the label
+      // down INSIDE the plot, where it overlaps the gridlines and the series.
+      // Tried and reverted.
+      nameGap: 2,
       nameTextStyle: {
         color: COLOR_TEXT_SECONDARY,
         align: side === 'right' ? 'right' : 'left',
@@ -949,7 +956,11 @@ export function buildOption(values, data, helpers = {}) {
   // Axis names sit at the TOP of their axis (nameLocation 'end'), so they need
   // headroom the plot would otherwise use. A top legend already provides it.
   const hasAxisName = !!(axisNames.left || axisNames.right);
-  const gridTopBase = hasAxisName ? 24 : 10;
+  // 18 holds an end-placed axis name (nameGap 2 above) without clipping it at
+  // the canvas top, and without leaving a visible empty strip between the
+  // label row and the plot. Measured on the real 248x140 panel: 28 wasted
+  // ~10px, 18 does not, and anything below ~16 clips the glyphs.
+  const gridTopBase = hasAxisName ? 18 : 10;
   const gridTop = legendPos === 'top' ? 36 : gridTopBase;
   // grid.bottom is the gap BELOW the x-axis labels (containLabel:true
   // auto-reserves the label height on top of this). Without a slider,
