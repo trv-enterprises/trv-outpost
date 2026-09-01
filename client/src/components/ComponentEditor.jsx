@@ -4697,6 +4697,19 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       // reset-policy subsection's visibility (shown only when at
                       // least one column has Δ Delta ticked).
                       any_accumulator: Array.isArray(yAxisAccumulate) && yAxisAccumulate.some(Boolean),
+                      // Dual-axis is stored in TWO places depending on the
+                      // component's vintage: `data_mapping.multiple_y_axis`
+                      // (current, what the spec field binds) and the older
+                      // `options.multipleYAxis`. buildOption already reads
+                      // both — a chart saved before the spec field existed
+                      // renders two axes off the options flag alone.
+                      //
+                      // The right-axis-label field gates on this rather than
+                      // on multipleYAxis directly, so an older dual chart can
+                      // still be given a right label. Gating on the spec field
+                      // alone hid the input on exactly the charts that needed
+                      // it (#309 follow-up).
+                      is_dual_y_axis: chartOptions.multipleYAxis === true,
                       accumulator_reset_policy: accumulatorResetPolicy,
                       // pie field ids — label binds to x_axis, value to
                       // y_axis[0]; map the shared state onto pie's ids so
