@@ -669,7 +669,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [xAxisLabel, setXAxisLabel] = useState(''); // Custom label for X axis
   const [xAxisFormat, setXAxisFormat] = useState('auto'); // Default timestamp format; 'auto' fits granularity to the data
   const [yAxisColumns, setYAxisColumns] = useState([]);
-  const [yAxisLabel, setYAxisLabel] = useState(''); // AXIS label rendered along the Y axis (single-axis mode; scatter + line/bar/area). Dual-axis charts render no axis labels — the legend + axis colors identify sides.
+  const [yAxisLabel, setYAxisLabel] = useState(''); // AXIS label for the LEFT y axis (scatter + line/bar/area). Optional on single- AND dual-axis charts.
+  const [yAxisLabelRight, setYAxisLabelRight] = useState(''); // AXIS label for the RIGHT y axis. Dual-axis only — ignored when there is no right axis to name.
   const [yAxisLabels, setYAxisLabels] = useState([]); // Per-SERIES labels (legend names). Index matches yAxisColumns. Empty entries fall back to column name.
   // Per-column series color overrides (resolved hex; '' = auto palette). Index
   // matches yAxisColumns, same parallel-array pattern as yAxisLabels. Saved into
@@ -1279,6 +1280,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       setYAxisColumns(loadedYCols);
       setYAxisColors(loadedYColors);
       setYAxisLabel(chart.data_mapping?.y_axis_label || '');
+      setYAxisLabelRight(chart.data_mapping?.y_axis_label_right || '');
       // Series labels live in y_axis_labels (the per-series source of
       // truth). The legacy fallback that seeded them from the singular
       // y_axis_label is gone — that field is now the AXIS label
@@ -1626,6 +1628,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         yAxisColumns: loadedYCols,
         yAxisColors: loadedYColors,
         yAxisLabel: chart.data_mapping?.y_axis_label || '',
+        yAxisLabelRight: chart.data_mapping?.y_axis_label_right || '',
         yAxisLabels: loadedYAxisLabels,
         groupByColumn: chart.data_mapping?.group_by || '',
         seriesColumn: chart.data_mapping?.series || '',
@@ -3018,6 +3021,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         // The old back-compat mirror (first series label copied here) is
         // gone; strip_y_axis_label_mirror cleaned the stored copies.
         y_axis_label: yAxisLabel || '',
+        // The RIGHT axis's label. Only meaningful on a dual-axis chart —
+        // omitted otherwise so a single-axis record doesn't carry a value
+        // that can never render (and can't resurface if the author later
+        // turns dual-axis on with a stale label attached).
+        y_axis_label_right: chartOptions.multipleYAxis === true
+          ? (yAxisLabelRight || '')
+          : undefined,
         y_axis_labels: (() => {
           if (!Array.isArray(yAxisLabels) || yAxisLabels.length === 0) return undefined;
           // Realign labels with the filtered y_axis. We compute the index
@@ -4721,6 +4731,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       pie_show_labels: chartOptions.pieShowLabels !== false,
                       // scatter field ids
                       y_axis_label: yAxisLabel || '',
+                      y_axis_label_right: yAxisLabelRight || '',
                       size_column: chartOptions.sizeColumn || '',
                       symbol_size: chartOptions.symbolSize ?? 15,
                       symbol_shape: chartOptions.symbolShape || 'circle',
@@ -4902,6 +4913,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         // size column + symbol style live on chartOptions;
                         // x-axis range is scatter-only (true value axis).
                         case 'y_axis_label': setYAxisLabel(value); break;
+                        case 'y_axis_label_right': setYAxisLabelRight(value); break;
                         case 'size_column': updateChartOption('sizeColumn', value); break;
                         case 'symbol_size': updateChartOption('symbolSize', value); break;
                         case 'symbol_shape': updateChartOption('symbolShape', value); break;
@@ -5985,6 +5997,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           accumulator_reset_policy: (Array.isArray(yAxisAccumulate) && yAxisAccumulate.some(Boolean)) ? accumulatorResetPolicy : undefined,
                           // scatter reads these off data_mapping
                           y_axis_label: yAxisLabel || '',
+                          // Preview must mirror the save path or the right
+                          // axis name appears only after a save+reload.
+                          y_axis_label_right: chartOptions.multipleYAxis === true
+                            ? (yAxisLabelRight || '')
+                            : undefined,
                           size_column: chartOptions.sizeColumn || '',
                           // banded_bar reads its per-row band column map off
                           // data_mapping. Only meaningful when a mean column
