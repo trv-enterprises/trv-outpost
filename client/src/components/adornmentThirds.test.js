@@ -9,28 +9,29 @@ import { adornmentRect } from './AdornmentLayer';
  * Border edges can land on the 1/3 and 2/3 marks inside a cell, not just on
  * cell boundaries (#309).
  *
- * The motivating layout: two independent borders sharing one cell — a box
+ * The motivating layout is two independent borders meeting in one cell: a box
  * around a left group of panels ending at the 1/3 mark, and a box around a
- * right group starting at the 2/3 mark. Each border must sit the SAME
- * distance from its own panels, or one group looks more tightly boxed than
- * the other. That is the property these tests protect.
+ * right group starting at the 2/3 mark. Between the two neighbouring panels
+ * there are three gaps, and they should look evenly spaced.
  *
- * Three rules make it work, each arrived at by rejecting something that
- * seemed reasonable first:
+ * The geometry that makes that work, each rule arrived at by rejecting
+ * something that seemed reasonable first:
  *
- *  1. A fraction is a fraction of the CELL BODY (32px), not of the stride
- *     (36px). The 4px gutter is dead space between cells, so a third of the
- *     stride lands a third of the way through "cell plus gutter".
+ *  1. A fraction divides the GUTTER-INCLUSIVE span (GAP + CELL + GAP = 40px),
+ *     starting one gutter before the cell. Dividing the 32px cell body was
+ *     the original bug: the two outer gaps each swallow a 4px gutter that the
+ *     centre never sees, so the centre came out ~6px tighter (measured
+ *     14.3 / 8.2 on a real dashboard).
  *
- *  2. The line straddles a whole-pixel anchor at floor(fraction * CELL) —
- *     pixel 10 for 1/3, 21 for 2/3 — rather than centring on the true
- *     sub-pixel third (10.67 / 21.33).
+ *  2. The line straddles a whole-pixel anchor rather than centring on the
+ *     true sub-pixel third, which would round unpredictably.
  *
- *  3. An even-width line can't be centred on one pixel, so the tie is broken
- *     AWAY from the box's own interior: a thickening border grows back toward
- *     the panels it surrounds, never further across the gap into its
- *     neighbour. This makes the leading and trailing rules deliberately
- *     asymmetric.
+ *  3. Both edges straddle by the same floor(width/2), which balances the
+ *     three gaps to within 1px at every width and exactly at 2px.
+ *
+ * KNOWN LIMITATION: at the first or last column there is no neighbouring
+ * panel, so the span is not symmetric and an edge-adjacent border spaces
+ * differently from an interior one. No cheap fix; deliberate.
  */
 
 const CELL = 32;
@@ -70,97 +71,84 @@ describe('adornmentRect — whole-cell boxes are unchanged', () => {
   });
 });
 
-describe('adornmentRect — two borders sharing a cell sit equally off their panels', () => {
-  // THE case this feature exists for. A box around a left group of panels
-  // ends its RIGHT edge at the 1/3 mark; a box around a right group starts
-  // its LEFT edge at the 2/3 mark. They share one 32px cell.
+describe('adornmentRect — two borders sharing a cell space evenly', () => {
+  // THE case this feature exists for, and the one that set the geometry.
   //
-  // What must look identical is each border's distance from ITS OWN panels —
-  // the left border's gap back to the cell start, and the right border's gap
-  // on to the cell end. If those differ, one group looks more tightly boxed
-  // than the other.
-  [1, 2, 3, 4].forEach((line) => {
-    it(`${line}px: each border sits the same distance from its own panels`, () => {
-      // Left group's box: runs up to the 1/3 mark.
-      const leftBorder = lineColumns({ x: 0, y: 0, w: THIRD, h: 1, width: line });
-      // Right group's box: starts at the 2/3 mark.
-      const rightBorder = lineColumns({ x: 2 * THIRD, y: 0, w: 1 - 2 * THIRD, h: 1, width: line });
+  // A box around a left group of panels ends its RIGHT edge at the 1/3 mark;
+  // a box around a right group starts its LEFT edge at the 2/3 mark. Between
+  // the two neighbouring PANELS there are three visible gaps:
+  //
+  //   left panel | gutter + (0..1/3) | (1/3..2/3) | (2/3..1) + gutter | right panel
+  //
+  // The outer two each swallow a 4px gutter that the centre never sees, which
+  // is why the fraction divides the 40px panel-edge-to-panel-edge span rather
+  // than the 32px cell body. Dividing the body measured 14.3 / 8.2 on a real
+  // dashboard — a ~6px discrepancy the author could see.
+  //
+  // Cell 0 is px 0..31. The panel left of it ends at px -5; the panel right
+  // of it starts at px 36.
+  const LEFT_PANEL_EDGE = -5;
+  const RIGHT_PANEL_EDGE = 36;
 
-      const leftGap = leftBorder.rightStart;          // cell start -> its line
-      const rightGap = (CELL - 1) - rightBorder.leftEnd; // its line -> cell end
-      expect(leftGap).toBe(rightGap);
+  /** The three gaps, measured panel edge to panel edge. */
+  function gaps(line) {
+    // Left group's box: ends at the 1/3 mark of cell 0.
+    const l = lineColumns({ x: -1, y: 0, w: 1 + THIRD, h: 1, width: line });
+    // Right group's box: starts at the 2/3 mark of cell 0.
+    const r = lineColumns({ x: 2 * THIRD, y: 0, w: 1, h: 1, width: line });
+    return [
+      l.rightStart - LEFT_PANEL_EDGE - 1,      // left panel -> left border
+      r.leftStart - l.rightEnd - 1,            // between the two borders
+      RIGHT_PANEL_EDGE - r.leftEnd - 1,        // right border -> right panel
+    ];
+  }
+
+  const expected = {
+    1: [13, 13, 12],
+    2: [12, 12, 12],
+    3: [12, 11, 11],
+    4: [11, 10, 11],
+  };
+
+  Object.entries(expected).forEach(([line, want]) => {
+    it(`${line}px gives gaps ${want.join('/')}`, () => {
+      expect(gaps(Number(line))).toEqual(want);
     });
   });
 
-  it('grows a thickening border toward its own panels, not across the gap', () => {
-    // The tie-break direction. As the line thickens, the centre gap between
-    // the two borders must not be eaten into faster on one side.
-    const centreGaps = [1, 2, 3, 4].map((line) => {
-      const l = lineColumns({ x: 0, y: 0, w: THIRD, h: 1, width: line });
-      const r = lineColumns({ x: 2 * THIRD, y: 0, w: 1 - 2 * THIRD, h: 1, width: line });
-      return r.leftStart - l.rightEnd - 1;
-    });
-    // Monotonically non-increasing: thicker lines never widen the gap.
-    centreGaps.forEach((g, i) => {
-      if (i > 0) expect(g).toBeLessThanOrEqual(centreGaps[i - 1]);
-    });
-  });
-});
-
-describe('adornmentRect — a single 1/3..2/3 box lands on the agreed pixels', () => {
-  //   width   left line   right line   outerL | inner | outerR
-  //     1px     10..10      21..21         10 |  10   |  10
-  //     2px      9..10      21..22          9 |  10   |   9
-  //     3px      9..11      20..22          9 |   8   |   9
-  //     4px      8..11      20..23          8 |   8   |   8
-  const spec = [
-    { line: 1, left: [10, 10], right: [21, 21], gaps: [10, 10, 10] },
-    { line: 2, left: [9, 10], right: [21, 22], gaps: [9, 10, 9] },
-    { line: 3, left: [9, 11], right: [20, 22], gaps: [9, 8, 9] },
-    { line: 4, left: [8, 11], right: [20, 23], gaps: [8, 8, 8] },
-  ];
-
-  spec.forEach(({ line, left, right, gaps }) => {
-    it(`${line}px lines occupy ${left.join('..')} and ${right.join('..')}`, () => {
-      const c = lineColumns({ x: THIRD, y: 0, w: THIRD, h: 1, width: line });
-      expect([c.leftStart, c.leftEnd]).toEqual(left);
-      expect([c.rightStart, c.rightEnd]).toEqual(right);
-    });
-
-    it(`${line}px gives gaps ${gaps.join('/')} with the outer two equal`, () => {
-      const c = lineColumns({ x: THIRD, y: 0, w: THIRD, h: 1, width: line });
-      const outerLeft = c.leftStart;
-      const inner = c.rightStart - c.leftEnd - 1;
-      const outerRight = (CELL - 1) - c.rightEnd;
-      expect([outerLeft, inner, outerRight]).toEqual(gaps);
-      // The outer gaps separate the border from the panels it surrounds, so
-      // they are the pair that must match.
-      expect(outerLeft).toBe(outerRight);
-      expect(outerLeft + line + inner + line + outerRight).toBe(CELL);
+  it('keeps all three gaps within 1px at every width', () => {
+    [1, 2, 3, 4].forEach((line) => {
+      const g = gaps(line);
+      expect(Math.max(...g) - Math.min(...g)).toBeLessThanOrEqual(1);
     });
   });
 
-  it('keeps the inner gap close to the outer ones', () => {
-    // A 32px cell can't split into three equal parts; the centre is allowed
-    // to differ, but only slightly.
-    spec.forEach(({ gaps }) => {
-      expect(Math.max(...gaps) - Math.min(...gaps)).toBeLessThanOrEqual(1);
-    });
+  it('is exactly even at 2px', () => {
+    // The width the author is most likely to use, so it is worth pinning
+    // that it comes out perfectly balanced.
+    expect(gaps(2)).toEqual([12, 12, 12]);
   });
 });
 
-describe('adornmentRect — fractions are of the cell body, not the stride', () => {
-  it('anchors 1/3 at floor(32/3), not floor(36/3)', () => {
-    // Thirds of the 36px stride would put the anchor at pixel 12, which sits
-    // left of centre inside the 0..31 cell the author is looking at.
+describe('adornmentRect — fractions divide the gutter-inclusive span', () => {
+  const SPAN = GAP + CELL + GAP; // 40
+
+  it('starts the span one gutter BEFORE the cell', () => {
+    // A 1/3 mark in cell 0 is measured from px -4, not px 0.
     const c = lineColumns({ x: THIRD, y: 0, w: THIRD, h: 1, width: 1 });
-    expect(c.leftStart).toBe(Math.floor(THIRD * CELL));
-    expect(c.leftStart).not.toBe(Math.floor(THIRD * STRIDE));
+    expect(c.leftStart).toBe(-GAP + Math.round(THIRD * SPAN));
+  });
+
+  it('does not divide the 32px cell body', () => {
+    // The original bug. Thirds of the body put the mark at px 10, which makes
+    // the centre gap ~6px tighter than the outer ones.
+    const c = lineColumns({ x: THIRD, y: 0, w: THIRD, h: 1, width: 1 });
+    expect(c.leftStart).not.toBe(Math.floor(THIRD * CELL));
   });
 
   it('offsets a fraction in a later cell by whole strides', () => {
     const c = lineColumns({ x: 2 + THIRD, y: 0, w: THIRD, h: 1, width: 1 });
-    expect(c.leftStart).toBe(2 * STRIDE + Math.floor(THIRD * CELL));
+    expect(c.leftStart).toBe(2 * STRIDE - GAP + Math.round(THIRD * SPAN));
   });
 });
 
