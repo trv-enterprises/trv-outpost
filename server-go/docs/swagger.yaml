@@ -1726,7 +1726,7 @@ definitions:
           supplies one (Carbon red50) on create.
         type: string
       h:
-        type: integer
+        type: number
       id:
         type: string
       kind:
@@ -1743,7 +1743,7 @@ definitions:
           leave an orphan behind.
         type: string
       w:
-        type: integer
+        type: number
       width:
         description: |-
           Width is the line width in px — must be one of the values returned by
@@ -1753,9 +1753,18 @@ definitions:
         description: |-
           X/Y/W/H position a "border". Unused (and omitted) for "panel_border",
           which derives its geometry from the panel it is bound to.
-        type: integer
+
+          FLOAT, not int, because a border edge can land on a THIRD of a cell as
+          well as a cell boundary (#309) — the author can box a region that
+          doesn't align to the 32x32 grid. Panels remain integer-only; only these
+          free-drawn boxes are fractional.
+
+          No migration was needed for the int->float64 change: a stored `5`
+          decodes into float64 from both JSON and BSON, and whole-number borders
+          still marshal back as `5`, so existing dashboards round-trip unchanged.
+        type: number
       "y":
-        type: integer
+        type: number
     type: object
   models.DashboardListResponse:
     description: Response containing a list of dashboards with pagination

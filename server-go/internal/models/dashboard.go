@@ -154,10 +154,19 @@ type DashboardAdornment struct {
 	Kind string `json:"kind" bson:"kind"` // "border" | "panel_border"
 	// X/Y/W/H position a "border". Unused (and omitted) for "panel_border",
 	// which derives its geometry from the panel it is bound to.
-	X int `json:"x,omitempty" bson:"x,omitempty"`
-	Y int `json:"y,omitempty" bson:"y,omitempty"`
-	W int `json:"w,omitempty" bson:"w,omitempty"`
-	H int `json:"h,omitempty" bson:"h,omitempty"`
+	//
+	// FLOAT, not int, because a border edge can land on a THIRD of a cell as
+	// well as a cell boundary (#309) — the author can box a region that
+	// doesn't align to the 32x32 grid. Panels remain integer-only; only these
+	// free-drawn boxes are fractional.
+	//
+	// No migration was needed for the int->float64 change: a stored `5`
+	// decodes into float64 from both JSON and BSON, and whole-number borders
+	// still marshal back as `5`, so existing dashboards round-trip unchanged.
+	X float64 `json:"x,omitempty" bson:"x,omitempty"`
+	Y float64 `json:"y,omitempty" bson:"y,omitempty"`
+	W float64 `json:"w,omitempty" bson:"w,omitempty"`
+	H float64 `json:"h,omitempty" bson:"h,omitempty"`
 	// PanelID binds a "panel_border" to its panel. Required for that kind;
 	// empty for "border". An adornment whose panel no longer exists is
 	// dropped on save (see sanitizeAdornments) so deleting a panel cannot

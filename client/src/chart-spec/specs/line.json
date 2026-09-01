@@ -39,6 +39,10 @@
     {
       "id": "legend_manual_side",
       "description": "Injected by ComponentEditor formState: true when legend_side_position is true AND width mode is Manual. Gates the manual Width + Long-labels fields."
+    },
+    {
+      "id": "is_dual_y_axis",
+      "description": "Injected by ComponentEditor formState: true when the chart has two y-axes. Reads the editor's chartOptions.multipleYAxis, which is the source of truth for BOTH storage locations (data_mapping.multiple_y_axis on current records, options.multipleYAxis on older ones). Gates the right-axis label so a pre-spec dual chart can still be given one."
     }
   ],
   "sections": [
@@ -132,7 +136,7 @@
               "type": "text",
               "label": "Y-axis label (right)",
               "visibleWhen": {
-                "field": "multipleYAxis",
+                "field": "is_dual_y_axis",
                 "operator": "truthy"
               },
               "helperText": "Shown at the top of the right axis."
