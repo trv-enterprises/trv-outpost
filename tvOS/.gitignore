@@ -1,0 +1,30 @@
+# Xcode / Swift build artifacts and per-user state.
+# Kept here rather than in the repo root so the tvOS toolchain's noise stays
+# scoped to its own directory.
+
+## Build output
+build/
+DerivedData/
+*.o
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+## Per-user Xcode state — never shared, and a constant source of pointless diffs
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+
+## Swift Package Manager
+.build/
+.swiftpm/
+
+## CocoaPods / Carthage (only if either is adopted later)
+Pods/
+Carthage/Build/
+
+## macOS
+.DS_Store
