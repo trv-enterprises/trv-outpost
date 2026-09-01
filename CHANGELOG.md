@@ -6,6 +6,53 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.60.0] — 2026-09-01
+
+### Added
+
+- **Dual-axis charts can name each axis.** A line/area/bar chart with two
+  y-axes can now carry a label on each side, shown at the top of the axis.
+  Previously axis labels were suppressed entirely in dual-axis mode on the
+  grounds that the legend and axis colours identified each side — but that
+  only holds while the legend is on, and turning the legend off to reclaim
+  space on a small panel is exactly when a two-scale chart most needs its
+  axes named.
+
+### Changed
+
+- **Chart titles sit closer to the chart.** The title band was a fixed height
+  with the text centred, which left as much empty space below the title as
+  above it. The gap above is unchanged; the one below is trimmed, returning
+  roughly 7px to the chart on every titled panel.
+
+### Fixed
+
+- **Charts wasted about 50px of width on the left.** The grid reserved room
+  for the y-axis tick labels on top of the room ECharts already reserves for
+  them, so every line, area, bar, banded-bar and scatter chart was indented
+  from its panel edge for no reason. On a small panel that was a large share
+  of the plot — a 230px-wide chart gets 42px of it back.
+
+- **A panel and its component could not be deleted together.** Choosing "also
+  delete the component" while removing a panel failed with "component is in
+  use", because the panel removal had not been saved yet when the component
+  delete was attempted. The component delete now runs after the dashboard
+  save, and cancelling the edit keeps both.
+
+- **Duplicating a panel could fail instead of numbering the copy.** The
+  name-collision check only looked at the components on the current dashboard
+  (or the current page of the components list), so an existing "(copy)"
+  elsewhere in the namespace was invisible and the duplicate was rejected
+  rather than becoming "(copy 2)".
+
+- **The right-axis label could not be entered.** On charts saved before the
+  field existed, the input was hidden; on the rest it accepted typing but
+  discarded the value on save. Both paths now work.
+
+- **Axis names were clipped at the top of the chart.** The name is anchored to
+  the top of its axis, and the space reserved for it was too small, so the
+  glyphs were cut off by the canvas edge.
+
 ## [0.59.3] — 2026-08-28
 
 ### Fixed
