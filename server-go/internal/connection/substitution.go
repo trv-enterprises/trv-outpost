@@ -7,6 +7,7 @@ package connection
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -52,8 +53,7 @@ const RangeParam = "range"
 // into one meaningless value per time bucket — a pivoted chart collapses to a
 // single line. The server derives this from the component's data_mapping.series
 // (see buildComponentDataQuery); the ts-store adapter forwards it only when a
-// step or authored agg_window is also present (ts-store requires an
-// aggregation window for group_by).
+// step is also present (ts-store requires an aggregation window for group_by).
 // Non-ts-store adapters ignore it.
 const GroupByParam = "group_by"
 
@@ -66,21 +66,6 @@ const GroupByParam = "group_by"
 // is set. Authored in the component's query_config.params by the editor's
 // "Current State" query type. Non-ts-store adapters ignore it.
 const LatestByParam = "latest_by"
-
-// Component-authored server-side aggregation (ts-store agg_window /
-// agg_default / agg_fields, #202), stored in query_config.params. ts-store
-// buckets records into agg_window-sized windows and reduces each field with
-// agg_default (one function for every field) or agg_fields
-// ("field:func,field:func" per-field overrides). The authored window is a
-// FLOOR on the bucket size: when the dashboard's range picker also supplies a
-// step, the coarser of the two is used (see setAggregationParams). Suppressed
-// under latest_by, which ts-store rejects alongside any aggregation window.
-// Non-ts-store adapters ignore them.
-const (
-	AggWindowParam  = "agg_window"
-	AggDefaultParam = "agg_default"
-	AggFieldsParam  = "agg_fields"
-)
 
 // StoreParam is the key under which a component on an endpoint-scoped tsstore
 // connection names its target store (query_config.params.store). A connection
@@ -155,35 +140,38 @@ func resolveLatestByParam(params map[string]interface{}) string {
 	return strings.TrimSpace(s)
 }
 
-// tsstoreAggregation is the full downsampling request for one ts-store read:
-// the viewer/raw-DSL step plus the component's authored aggregation. Step
-// arrives per request (range picker or a flat params.step); the rest comes
-// from query_config.params.
-type tsstoreAggregation struct {
-	Step    string // downsampling resolution; implies agg_default=avg
-	Window  string // authored agg_window — a floor on the bucket size
-	Default string // authored agg_default, e.g. "max"
-	Fields  string // authored agg_fields, e.g. "cpu:max,events:sum"
-}
+// ts-store-native query params a component authors in query_config.params
+// and the adapter forwards verbatim (#202) — ts-store does the work; the
+// dashboard only carries the value. Aggregation: agg_window (bucket size),
+// agg_default / agg_fields (functions). Scan bounds: window (lookback for a
+// filtered or aggregated /newest with no since; "0" = whole store) and
+// scan_limit (record budget for latest_by with no filter/since, and for a
+// filtered /oldest; 0 = unbounded).
+var (
+	tsstoreAggParamKeys  = []string{"agg_window", "agg_default", "agg_fields"}
+	tsstoreScanParamKeys = []string{"window", "scan_limit"}
+)
 
-// withStep returns a copy carrying the given step.
-func (a tsstoreAggregation) withStep(step string) tsstoreAggregation {
-	a.Step = step
-	return a
-}
-
-// resolveAggregationParams reads the authored aggregation from Query.Params.
-// Step is left empty — each dispatch path fills it via withStep.
-func resolveAggregationParams(params map[string]interface{}) tsstoreAggregation {
-	str := func(key string) string {
-		s, _ := params[key].(string)
-		return strings.TrimSpace(s)
+// nativeParams copies the named keys from Query.Params into url.Values.
+// Strings are trimmed (blank → omitted); JSON numbers are formatted as
+// integers-when-whole, so a scan_limit of 0 is forwarded rather than dropped.
+func nativeParams(params map[string]interface{}, keySets ...[]string) url.Values {
+	out := url.Values{}
+	for _, keys := range keySets {
+		for _, k := range keys {
+			switch v := params[k].(type) {
+			case string:
+				if s := strings.TrimSpace(v); s != "" {
+					out.Set(k, s)
+				}
+			case float64:
+				out.Set(k, strconv.FormatFloat(v, 'f', -1, 64))
+			case int:
+				out.Set(k, strconv.Itoa(v))
+			}
+		}
 	}
-	return tsstoreAggregation{
-		Window:  str(AggWindowParam),
-		Default: str(AggDefaultParam),
-		Fields:  str(AggFieldsParam),
-	}
+	return out
 }
 
 // resolveStoreParam reads the component-selected store name from Query.Params
