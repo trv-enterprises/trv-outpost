@@ -116,7 +116,7 @@ Two related constraints on single-value types:
 |---------------|-------------------------------------------|---------------------------------------------|-------------------------------------------|
 | **SQL**       | `GROUP BY` + `SUM/AVG/COUNT/...`          | `WHERE`, parameterized                      | Native — `information_schema`, sample rows |
 | **Prometheus**| Built-in operators: `sum / avg / min / max / count`, with `by (...)` / `without (...)` to control label retention | Label matchers in `{...}`; boolean filters via `> 80`; `topk / bottomk` | None for a specific expression — `/api/v1/labels` is global, only post-hoc inspection of returned `metric: {}` |
-| **ts-store**  | Push connection's `agg_window` + `agg_default` (avg/min/max/sum). One bucketed series per push connection. | REST mode: substring `filter` (+ `filter_ignore_case`) and `latest_by` (newest record per distinct value). Neither is available on the push/streaming transport — those consumers filter and reduce chart-side. | Schema endpoint per store; columns and types are known |
+| **ts-store**  | Streaming: the push connection's `agg_window` + `agg_default` — one bucketed series per push connection. REST: per-component `agg_window` / `agg_default` / `agg_fields` in `query_config.params` (#202). The authored window is a *floor* — a dashboard range picker's coarser `step` wins; see `setAggregationParams` in `connection/tsstore.go`. | REST mode: substring `filter` (+ `filter_ignore_case`) and `latest_by` (newest record per distinct value). Neither is available on the push/streaming transport — those consumers filter and reduce chart-side. | Schema endpoint per store; columns and types are known |
 | **MQTT**      | None at the broker                        | Topic-level subscription only; no value-level filtering | None — payload shape is whatever the publisher sent; learned by inspection |
 | **REST API**  | Whatever the upstream API supports        | URL params / request body, fully API-specific | API-specific; treat as opaque |
 | **WebSocket** | None at protocol layer                    | Connection-level parser (`data_path`) carves a slice; no value filter | None — payload shape is publisher-defined |
@@ -206,9 +206,12 @@ aggregation into `data_mapping`. Layer it with this:
    should generate a query with `GROUP BY` (SQL) or
    `avg by (...)` (PromQL).
 
-2. **For ts-store**: configure `agg_window` on the push connection
-   if the chart's bucketing matches. If the user wants a different
-   bucket per chart on the same connection, fall back to chart-side
+2. **For ts-store**: on a REST connection, set the component's own
+   `agg_window` / `agg_default` (and `agg_fields` for per-field
+   functions) in `query_config.params` — each component buckets
+   independently. On a streaming connection, configure `agg_window` on
+   the push connection if the chart's bucketing matches; if charts on
+   the same stream need different buckets, fall back to chart-side
    `time_bucket`.
 
 3. **For MQTT and WebSocket**: source can't aggregate. Use the

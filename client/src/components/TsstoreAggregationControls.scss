@@ -1,0 +1,15 @@
+@use '@carbon/react/scss/spacing' as spacing;
+
+// Server-side aggregation block inside the ts-store query card. Rows reuse
+// the card's .tsstore-query-row layout from ComponentEditor.scss.
+.tsstore-agg {
+  margin-bottom: spacing.$spacing-04;
+
+  .cds--toggle {
+    margin-bottom: spacing.$spacing-04;
+  }
+
+  .editor-info-hint {
+    margin-top: spacing.$spacing-03;
+  }
+}

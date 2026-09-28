@@ -5,7 +5,6 @@
 package connection
 
 import (
-	"net/url"
 	"testing"
 	"time"
 )
@@ -21,18 +20,18 @@ func TestClampTSStoreStep(t *testing.T) {
 		want   string
 	}{
 		// Under budget → returned untouched.
-		{"1h window, 15s step", "15s", time.Hour, "15s"},              // 240 pts
-		{"24h window, 30s step", "30s", 24 * time.Hour, "30s"},        // 2,880 pts
-		{"24h window, 1m step", "1m", 24 * time.Hour, "1m"},           // 1,440 pts
-		{"7d window, 5m step", "5m", 7 * 24 * time.Hour, "5m"},        // 2,016 pts
-		{"30d window, 15m step", "15m", 30 * 24 * time.Hour, "15m"},   // 2,880 pts
-		{"exactly at budget", "1s", 5000 * time.Second, "1s"},         // 5,000 pts
+		{"1h window, 15s step", "15s", time.Hour, "15s"},            // 240 pts
+		{"24h window, 30s step", "30s", 24 * time.Hour, "30s"},      // 2,880 pts
+		{"24h window, 1m step", "1m", 24 * time.Hour, "1m"},         // 1,440 pts
+		{"7d window, 5m step", "5m", 7 * 24 * time.Hour, "5m"},      // 2,016 pts
+		{"30d window, 15m step", "15m", 30 * 24 * time.Hour, "15m"}, // 2,880 pts
+		{"exactly at budget", "1s", 5000 * time.Second, "1s"},       // 5,000 pts
 
 		// Over budget → raised to the smallest whole-second step that fits.
-		{"24h window, 15s step", "15s", 24 * time.Hour, "18s"},        // 5,760 → 17.28s, rounds up
-		{"7d window, 15s step", "15s", 7 * 24 * time.Hour, "121s"},    // 40,320 pts
-		{"30d window, 15s step", "15s", 30 * 24 * time.Hour, "519s"},  // 172,800 pts
-		{"30d window, 1m step", "1m", 30 * 24 * time.Hour, "519s"},    // 43,200 pts
+		{"24h window, 15s step", "15s", 24 * time.Hour, "18s"},       // 5,760 → 17.28s, rounds up
+		{"7d window, 15s step", "15s", 7 * 24 * time.Hour, "121s"},   // 40,320 pts
+		{"30d window, 15s step", "15s", 30 * 24 * time.Hour, "519s"}, // 172,800 pts
+		{"30d window, 1m step", "1m", 30 * 24 * time.Hour, "519s"},   // 43,200 pts
 		{"one over budget", "1s", 5001 * time.Second, "2s"},
 
 		// Degenerate input → returned unchanged rather than guessed at.
@@ -121,38 +120,6 @@ func TestTSStoreRangeFromSpecStep(t *testing.T) {
 	t.Run("unparseable relative token still yields no step", func(t *testing.T) {
 		if _, ok := tsstoreRangeFromSpec(RangeSpec{Type: "relative", Token: "banana", Step: "1m"}); ok {
 			t.Error("expected ok=false for an unparseable token")
-		}
-	})
-}
-
-// TestSetStepParam covers the wire-level guard. ts-store 400s on a request
-// carrying both step and agg_window ("set either step or agg_window, not both").
-func TestSetStepParam(t *testing.T) {
-	t.Run("sets step", func(t *testing.T) {
-		p := url.Values{}
-		setStepParam(p, "1m")
-		if p.Get("step") != "1m" {
-			t.Errorf("step = %q, want 1m", p.Get("step"))
-		}
-	})
-
-	t.Run("empty step is a no-op", func(t *testing.T) {
-		p := url.Values{}
-		setStepParam(p, "")
-		if _, present := p["step"]; present {
-			t.Error("empty step must not emit a step param")
-		}
-	})
-
-	t.Run("never combines with agg_window", func(t *testing.T) {
-		p := url.Values{}
-		p.Set("agg_window", "5m")
-		setStepParam(p, "1m")
-		if p.Get("step") != "" {
-			t.Error("step must not be set alongside agg_window — ts-store would 400")
-		}
-		if p.Get("agg_window") != "5m" {
-			t.Error("existing agg_window must be preserved")
 		}
 	})
 }

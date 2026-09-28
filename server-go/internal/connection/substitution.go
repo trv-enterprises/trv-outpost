@@ -52,7 +52,8 @@ const RangeParam = "range"
 // into one meaningless value per time bucket — a pivoted chart collapses to a
 // single line. The server derives this from the component's data_mapping.series
 // (see buildComponentDataQuery); the ts-store adapter forwards it only when a
-// step is also present (ts-store requires an aggregation window for group_by).
+// step or authored agg_window is also present (ts-store requires an
+// aggregation window for group_by).
 // Non-ts-store adapters ignore it.
 const GroupByParam = "group_by"
 
@@ -65,6 +66,21 @@ const GroupByParam = "group_by"
 // is set. Authored in the component's query_config.params by the editor's
 // "Current State" query type. Non-ts-store adapters ignore it.
 const LatestByParam = "latest_by"
+
+// Component-authored server-side aggregation (ts-store agg_window /
+// agg_default / agg_fields, #202), stored in query_config.params. ts-store
+// buckets records into agg_window-sized windows and reduces each field with
+// agg_default (one function for every field) or agg_fields
+// ("field:func,field:func" per-field overrides). The authored window is a
+// FLOOR on the bucket size: when the dashboard's range picker also supplies a
+// step, the coarser of the two is used (see setAggregationParams). Suppressed
+// under latest_by, which ts-store rejects alongside any aggregation window.
+// Non-ts-store adapters ignore them.
+const (
+	AggWindowParam  = "agg_window"
+	AggDefaultParam = "agg_default"
+	AggFieldsParam  = "agg_fields"
+)
 
 // StoreParam is the key under which a component on an endpoint-scoped tsstore
 // connection names its target store (query_config.params.store). A connection
@@ -137,6 +153,37 @@ func resolveGroupByParam(params map[string]interface{}) string {
 func resolveLatestByParam(params map[string]interface{}) string {
 	s, _ := params[LatestByParam].(string)
 	return strings.TrimSpace(s)
+}
+
+// tsstoreAggregation is the full downsampling request for one ts-store read:
+// the viewer/raw-DSL step plus the component's authored aggregation. Step
+// arrives per request (range picker or a flat params.step); the rest comes
+// from query_config.params.
+type tsstoreAggregation struct {
+	Step    string // downsampling resolution; implies agg_default=avg
+	Window  string // authored agg_window — a floor on the bucket size
+	Default string // authored agg_default, e.g. "max"
+	Fields  string // authored agg_fields, e.g. "cpu:max,events:sum"
+}
+
+// withStep returns a copy carrying the given step.
+func (a tsstoreAggregation) withStep(step string) tsstoreAggregation {
+	a.Step = step
+	return a
+}
+
+// resolveAggregationParams reads the authored aggregation from Query.Params.
+// Step is left empty — each dispatch path fills it via withStep.
+func resolveAggregationParams(params map[string]interface{}) tsstoreAggregation {
+	str := func(key string) string {
+		s, _ := params[key].(string)
+		return strings.TrimSpace(s)
+	}
+	return tsstoreAggregation{
+		Window:  str(AggWindowParam),
+		Default: str(AggDefaultParam),
+		Fields:  str(AggFieldsParam),
+	}
 }
 
 // resolveStoreParam reads the component-selected store name from Query.Params

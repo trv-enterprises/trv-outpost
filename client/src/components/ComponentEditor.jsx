@@ -40,8 +40,10 @@ import EdgeLakeQueryBuilder from './EdgeLakeQueryBuilder';
 import MQTTTopicSelector from './MQTTTopicSelector';
 import ControlEditor from './ControlEditor';
 import DisplayEditor from './DisplayEditor';
+import TsstoreAggregationControls from './TsstoreAggregationControls';
 import { transformData, formatCellValue, DASHBOARD_VARIABLE_TOKEN, RANGE_VARIABLE_TOKEN, isTimestampColumn, extractRangeColumn, stripRangePredicate } from '../utils/dataTransforms';
 import { deriveVariableColumn } from '../utils/deriveVariableColumn';
+import { EMPTY_TSSTORE_AGG, tsstoreAggFromParams, tsstoreAggToParams, tsstoreQueryTypeSupportsAgg } from '../utils/tsstoreAggregation';
 import { durationTokenToSeconds, secondsToDurationToken } from '../utils/rangePresets';
 
 // Sliding-window ceiling. The stored value is whole seconds; 30 days is a
@@ -808,6 +810,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // 'latest' query type (ts-store v0.19.0 latest_by): the field whose distinct
   // values define the series — one row per value, each its newest record.
   const [tsstoreLatestBy, setTsstoreLatestBy] = useState('');
+  // Server-side aggregation (agg_window/agg_default/agg_fields, #202) as one
+  // object: { enabled, window, func, fields }. See utils/tsstoreAggregation.
+  const [tsstoreAgg, setTsstoreAgg] = useState(EMPTY_TSSTORE_AGG);
   const [tsstoreSinceDuration, setTsstoreSinceDuration] = useState('1h'); // e.g., "30m", "2h", "7d"
   // Absolute from→to window for tsstoreQueryType==='range'. Stored as
   // datetime-local strings ("YYYY-MM-DDTHH:MM", local time); converted to epoch
@@ -882,6 +887,17 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     const field = (tsstoreLatestBy || '').trim();
     return tsstoreQueryType === 'latest' && field ? { latest_by: field } : {};
   }, [tsstoreQueryType, tsstoreLatestBy]);
+
+  // Params for server-side aggregation (#202). {} on a streaming connection
+  // (no query params reach a push stream) and on query types that can't
+  // aggregate ('oldest'; 'latest' is mutually exclusive with it). Reads the
+  // transport off selectedDatasource directly: isTSStoreStreaming is declared
+  // further down, so referencing it here would hit the TDZ.
+  const buildTsstoreAggParams = useCallback(() => {
+    if (selectedDatasource?.config?.tsstore?.transport === 'streaming') return {};
+    if (!tsstoreQueryTypeSupportsAgg(tsstoreQueryType)) return {};
+    return tsstoreAggToParams(tsstoreAgg);
+  }, [selectedDatasource, tsstoreQueryType, tsstoreAgg]);
 
   // Assemble query_config.params for a Prometheus component. 'instant' carries
   // only query_type (start/end/step are meaningless for a snapshot); 'range'
@@ -1458,6 +1474,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       // Set unconditionally so switching between charts never leaks a store.
       const savedTsStore = chart.query_config?.params?.store;
       setTsstoreStore(typeof savedTsStore === 'string' ? savedTsStore : '');
+      // #202: restore server-side aggregation (set unconditionally, like store).
+      setTsstoreAgg(tsstoreAggFromParams(chart.query_config?.params));
       // Prometheus query config: restore instant/range + window/step from the
       // saved params. Restore whenever a Prometheus query_type param is present
       // (documentary type may say "prometheus" or "sql"/"api" on agent-built
@@ -1619,6 +1637,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         tsstoreFilterSource: loadedTsstoreFilterSource,
         tsstoreFilterIgnoreCase: loadedTsstoreFilterIgnoreCase,
         tsstoreStore: loadedTsstoreStore,
+        tsstoreAgg: tsstoreAggFromParams(chart.query_config?.params),
         edgelakeDatabase: loadedEdgelakeDatabase,
         xAxisColumn: chart.data_mapping?.x_axis || '',
         xAxisLabel: chart.data_mapping?.x_axis_label || '',
@@ -1704,6 +1723,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         tsstoreFilterSource: 'literal',
         tsstoreFilterIgnoreCase: false,
         tsstoreStore: '',
+        tsstoreAgg: EMPTY_TSSTORE_AGG,
         edgelakeDatabase: '',
         xAxisColumn: '',
         xAxisLabel: '',
@@ -1793,6 +1813,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       tsstoreFilterSource,
       tsstoreFilterIgnoreCase,
       tsstoreStore,
+      tsstoreAgg,
       edgelakeDatabase,
       xAxisColumn,
       xAxisLabel,
@@ -1842,7 +1863,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   }, [
     name, title, description, namespace, tags, componentType, chartType,
     controlConfig, displayConfig, selectedConnectionId, queryRaw, queryType,
-    tsstoreQueryType, tsstoreSinceDuration, tsstoreRangeFrom, tsstoreRangeTo, tsstoreLimit, tsstoreLatestBy, promQueryType, promTimeRange, promStep, tsstoreFilter, tsstoreFilterSource, tsstoreFilterIgnoreCase, tsstoreStore, edgelakeDatabase,
+    tsstoreQueryType, tsstoreSinceDuration, tsstoreRangeFrom, tsstoreRangeTo, tsstoreLimit, tsstoreLatestBy, promQueryType, promTimeRange, promStep, tsstoreFilter, tsstoreFilterSource, tsstoreFilterIgnoreCase, tsstoreStore, tsstoreAgg, edgelakeDatabase,
     xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, yAxisColors,
     groupByColumn, seriesColumn, filters, aggregation,
     slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol,
@@ -2131,6 +2152,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
               setTsstoreQueryType('newest');
               setTsstoreLimit(defaultTsstoreLimit(chartType));
               setTsstoreLatestBy('');
+              setTsstoreAgg(EMPTY_TSSTORE_AGG);
               setTsstoreSinceDuration('1h');
               setPromQueryType('range');
               setPromTimeRange('1h');
@@ -2363,6 +2385,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setTsstoreQueryType('newest');
     setTsstoreLimit(defaultTsstoreLimit('line'));
     setTsstoreLatestBy('');
+    setTsstoreAgg(EMPTY_TSSTORE_AGG);
     setTsstoreSinceDuration('1h');
     setPromQueryType('range');
     setPromTimeRange('1h');
@@ -2626,6 +2649,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           rawQuery = tsstoreQueryType;
           queryParams = { limit: tsstoreLimit };
         }
+        Object.assign(queryParams, buildTsstoreAggParams());
         if (!(tsstoreFilterUsesVariable && !effectiveVarValue)) {
           Object.assign(queryParams, buildTsstoreFilterParams());
         }
@@ -2815,6 +2839,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         rawQuery = tsstoreQueryType;
         queryParams = { limit: tsstoreLimit, ...tsstoreFilterParams };
       }
+      Object.assign(queryParams, buildTsstoreAggParams());
     } else if (selectedDatasource?.type === 'prometheus') {
       queryParams = buildPrometheusParams();
     } else if (selectedDatasource?.type === 'edgelake' && edgelakeDatabase) {
@@ -2856,7 +2881,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       : null;
 
     return getDataDrivenChartCode(chartType, selectedConnectionId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, chart?.id || '', isTSStoreStreaming, true, tsstoreFilterParams);
-  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, yAxisColors, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, title, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, tsstoreRangeFrom, tsstoreRangeTo, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle, previewVariableValue, buildTsstoreFilterParams, buildTsstoreLatestByParams, buildTsstoreStoreParams, buildPrometheusParams]);
+  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, yAxisColors, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, title, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, tsstoreRangeFrom, tsstoreRangeTo, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle, previewVariableValue, buildTsstoreFilterParams, buildTsstoreLatestByParams, buildTsstoreAggParams, buildTsstoreStoreParams, buildPrometheusParams]);
 
   const filteredPreviewData = useMemo(() => {
     if (!previewData) return null;
@@ -2997,7 +3022,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           // use the limit. 'latest' omits it too — there the limit would cap
           // DISTINCT SERIES, and ts-store's own default (up to 1000 groups) is
           // the right ceiling.
-          ? { ...(tsstoreQueryType === 'since' || tsstoreQueryType === 'range' || tsstoreQueryType === 'latest' ? {} : { limit: tsstoreLimit }), ...buildTsstoreLatestByParams(), ...buildTsstoreFilterParams(), ...buildTsstoreStoreParams() }
+          ? { ...(tsstoreQueryType === 'since' || tsstoreQueryType === 'range' || tsstoreQueryType === 'latest' ? {} : { limit: tsstoreLimit }), ...buildTsstoreLatestByParams(), ...buildTsstoreAggParams(), ...buildTsstoreFilterParams(), ...buildTsstoreStoreParams() }
           : selectedDatasource?.type === 'prometheus'
             ? buildPrometheusParams()
             : selectedDatasource?.type === 'edgelake' && edgelakeDatabase
@@ -4129,6 +4154,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           </div>
                         )}
                       </div>
+                      {tsstoreQueryTypeSupportsAgg(tsstoreQueryType) && (
+                        <TsstoreAggregationControls value={tsstoreAgg} onChange={setTsstoreAgg} />
+                      )}
                       {/* Source-side FILTER row — mirrors the SQL WHERE
                           value-source pattern: [Value | Dashboard variable]
                           then the value (literal text or a bound-variable
@@ -6035,6 +6063,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           ? {
                               ...(tsstoreQueryType === 'since' || tsstoreQueryType === 'range' || tsstoreQueryType === 'latest' ? {} : { limit: tsstoreLimit }),
                               ...buildTsstoreLatestByParams(),
+                              ...buildTsstoreAggParams(),
                               ...buildTsstoreFilterParams(),
                               // Resolve the filter token for the custom-code preview.
                               ...(tsstoreFilterUsesVariable ? { dashboard_variable: previewVariableValue } : {}),
