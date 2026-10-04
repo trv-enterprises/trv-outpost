@@ -7,6 +7,7 @@ package connection
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -137,6 +138,40 @@ func resolveGroupByParam(params map[string]interface{}) string {
 func resolveLatestByParam(params map[string]interface{}) string {
 	s, _ := params[LatestByParam].(string)
 	return strings.TrimSpace(s)
+}
+
+// ts-store-native query params a component authors in query_config.params
+// and the adapter forwards verbatim (#202) — ts-store does the work; the
+// dashboard only carries the value. Aggregation: agg_window (bucket size),
+// agg_default / agg_fields (functions). Scan bounds: window (lookback for a
+// filtered or aggregated /newest with no since; "0" = whole store) and
+// scan_limit (record budget for latest_by with no filter/since, and for a
+// filtered /oldest; 0 = unbounded).
+var (
+	tsstoreAggParamKeys  = []string{"agg_window", "agg_default", "agg_fields"}
+	tsstoreScanParamKeys = []string{"window", "scan_limit"}
+)
+
+// nativeParams copies the named keys from Query.Params into url.Values.
+// Strings are trimmed (blank → omitted); JSON numbers are formatted as
+// integers-when-whole, so a scan_limit of 0 is forwarded rather than dropped.
+func nativeParams(params map[string]interface{}, keySets ...[]string) url.Values {
+	out := url.Values{}
+	for _, keys := range keySets {
+		for _, k := range keys {
+			switch v := params[k].(type) {
+			case string:
+				if s := strings.TrimSpace(v); s != "" {
+					out.Set(k, s)
+				}
+			case float64:
+				out.Set(k, strconv.FormatFloat(v, 'f', -1, 64))
+			case int:
+				out.Set(k, strconv.Itoa(v))
+			}
+		}
+	}
+	return out
 }
 
 // resolveStoreParam reads the component-selected store name from Query.Params
