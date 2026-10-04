@@ -6,6 +6,37 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.61.0] — 2026-10-03
+
+### Added
+
+- **ts-store components can use ts-store's own aggregation and scan options.**
+  A component on a ts-store REST connection gets a "ts-store options" section
+  in its query card, exposing five parameters ts-store already supported but
+  the dashboard never passed through: an aggregation window, an aggregation
+  function, per-field functions, a lookback window, and a scan limit. The
+  dashboard adds no behaviour of its own — the values go to ts-store verbatim,
+  and a blank field means ts-store's default. Only the options ts-store applies
+  to the selected query type are shown.
+
+  The one that matters most on a dashboard with a time-range picker is the
+  function. The picker downsamples by averaging every numeric field, which is
+  wrong for a 0/1 field such as occupancy (it reads 0.46 instead of 0 or 1).
+  Setting the function to `max` keeps the picker's resolution but reports
+  whether there was any activity in each bucket. (#202)
+
+### Fixed
+
+- **A `_schema` column and a row dated 1970 appeared in ts-store data.** On a
+  dashboard with a time-range picker, the data view of a component reading a
+  ts-store schema store showed a stray `_schema` column and one row stamped
+  1970. ts-store leads a downsampled response with a header naming its
+  fields, and the dashboard was treating that header as a data row.
+
+### Documentation
+
+- `THIRD_PARTY_LICENSES` now declares the container base images.
+
 ## [0.60.0] — 2026-09-01
 
 ### Added
