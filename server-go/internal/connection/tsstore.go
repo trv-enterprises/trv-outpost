@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -578,6 +579,11 @@ func (a *TSStoreAdapter) jsonToRegistryResultSet(objects []dataResponse, metadat
 			indexToName[strconv.Itoa(f.Index)] = f.Name
 		}
 	}
+	// An aggregated compact response leads with a schema header, not data.
+	header, objects := splitSchemaHeader(objects)
+	for idx, name := range header {
+		indexToName[idx] = name
+	}
 	renameKey := func(key string) string {
 		if name, ok := indexToName[key]; ok {
 			return name
@@ -590,7 +596,7 @@ func (a *TSStoreAdapter) jsonToRegistryResultSet(objects []dataResponse, metadat
 	columnSet["timestamp"] = true
 	// Seed the column order from the schema (index order) so named columns
 	// appear deterministically left-to-right, not in map-iteration order.
-	if len(indexToName) > 0 {
+	if a.schema != nil && len(indexToName) > 0 {
 		for _, f := range a.schema.Fields {
 			if f.Name == "timestamp" {
 				continue // already first
@@ -599,6 +605,14 @@ func (a *TSStoreAdapter) jsonToRegistryResultSet(objects []dataResponse, metadat
 				columnSet[f.Name] = true
 				columnOrder = append(columnOrder, f.Name)
 			}
+		}
+	}
+	// No cached schema (its fetch failed): the response's own header still
+	// gives a deterministic index order.
+	for _, name := range headerFieldOrder(header) {
+		if name != "timestamp" && !columnSet[name] {
+			columnSet[name] = true
+			columnOrder = append(columnOrder, name)
 		}
 	}
 
@@ -863,6 +877,54 @@ func (a *TSStoreAdapter) fetchRange(ctx context.Context, startTime, endTime int6
 
 	endpoint := fmt.Sprintf("/api/stores/%s/data/range?%s", a.store, params.Encode())
 	return a.fetchList(ctx, endpoint)
+}
+
+// schemaHeaderKey marks the pseudo-record ts-store prepends to an AGGREGATED
+// compact response for a schema store (step / agg_window + format=compact):
+//
+//	{"timestamp": 0, "data": {"_schema": {"1": "device", "2": "occupancy"}}}
+//
+// It is the index→name map for the records that follow, not a data record.
+// Plain (unaggregated) compact reads carry no header.
+const schemaHeaderKey = "_schema"
+
+// splitSchemaHeader strips a leading schema header from objects and returns
+// its index→name map (nil when there is none). Left in place, the header
+// surfaces as a row stamped 1970 plus a stray `_schema` column on every
+// stepped schema-store query.
+func splitSchemaHeader(objects []dataResponse) (map[string]string, []dataResponse) {
+	if len(objects) == 0 {
+		return nil, objects
+	}
+	var probe map[string]json.RawMessage
+	if err := json.Unmarshal(objects[0].Data, &probe); err != nil || len(probe) != 1 {
+		return nil, objects
+	}
+	raw, ok := probe[schemaHeaderKey]
+	if !ok {
+		return nil, objects
+	}
+	var names map[string]string
+	if err := json.Unmarshal(raw, &names); err != nil {
+		return nil, objects
+	}
+	return names, objects[1:]
+}
+
+// headerFieldOrder returns a schema header's field names in index order.
+func headerFieldOrder(header map[string]string) []string {
+	indices := make([]int, 0, len(header))
+	for idx := range header {
+		if n, err := strconv.Atoi(idx); err == nil {
+			indices = append(indices, n)
+		}
+	}
+	sort.Ints(indices)
+	names := make([]string, 0, len(indices))
+	for _, n := range indices {
+		names = append(names, header[strconv.Itoa(n)])
+	}
+	return names
 }
 
 // toEpochNanos normalizes a caller-supplied epoch to NANOSECONDS for the
@@ -1392,6 +1454,11 @@ func (t *TSStoreDataSource) jsonToResultSet(objects []dataResponse, metadata map
 			indexToName[strconv.Itoa(f.Index)] = f.Name
 		}
 	}
+	// An aggregated compact response leads with a schema header, not data.
+	header, objects := splitSchemaHeader(objects)
+	for idx, name := range header {
+		indexToName[idx] = name
+	}
 	normalize := func(record map[string]interface{}) map[string]interface{} {
 		if len(indexToName) == 0 {
 			return record
@@ -1413,7 +1480,7 @@ func (t *TSStoreDataSource) jsonToResultSet(objects []dataResponse, metadata map
 	columnSet["timestamp"] = true
 	// Seed column order from the schema (index order) so named columns appear
 	// deterministically left-to-right, not in map-iteration order.
-	if len(indexToName) > 0 {
+	if t.schema != nil && len(indexToName) > 0 {
 		for _, f := range t.schema.Fields {
 			if f.Name == "timestamp" {
 				continue // already first
@@ -1422,6 +1489,14 @@ func (t *TSStoreDataSource) jsonToResultSet(objects []dataResponse, metadata map
 				columnSet[f.Name] = true
 				columnOrder = append(columnOrder, f.Name)
 			}
+		}
+	}
+	// No cached schema (its fetch failed): the response's own header still
+	// gives a deterministic index order.
+	for _, name := range headerFieldOrder(header) {
+		if name != "timestamp" && !columnSet[name] {
+			columnSet[name] = true
+			columnOrder = append(columnOrder, name)
 		}
 	}
 
