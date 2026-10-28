@@ -74,11 +74,99 @@ export function adornmentRect(a) {
   // Two things must stay true together, or the line lands back on the panel:
   // this offset, and `content-box` (with `border-box` the width would absorb
   // the border instead of adding to it).
+  // A fractional (1/3 or 2/3) edge divides the GUTTER-INCLUSIVE span and
+  // straddles a whole pixel (#309).
+  //
+  // The layout this is for: two independent borders meeting in one cell — a
+  // box around a left group of panels ending at 1/3, a box around a right
+  // group starting at 2/3. The three visible gaps are
+  //
+  //   left panel | gutter + (0..1/3) | (1/3..2/3) | (2/3..1) + gutter | right panel
+  //
+  // Both OUTER gaps include a 4px gutter; the CENTRE gap does not. Dividing
+  // only the 32px cell body therefore leaves the centre ~6px tighter than the
+  // outers no matter how the lines are placed — measured 14.3 / 8.2 on a real
+  // dashboard. So the span the thirds share is panel-edge to panel-edge:
+  // GAP + CELL + GAP = 40px, starting one gutter BEFORE the cell.
+  //
+  // Both edges then straddle their anchor by floor(width/2), which balances
+  // the three gaps as evenly as whole pixels allow:
+  //
+  //     width   outerL | centre | outerR
+  //       1px       13 |   13   |   12
+  //       2px       12 |   12   |   12
+  //       3px       12 |   11   |   11
+  //       4px       11 |   10   |   11
+  //
+  // 2px is exact; nothing is worse than 1px off.
+  //
+  // KNOWN LIMITATION — the grid edge. At the first or last column there is no
+  // neighbouring panel, so the span is not symmetric: the border ends up 2/3
+  // out plus a gutter from the canvas edge rather than the 1/3 that would
+  // match the interior rhythm. There is no cheap fix (it needs the edge case
+  // to know it is an edge and rebalance), so an edge-adjacent border spaces
+  // slightly differently from an interior one. Deliberate, not a bug.
+  //
+  // Rejected alternatives:
+  //   - Dividing the 32px CELL BODY. The centre gap can never match outers
+  //     that each swallow a gutter — this was the original bug.
+  //   - Dividing the 36px STRIDE. Marks at 12/24 sit off-centre inside the
+  //     cell the author is looking at.
+  //   - CENTRING on the true sub-pixel third. Rounds unpredictably and the
+  //     gaps drift as the line thickens.
+  const onBoundary = (v) => Number.isInteger(v);
+
+  // Pixel position of a cell coordinate.
+  //
+  // A whole coordinate is a cell boundary and maps by the full stride. A
+  // FRACTION divides the GUTTER-INCLUSIVE span, not the 32px cell body.
+  //
+  // Why: when two borders meet in a shared cell — a box around a left group
+  // ending at 1/3, a box around a right group starting at 2/3 — the three
+  // visible gaps are
+  //
+  //     left panel | gutter + (0..1/3) | (1/3..2/3) | (2/3..1) + gutter | right panel
+  //
+  // The two OUTER gaps each include a 4px gutter; the CENTRE gap does not.
+  // Dividing only the 32px body therefore makes the centre ~6px tighter than
+  // the outers no matter how the lines are placed — measured at 14.33 / 8.17
+  // on a real dashboard. The span the thirds must share is panel-edge to
+  // panel-edge: GAP + CELL + GAP = 40px, starting one gutter BEFORE the cell.
+  const FRACTION_SPAN = GAP + CELL_WIDTH + GAP;
+  const FRACTION_SPAN_Y = GAP + CELL_HEIGHT + GAP;
+  // A whole coordinate maps by the stride and is untouched, so existing
+  // whole-cell borders are byte-identical. A fraction starts one gutter
+  // before the cell and walks the 40px span.
+  const toPx = (v, cellStride, span) => {
+    const k = Math.floor(v);
+    const frac = v - k;
+    if (frac === 0) return k * cellStride;
+    return (k * cellStride - GAP) + Math.round(frac * span);
+  };
+
+  // Leading edge (the box's left/top side): a boundary edge sits fully
+  // outside the content box; a fractional edge straddles its anchor.
+  const leadX = onBoundary(a.x) ? line : Math.floor(line / 2);
+  const leadY = onBoundary(a.y) ? line : Math.floor(line / 2);
+  // Trailing edge (right/bottom): a boundary box stops GAP short, because the
+  // gutter sits outside its content box. A fractional end straddles its anchor
+  // by the SAME floor(line/2) — symmetric with the leading edge, which is what
+  // balances the three gaps (12/12/12 at 2px).
+  const trailX = onBoundary(a.x + a.w) ? GAP : Math.floor(line / 2);
+  const trailY = onBoundary(a.y + a.h) ? GAP : Math.floor(line / 2);
+
+  const x0 = toPx(a.x, stride, FRACTION_SPAN);
+  const y0 = toPx(a.y, strideY, FRACTION_SPAN_Y);
+  const x1 = toPx(a.x + a.w, stride, FRACTION_SPAN);
+  const y1 = toPx(a.y + a.h, strideY, FRACTION_SPAN_Y);
+
   return {
-    left: a.x * stride - line,
-    top: a.y * strideY - line,
-    width: a.w * stride - GAP,
-    height: a.h * strideY - GAP,
+    left: x0 - leadX,
+    top: y0 - leadY,
+    // Span from the (shifted) leading edge to the trailing edge, so a mixed
+    // box — boundary on one side, third on the other — still closes cleanly.
+    width: (x1 - x0) - trailX + (leadX - line),
+    height: (y1 - y0) - trailY + (leadY - line),
   };
 }
 

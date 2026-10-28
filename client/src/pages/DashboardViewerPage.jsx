@@ -134,8 +134,11 @@ const ADORNMENT_LINE_STYLES = ['solid', 'dashed', 'dotted', 'hidden'];
 // distinguish from ordinary edit chrome — the thing the author just added
 // looked like part of the editor.
 const ADORNMENT_DEFAULT_COLOR = '#fa4d56';
-// Smallest border a resize may shrink to.
-const ADORNMENT_MIN_CELLS = 1;
+// Smallest border a resize may shrink to. A THIRD of a cell, not a whole one:
+// border edges snap to the 1/3 and 2/3 marks inside a cell (#309), so a
+// third-wide box is a legitimate thing to draw. Mirrors minBorderExtent in
+// server-go/internal/service/dashboard_service.go — keep the two in step.
+const ADORNMENT_MIN_CELLS = 1 / 3;
 // Click-vs-drag threshold. A press that never grew past this is a CLICK: on a
 // panel it attaches a panel border, on bare grid it seeds a 1x1 box to build
 // from with shift-click. Anything larger is a drawn box.
@@ -3088,20 +3091,57 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
   // reasonable ask of a mouse. Anywhere else in the stride resolves to
   // whichever boundary is nearer.
   const EDGE_SNAP_TOL = 4;
+  // Border edges snap to four stops per cell, not one (#309): the cell's own
+  // boundary plus the 1/3 and 2/3 marks inside it. A box can then enclose a
+  // region that doesn't align to the 32x32 grid.
+  //
+  // Returned as a FLOAT cell coordinate (4, 4.3333, 4.6667, 5). Adornment
+  // x/y/w/h are float end-to-end for exactly this; panels stay integer-only.
+  //
+  // The stops are expressed relative to the two things an edge can mean:
+  //   'near' (left/top)     — the START of a cell:  k + {0, 1/3, 2/3}
+  //   'far'  (right/bottom) — the END of a cell:    k + {1/3, 2/3, 1}
+  // Both sets are the same four lines on screen; which cell index they hang
+  // off differs, which is what keeps a 1-cell box reading as w=1 and not
+  // w=0.9999.
+  const THIRD = 1 / 3;
   const snapEdgeToCell = useCallback((px, origin, stride, kind) => {
     const rel = px - origin;
     const k = Math.floor(rel / stride);
     const frac = rel - k * stride;
-    // Cell body is CELL_SIZE of the stride; the remainder is the gutter.
+    // Cell body is CELL_SIZE of the stride; the remainder is the gutter. The
+    // boundary stop keeps its old tolerance so whole-cell work is unchanged:
+    // being a hair short of the line still lands ON it.
     const body = stride * (32 / 36);
-    if (kind === 'far') {
-      if (frac >= body - EDGE_SNAP_TOL) return k;      // on/near this cell's end
-      if (frac <= EDGE_SNAP_TOL) return k - 1;         // just past the previous end
-      return frac >= stride / 2 ? k : k - 1;           // nearest
+
+    // Candidate stops, as (edge position in CELL UNITS, pixel offset within
+    // the stride). Both grips return an edge POSITION, not a cell index — a
+    // fractional edge has no index. The boundary entries carry the tolerance;
+    // the thirds are plain nearest-wins.
+    //
+    // The two grips differ only in where the cell's own boundary sits in the
+    // stride: a far (right/bottom) edge is the END of the cell body, at
+    // `body` px; a near (left/top) edge is the START of the next cell, at the
+    // full `stride`. The thirds are the same lines for both.
+    const stops = [
+      { at: k, px: 0, tol: true },
+      { at: k + THIRD, px: body * THIRD },
+      { at: k + 2 * THIRD, px: body * 2 * THIRD },
+      { at: k + 1, px: kind === 'far' ? body : stride, tol: true },
+    ];
+
+    // Boundary stops win inside the tolerance band, preserving the old feel.
+    for (const s of stops) {
+      if (s.tol && Math.abs(frac - s.px) <= EDGE_SNAP_TOL) return s.at;
     }
-    if (frac <= EDGE_SNAP_TOL) return k;               // on/just past this start
-    if (frac >= stride - EDGE_SNAP_TOL) return k + 1;  // near the next start
-    return frac >= stride / 2 ? k + 1 : k;             // nearest
+    // Otherwise: nearest of the four.
+    let best = stops[0];
+    let bestD = Infinity;
+    for (const s of stops) {
+      const d = Math.abs(frac - s.px);
+      if (d < bestD) { bestD = d; best = s; }
+    }
+    return best.at;
   }, []);
 
   const startDragging = (e, panel) => {
@@ -3528,10 +3568,18 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       }
       setResizingAdornment({ id: adornment.id, edge, offsetX, offsetY });
     } else {
+      // Split the grab offset into a WHOLE-CELL part and the box's fractional
+      // position within its cell (#309). `pos` is whole-cell, so folding the
+      // fraction into the offset would round it away on the first move and
+      // a third-aligned box would jump back onto the grid. The mousemove
+      // handler re-applies fracX/fracY, so a drag translates the box without
+      // reshaping it.
       setDraggingAdornment({
         id: adornment.id,
-        offsetX: pos.x - adornment.x,
-        offsetY: pos.y - adornment.y,
+        offsetX: pos.x - Math.floor(adornment.x),
+        offsetY: pos.y - Math.floor(adornment.y),
+        fracX: adornment.x - Math.floor(adornment.x),
+        fracY: adornment.y - Math.floor(adornment.y),
       });
     }
   }, [getGridPosition, gridCellGeometry]);
@@ -3889,8 +3937,20 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
       if (draggingAdornment) {
         const a = editableAdornments.find(v => v.id === draggingAdornment.id);
         if (!a) return;
-        const newX = Math.max(0, Math.min(pos.x - draggingAdornment.offsetX, boundCols - a.w));
-        const newY = Math.max(0, Math.min(pos.y - draggingAdornment.offsetY, boundRows - a.h));
+        // Preserve the border's FRACTIONAL offset within the cell while
+        // moving (#309). `pos` is a whole-cell position, so moving by whole
+        // cells alone would quietly re-snap a third-aligned box back onto the
+        // grid and destroy the placement the author just made. Carry the
+        // fraction the box had when the drag started and re-apply it, so a
+        // move translates the box without reshaping it.
+        const fracX = draggingAdornment.fracX || 0;
+        const fracY = draggingAdornment.fracY || 0;
+        const newX = Math.max(0, Math.min(
+          pos.x - draggingAdornment.offsetX + fracX, boundCols - a.w,
+        ));
+        const newY = Math.max(0, Math.min(
+          pos.y - draggingAdornment.offsetY + fracY, boundRows - a.h,
+        ));
         if (newX !== a.x || newY !== a.y) updateAdornment(a.id, { x: newX, y: newY });
         return;
       }
@@ -3907,6 +3967,8 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
           updateAdornment(a.id, {
             x: Number.isFinite(a.x) ? a.x : 0,
             y: Number.isFinite(a.y) ? a.y : 0,
+            // Heal to a visible box, not the bare minimum — a third-of-a-cell
+            // stub would be hard to grab again. A whole cell is recoverable.
             w: Number.isFinite(a.w) ? a.w : 1,
             h: Number.isFinite(a.h) ? a.h : 1,
           });
@@ -3934,11 +3996,16 @@ function DashboardViewerPage({ canDesign = false, canControl = true }) {
         // Each grip owns one edge. Left/top move the near edge while the far
         // edge stays anchored (x and w both change, x+w constant) — the same
         // model the panel resize uses.
+        // snapEdgeToCell('far') returns the EDGE POSITION in cell units (the
+        // cell's end is k+1, not k), so the width is a plain difference. It
+        // used to return the index of the cell whose end was the edge, hence
+        // the old `+1`; the four-stop version (#309) can land between cells,
+        // where no such index exists.
         if (edge === 'right' || edge === 'corner') {
-          next.w = Math.max(ADORNMENT_MIN_CELLS, Math.min(farX - a.x + 1, boundCols - a.x));
+          next.w = Math.max(ADORNMENT_MIN_CELLS, Math.min(farX - a.x, boundCols - a.x));
         }
         if (edge === 'bottom' || edge === 'corner') {
-          next.h = Math.max(ADORNMENT_MIN_CELLS, Math.min(farY - a.y + 1, boundRows - a.y));
+          next.h = Math.max(ADORNMENT_MIN_CELLS, Math.min(farY - a.y, boundRows - a.y));
         }
         if (edge === 'left') {
           const rightEdge = a.x + a.w;
