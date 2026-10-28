@@ -33,7 +33,7 @@ import {
   makeSIAxisFormatter,
   formatSI,
 } from '../option-helpers.js';
-import { parseTimestamp } from '../../utils/dataTransforms.js';
+import { parseTimestamp, detectTimestampType } from '../../utils/dataTransforms.js';
 import { applyConversion, normalizeConversion, distinctConversionSymbols } from '../units.js';
 import { inferIntervalMs, insertGapRows } from '../gap-detection.js';
 
@@ -140,6 +140,38 @@ function resolveAutoXFormat(xValues, xAxisCol, formatCellValue) {
  * This is the read-path migration shim — legacy line records load
  * cleanly without a Mongo migration.
  */
+// Time-series rows plot OLDEST-FIRST — earliest on the left, newest on the
+// right. The category x-axis places rows in array order, so the order has to
+// be fixed here, in the rows. The streaming backfill already normalizes
+// (useData.js), but a polled fetch delivers the source's own order, and
+// ts-store's /data/newest is newest-first — which drew REST ts-store charts
+// right-to-left. Sorting at the chart rather than in the data layer is
+// deliberate: value tiles read rows[0] as the latest reading and must keep
+// the source order.
+//
+// Only a REAL time axis is reordered: every x-value must be an ISO string or
+// an epoch s/ms (detectTimestampType, which is strict — a small integer is a
+// category, not 1970). Any other x keeps the author's / query's order, as
+// does a time column with a blank cell. The sort is stable, so rows sharing
+// a timestamp (pivot groups) keep their relative order.
+function sortRowsOldestFirst(rows, xColIdx) {
+  if (xColIdx < 0 || rows.length < 2) return rows;
+  const times = new Array(rows.length);
+  let ascending = true;
+  for (let i = 0; i < rows.length; i++) {
+    const v = rows[i][xColIdx];
+    const type = detectTimestampType(v);
+    if (!type) return rows;
+    times[i] = parseTimestamp(v, type).getTime();
+    if (i > 0 && times[i] < times[i - 1]) ascending = false;
+  }
+  if (ascending) return rows;
+  return rows
+    .map((r, i) => ({ r, t: times[i] }))
+    .sort((a, b) => a.t - b.t)
+    .map(({ r }) => r);
+}
+
 function normalizeYEntry(e) {
   if (typeof e === 'string') return { column: e, label: '', stack: false, axis: undefined, color: '', convert: null };
   if (!e || typeof e !== 'object') return { column: '', label: '', stack: false, axis: undefined, color: '', convert: null };
@@ -268,13 +300,15 @@ function buildYAxisDefs(dualAxis, range, si = {}, names = {}) {
       ...def,
       name,
       nameLocation: 'end',
-      // NEGATIVE gap, deliberately. `nameLocation: 'end'` anchors the name at
-      // the axis's end point — which is grid.top — and a POSITIVE nameGap
-      // pushes it FURTHER UP, straight off the top of the canvas where it is
-      // clipped. Measured on a real 248x140 panel: the name's box landed at
-      // y = -8.7, so the label was invisible while grid.top still reserved an
-      // empty band for it. A negative gap pulls it back DOWN into that band.
-      nameGap: -12,
+      // Small POSITIVE gap. `nameLocation: 'end'` anchors the name at the
+      // axis's end point (grid.top) and nameGap lifts it from there, so the
+      // name needs grid.top to be large enough to hold it — see gridTopBase
+      // below, which is sized for exactly this.
+      //
+      // Do NOT make this negative to "reclaim" the band: that pulls the label
+      // down INSIDE the plot, where it overlaps the gridlines and the series.
+      // Tried and reverted.
+      nameGap: 2,
       nameTextStyle: {
         color: COLOR_TEXT_SECONDARY,
         align: side === 'right' ? 'right' : 'left',
@@ -640,6 +674,10 @@ export function buildOption(values, data, helpers = {}) {
     rows = [...byCat.values()];
   }
 
+  // Before gap detection, which walks consecutive deltas, and the
+  // accumulator, which plots value[i] - value[i-1] — both assume time order.
+  rows = sortRowsOldestFirst(rows, xColIdxRaw);
+
   // Build categories from the x-axis column. The 'auto' format resolves
   // to a concrete preset from the data (span → time-only/date+time,
   // collision → add seconds, non-timestamp → 'raw' passthrough); every
@@ -954,11 +992,11 @@ export function buildOption(values, data, helpers = {}) {
   // Axis names sit at the TOP of their axis (nameLocation 'end'), so they need
   // headroom the plot would otherwise use. A top legend already provides it.
   const hasAxisName = !!(axisNames.left || axisNames.right);
-  // 16 is enough for a name pulled down by the negative nameGap above. The
-  // old 24 was sized for a name that was never actually drawn there, so it
-  // read as a wasted strip between the label row and the plot — on a 140px
-  // panel that was 17% of the height for nothing.
-  const gridTopBase = hasAxisName ? 16 : 10;
+  // 18 holds an end-placed axis name (nameGap 2 above) without clipping it at
+  // the canvas top, and without leaving a visible empty strip between the
+  // label row and the plot. Measured on the real 248x140 panel: 28 wasted
+  // ~10px, 18 does not, and anything below ~16 clips the glyphs.
+  const gridTopBase = hasAxisName ? 18 : 10;
   const gridTop = legendPos === 'top' ? 36 : gridTopBase;
   // grid.bottom is the gap BELOW the x-axis labels (containLabel:true
   // auto-reserves the label height on top of this). Without a slider,

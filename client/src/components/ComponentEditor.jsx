@@ -40,8 +40,10 @@ import EdgeLakeQueryBuilder from './EdgeLakeQueryBuilder';
 import MQTTTopicSelector from './MQTTTopicSelector';
 import ControlEditor from './ControlEditor';
 import DisplayEditor from './DisplayEditor';
+import TsstoreNativeParamsControls from './TsstoreNativeParamsControls';
 import { transformData, formatCellValue, DASHBOARD_VARIABLE_TOKEN, RANGE_VARIABLE_TOKEN, isTimestampColumn, extractRangeColumn, stripRangePredicate } from '../utils/dataTransforms';
 import { deriveVariableColumn } from '../utils/deriveVariableColumn';
+import { EMPTY_TSSTORE_NATIVE, tsstoreNativeFromParams, tsstoreNativeToParams } from '../utils/tsstoreNativeParams';
 import { durationTokenToSeconds, secondsToDurationToken } from '../utils/rangePresets';
 
 // Sliding-window ceiling. The stored value is whole seconds; 30 days is a
@@ -669,7 +671,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   const [xAxisLabel, setXAxisLabel] = useState(''); // Custom label for X axis
   const [xAxisFormat, setXAxisFormat] = useState('auto'); // Default timestamp format; 'auto' fits granularity to the data
   const [yAxisColumns, setYAxisColumns] = useState([]);
-  const [yAxisLabel, setYAxisLabel] = useState(''); // AXIS label rendered along the Y axis (single-axis mode; scatter + line/bar/area). Dual-axis charts render no axis labels — the legend + axis colors identify sides.
+  const [yAxisLabel, setYAxisLabel] = useState(''); // AXIS label for the LEFT y axis (scatter + line/bar/area). Optional on single- AND dual-axis charts.
+  const [yAxisLabelRight, setYAxisLabelRight] = useState(''); // AXIS label for the RIGHT y axis. Dual-axis only — ignored when there is no right axis to name.
   const [yAxisLabels, setYAxisLabels] = useState([]); // Per-SERIES labels (legend names). Index matches yAxisColumns. Empty entries fall back to column name.
   // Per-column series color overrides (resolved hex; '' = auto palette). Index
   // matches yAxisColumns, same parallel-array pattern as yAxisLabels. Saved into
@@ -807,6 +810,9 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   // 'latest' query type (ts-store v0.19.0 latest_by): the field whose distinct
   // values define the series — one row per value, each its newest record.
   const [tsstoreLatestBy, setTsstoreLatestBy] = useState('');
+  // ts-store-native options (#202) — agg_window / agg_default / agg_fields /
+  // window / scan_limit — as one object. See utils/tsstoreNativeParams.
+  const [tsstoreNative, setTsstoreNative] = useState(EMPTY_TSSTORE_NATIVE);
   const [tsstoreSinceDuration, setTsstoreSinceDuration] = useState('1h'); // e.g., "30m", "2h", "7d"
   // Absolute from→to window for tsstoreQueryType==='range'. Stored as
   // datetime-local strings ("YYYY-MM-DDTHH:MM", local time); converted to epoch
@@ -881,6 +887,16 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     const field = (tsstoreLatestBy || '').trim();
     return tsstoreQueryType === 'latest' && field ? { latest_by: field } : {};
   }, [tsstoreQueryType, tsstoreLatestBy]);
+
+  // Params for the ts-store-native options (#202), filtered to the ones
+  // ts-store applies to the current query type. {} on a streaming connection
+  // (no query params reach a push stream). Reads the transport off
+  // selectedDatasource directly: isTSStoreStreaming is declared further down,
+  // so referencing it here would hit the TDZ.
+  const buildTsstoreNativeParams = useCallback(() => {
+    if (selectedDatasource?.config?.tsstore?.transport === 'streaming') return {};
+    return tsstoreNativeToParams(tsstoreNative, tsstoreQueryType);
+  }, [selectedDatasource, tsstoreQueryType, tsstoreNative]);
 
   // Assemble query_config.params for a Prometheus component. 'instant' carries
   // only query_type (start/end/step are meaningless for a snapshot); 'range'
@@ -1279,6 +1295,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       setYAxisColumns(loadedYCols);
       setYAxisColors(loadedYColors);
       setYAxisLabel(chart.data_mapping?.y_axis_label || '');
+      setYAxisLabelRight(chart.data_mapping?.y_axis_label_right || '');
       // Series labels live in y_axis_labels (the per-series source of
       // truth). The legacy fallback that seeded them from the singular
       // y_axis_label is gone — that field is now the AXIS label
@@ -1456,6 +1473,8 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       // Set unconditionally so switching between charts never leaks a store.
       const savedTsStore = chart.query_config?.params?.store;
       setTsstoreStore(typeof savedTsStore === 'string' ? savedTsStore : '');
+      // #202: restore ts-store-native options (set unconditionally, like store).
+      setTsstoreNative(tsstoreNativeFromParams(chart.query_config?.params));
       // Prometheus query config: restore instant/range + window/step from the
       // saved params. Restore whenever a Prometheus query_type param is present
       // (documentary type may say "prometheus" or "sql"/"api" on agent-built
@@ -1617,6 +1636,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         tsstoreFilterSource: loadedTsstoreFilterSource,
         tsstoreFilterIgnoreCase: loadedTsstoreFilterIgnoreCase,
         tsstoreStore: loadedTsstoreStore,
+        tsstoreNative: tsstoreNativeFromParams(chart.query_config?.params),
         edgelakeDatabase: loadedEdgelakeDatabase,
         xAxisColumn: chart.data_mapping?.x_axis || '',
         xAxisLabel: chart.data_mapping?.x_axis_label || '',
@@ -1626,6 +1646,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         yAxisColumns: loadedYCols,
         yAxisColors: loadedYColors,
         yAxisLabel: chart.data_mapping?.y_axis_label || '',
+        yAxisLabelRight: chart.data_mapping?.y_axis_label_right || '',
         yAxisLabels: loadedYAxisLabels,
         groupByColumn: chart.data_mapping?.group_by || '',
         seriesColumn: chart.data_mapping?.series || '',
@@ -1701,6 +1722,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         tsstoreFilterSource: 'literal',
         tsstoreFilterIgnoreCase: false,
         tsstoreStore: '',
+        tsstoreNative: EMPTY_TSSTORE_NATIVE,
         edgelakeDatabase: '',
         xAxisColumn: '',
         xAxisLabel: '',
@@ -1790,6 +1812,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       tsstoreFilterSource,
       tsstoreFilterIgnoreCase,
       tsstoreStore,
+      tsstoreNative,
       edgelakeDatabase,
       xAxisColumn,
       xAxisLabel,
@@ -1839,7 +1862,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
   }, [
     name, title, description, namespace, tags, componentType, chartType,
     controlConfig, displayConfig, selectedConnectionId, queryRaw, queryType,
-    tsstoreQueryType, tsstoreSinceDuration, tsstoreRangeFrom, tsstoreRangeTo, tsstoreLimit, tsstoreLatestBy, promQueryType, promTimeRange, promStep, tsstoreFilter, tsstoreFilterSource, tsstoreFilterIgnoreCase, tsstoreStore, edgelakeDatabase,
+    tsstoreQueryType, tsstoreSinceDuration, tsstoreRangeFrom, tsstoreRangeTo, tsstoreLimit, tsstoreLatestBy, promQueryType, promTimeRange, promStep, tsstoreFilter, tsstoreFilterSource, tsstoreFilterIgnoreCase, tsstoreStore, tsstoreNative, edgelakeDatabase,
     xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, yAxisColors,
     groupByColumn, seriesColumn, filters, aggregation,
     slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol,
@@ -2128,6 +2151,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
               setTsstoreQueryType('newest');
               setTsstoreLimit(defaultTsstoreLimit(chartType));
               setTsstoreLatestBy('');
+              setTsstoreNative(EMPTY_TSSTORE_NATIVE);
               setTsstoreSinceDuration('1h');
               setPromQueryType('range');
               setPromTimeRange('1h');
@@ -2360,6 +2384,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
     setTsstoreQueryType('newest');
     setTsstoreLimit(defaultTsstoreLimit('line'));
     setTsstoreLatestBy('');
+    setTsstoreNative(EMPTY_TSSTORE_NATIVE);
     setTsstoreSinceDuration('1h');
     setPromQueryType('range');
     setPromTimeRange('1h');
@@ -2623,6 +2648,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           rawQuery = tsstoreQueryType;
           queryParams = { limit: tsstoreLimit };
         }
+        Object.assign(queryParams, buildTsstoreNativeParams());
         if (!(tsstoreFilterUsesVariable && !effectiveVarValue)) {
           Object.assign(queryParams, buildTsstoreFilterParams());
         }
@@ -2812,6 +2838,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         rawQuery = tsstoreQueryType;
         queryParams = { limit: tsstoreLimit, ...tsstoreFilterParams };
       }
+      Object.assign(queryParams, buildTsstoreNativeParams());
     } else if (selectedDatasource?.type === 'prometheus') {
       queryParams = buildPrometheusParams();
     } else if (selectedDatasource?.type === 'edgelake' && edgelakeDatabase) {
@@ -2853,7 +2880,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
       : null;
 
     return getDataDrivenChartCode(chartType, selectedConnectionId, rawQuery, queryType, xAxisColumn, yAxisColumns, transforms, chartOptions, queryParams, seriesColumn, columnAliases, isTSStoreStreaming || isMQTT, slidingWindow, activeParser, chart?.id || '', isTSStoreStreaming, true, tsstoreFilterParams);
-  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, yAxisColors, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, title, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, tsstoreRangeFrom, tsstoreRangeTo, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle, previewVariableValue, buildTsstoreFilterParams, buildTsstoreLatestByParams, buildTsstoreStoreParams, buildPrometheusParams]);
+  }, [chartType, selectedConnectionId, queryRaw, queryType, xAxisColumn, xAxisLabel, xAxisFormat, yAxisColumns, yAxisLabel, yAxisLabels, yAxisColors, filters, aggregation, sortBy, sortOrder, limitRows, showCustomCode, componentCode, name, title, chartOptions, selectedDatasource, tsstoreLimit, tsstoreQueryType, tsstoreSinceDuration, tsstoreRangeFrom, tsstoreRangeTo, seriesColumn, edgelakeDatabase, columnAliases, visibleColumns, isTSStoreStreaming, isMQTT, slidingWindowEnabled, slidingWindowDuration, slidingWindowTimestampCol, parserPreset, parserDataPath, parserTimestampField, parserTimestampScale, bandColumns, bandedBarStyle, previewVariableValue, buildTsstoreFilterParams, buildTsstoreLatestByParams, buildTsstoreNativeParams, buildTsstoreStoreParams, buildPrometheusParams]);
 
   const filteredPreviewData = useMemo(() => {
     if (!previewData) return null;
@@ -2994,7 +3021,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
           // use the limit. 'latest' omits it too — there the limit would cap
           // DISTINCT SERIES, and ts-store's own default (up to 1000 groups) is
           // the right ceiling.
-          ? { ...(tsstoreQueryType === 'since' || tsstoreQueryType === 'range' || tsstoreQueryType === 'latest' ? {} : { limit: tsstoreLimit }), ...buildTsstoreLatestByParams(), ...buildTsstoreFilterParams(), ...buildTsstoreStoreParams() }
+          ? { ...(tsstoreQueryType === 'since' || tsstoreQueryType === 'range' || tsstoreQueryType === 'latest' ? {} : { limit: tsstoreLimit }), ...buildTsstoreLatestByParams(), ...buildTsstoreNativeParams(), ...buildTsstoreFilterParams(), ...buildTsstoreStoreParams() }
           : selectedDatasource?.type === 'prometheus'
             ? buildPrometheusParams()
             : selectedDatasource?.type === 'edgelake' && edgelakeDatabase
@@ -3018,6 +3045,13 @@ const ComponentEditor = forwardRef(function ComponentEditor({
         // The old back-compat mirror (first series label copied here) is
         // gone; strip_y_axis_label_mirror cleaned the stored copies.
         y_axis_label: yAxisLabel || '',
+        // The RIGHT axis's label. Only meaningful on a dual-axis chart —
+        // omitted otherwise so a single-axis record doesn't carry a value
+        // that can never render (and can't resurface if the author later
+        // turns dual-axis on with a stale label attached).
+        y_axis_label_right: chartOptions.multipleYAxis === true
+          ? (yAxisLabelRight || '')
+          : undefined,
         y_axis_labels: (() => {
           if (!Array.isArray(yAxisLabels) || yAxisLabels.length === 0) return undefined;
           // Realign labels with the filtered y_axis. We compute the index
@@ -4119,6 +4153,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           </div>
                         )}
                       </div>
+                      <TsstoreNativeParamsControls
+                        value={tsstoreNative}
+                        onChange={setTsstoreNative}
+                        queryType={tsstoreQueryType}
+                      />
                       {/* Source-side FILTER row — mirrors the SQL WHERE
                           value-source pattern: [Value | Dashboard variable]
                           then the value (literal text or a bound-variable
@@ -4721,6 +4760,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                       pie_show_labels: chartOptions.pieShowLabels !== false,
                       // scatter field ids
                       y_axis_label: yAxisLabel || '',
+                      y_axis_label_right: yAxisLabelRight || '',
                       size_column: chartOptions.sizeColumn || '',
                       symbol_size: chartOptions.symbolSize ?? 15,
                       symbol_shape: chartOptions.symbolShape || 'circle',
@@ -4902,6 +4942,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                         // size column + symbol style live on chartOptions;
                         // x-axis range is scatter-only (true value axis).
                         case 'y_axis_label': setYAxisLabel(value); break;
+                        case 'y_axis_label_right': setYAxisLabelRight(value); break;
                         case 'size_column': updateChartOption('sizeColumn', value); break;
                         case 'symbol_size': updateChartOption('symbolSize', value); break;
                         case 'symbol_shape': updateChartOption('symbolShape', value); break;
@@ -5985,6 +6026,11 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           accumulator_reset_policy: (Array.isArray(yAxisAccumulate) && yAxisAccumulate.some(Boolean)) ? accumulatorResetPolicy : undefined,
                           // scatter reads these off data_mapping
                           y_axis_label: yAxisLabel || '',
+                          // Preview must mirror the save path or the right
+                          // axis name appears only after a save+reload.
+                          y_axis_label_right: chartOptions.multipleYAxis === true
+                            ? (yAxisLabelRight || '')
+                            : undefined,
                           size_column: chartOptions.sizeColumn || '',
                           // banded_bar reads its per-row band column map off
                           // data_mapping. Only meaningful when a mean column
@@ -6018,6 +6064,7 @@ const ComponentEditor = forwardRef(function ComponentEditor({
                           ? {
                               ...(tsstoreQueryType === 'since' || tsstoreQueryType === 'range' || tsstoreQueryType === 'latest' ? {} : { limit: tsstoreLimit }),
                               ...buildTsstoreLatestByParams(),
+                              ...buildTsstoreNativeParams(),
                               ...buildTsstoreFilterParams(),
                               // Resolve the filter token for the custom-code preview.
                               ...(tsstoreFilterUsesVariable ? { dashboard_variable: previewVariableValue } : {}),

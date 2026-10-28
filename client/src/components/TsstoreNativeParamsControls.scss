@@ -1,0 +1,11 @@
+@use '@carbon/react/scss/spacing' as spacing;
+
+// ts-store options accordion inside the ts-store query card. Rows reuse the
+// card's .tsstore-query-row layout from ComponentEditor.scss.
+.tsstore-native-params {
+  margin-bottom: spacing.$spacing-04;
+
+  .cds--accordion__content {
+    padding-inline-end: 0;
+  }
+}

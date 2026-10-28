@@ -6,6 +6,84 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.61.0] — 2026-10-03
+
+### Added
+
+- **ts-store components can use ts-store's own aggregation and scan options.**
+  A component on a ts-store REST connection gets a "ts-store options" section
+  in its query card, exposing five parameters ts-store already supported but
+  the dashboard never passed through: an aggregation window, an aggregation
+  function, per-field functions, a lookback window, and a scan limit. The
+  dashboard adds no behaviour of its own — the values go to ts-store verbatim,
+  and a blank field means ts-store's default. Only the options ts-store applies
+  to the selected query type are shown.
+
+  The one that matters most on a dashboard with a time-range picker is the
+  function. The picker downsamples by averaging every numeric field, which is
+  wrong for a 0/1 field such as occupancy (it reads 0.46 instead of 0 or 1).
+  Setting the function to `max` keeps the picker's resolution but reports
+  whether there was any activity in each bucket. (#202)
+
+### Fixed
+
+- **A `_schema` column and a row dated 1970 appeared in ts-store data.** On a
+  dashboard with a time-range picker, the data view of a component reading a
+  ts-store schema store showed a stray `_schema` column and one row stamped
+  1970. ts-store leads a downsampled response with a header naming its
+  fields, and the dashboard was treating that header as a data row.
+
+### Documentation
+
+- `THIRD_PARTY_LICENSES` now declares the container base images.
+
+## [0.60.0] — 2026-09-01
+
+### Added
+
+- **Dual-axis charts can name each axis.** A line/area/bar chart with two
+  y-axes can now carry a label on each side, shown at the top of the axis.
+  Previously axis labels were suppressed entirely in dual-axis mode on the
+  grounds that the legend and axis colours identified each side — but that
+  only holds while the legend is on, and turning the legend off to reclaim
+  space on a small panel is exactly when a two-scale chart most needs its
+  axes named.
+
+### Changed
+
+- **Chart titles sit closer to the chart.** The title band was a fixed height
+  with the text centred, which left as much empty space below the title as
+  above it. The gap above is unchanged; the one below is trimmed, returning
+  roughly 7px to the chart on every titled panel.
+
+### Fixed
+
+- **Charts wasted about 50px of width on the left.** The grid reserved room
+  for the y-axis tick labels on top of the room ECharts already reserves for
+  them, so every line, area, bar, banded-bar and scatter chart was indented
+  from its panel edge for no reason. On a small panel that was a large share
+  of the plot — a 230px-wide chart gets 42px of it back.
+
+- **A panel and its component could not be deleted together.** Choosing "also
+  delete the component" while removing a panel failed with "component is in
+  use", because the panel removal had not been saved yet when the component
+  delete was attempted. The component delete now runs after the dashboard
+  save, and cancelling the edit keeps both.
+
+- **Duplicating a panel could fail instead of numbering the copy.** The
+  name-collision check only looked at the components on the current dashboard
+  (or the current page of the components list), so an existing "(copy)"
+  elsewhere in the namespace was invisible and the duplicate was rejected
+  rather than becoming "(copy 2)".
+
+- **The right-axis label could not be entered.** On charts saved before the
+  field existed, the input was hidden; on the rest it accepted typing but
+  discarded the value on save. Both paths now work.
+
+- **Axis names were clipped at the top of the chart.** The name is anchored to
+  the top of its axis, and the space reserved for it was too small, so the
+  glyphs were cut off by the canvas edge.
+
 ## [0.59.3] — 2026-08-28
 
 ### Fixed
