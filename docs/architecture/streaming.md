@@ -185,7 +185,11 @@ backfill before the live stream takes over (`client/src/hooks/useData.js`,
   backfill latch, and re-backfills at the new window without
   duplicates. Row order is **detected from the data's timestamps**, not
   assumed per endpoint (plain `newest` returns newest-first;
-  `since:`/`range:`+step return oldest-first), and the leading epoch-0
+  `since:`/`range:`+step return oldest-first). A polled (REST) fetch
+  skips this path and keeps the source order, so line/area/bar sort a
+  timestamp x-axis oldest-first themselves (`specs/line.js`
+  `sortRowsOldestFirst`); value tiles keep source order because they
+  read `rows[0]` as the latest. The leading epoch-0
   bucket a stepped pull can emit is dropped. An **absolute** range is a
   closed past window: the panel renders the backfill statically and
   never subscribes to the live stream (historical mode); a relative

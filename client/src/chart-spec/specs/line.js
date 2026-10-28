@@ -33,7 +33,7 @@ import {
   makeSIAxisFormatter,
   formatSI,
 } from '../option-helpers.js';
-import { parseTimestamp } from '../../utils/dataTransforms.js';
+import { parseTimestamp, detectTimestampType } from '../../utils/dataTransforms.js';
 import { applyConversion, normalizeConversion, distinctConversionSymbols } from '../units.js';
 import { inferIntervalMs, insertGapRows } from '../gap-detection.js';
 
@@ -140,6 +140,38 @@ function resolveAutoXFormat(xValues, xAxisCol, formatCellValue) {
  * This is the read-path migration shim — legacy line records load
  * cleanly without a Mongo migration.
  */
+// Time-series rows plot OLDEST-FIRST — earliest on the left, newest on the
+// right. The category x-axis places rows in array order, so the order has to
+// be fixed here, in the rows. The streaming backfill already normalizes
+// (useData.js), but a polled fetch delivers the source's own order, and
+// ts-store's /data/newest is newest-first — which drew REST ts-store charts
+// right-to-left. Sorting at the chart rather than in the data layer is
+// deliberate: value tiles read rows[0] as the latest reading and must keep
+// the source order.
+//
+// Only a REAL time axis is reordered: every x-value must be an ISO string or
+// an epoch s/ms (detectTimestampType, which is strict — a small integer is a
+// category, not 1970). Any other x keeps the author's / query's order, as
+// does a time column with a blank cell. The sort is stable, so rows sharing
+// a timestamp (pivot groups) keep their relative order.
+function sortRowsOldestFirst(rows, xColIdx) {
+  if (xColIdx < 0 || rows.length < 2) return rows;
+  const times = new Array(rows.length);
+  let ascending = true;
+  for (let i = 0; i < rows.length; i++) {
+    const v = rows[i][xColIdx];
+    const type = detectTimestampType(v);
+    if (!type) return rows;
+    times[i] = parseTimestamp(v, type).getTime();
+    if (i > 0 && times[i] < times[i - 1]) ascending = false;
+  }
+  if (ascending) return rows;
+  return rows
+    .map((r, i) => ({ r, t: times[i] }))
+    .sort((a, b) => a.t - b.t)
+    .map(({ r }) => r);
+}
+
 function normalizeYEntry(e) {
   if (typeof e === 'string') return { column: e, label: '', stack: false, axis: undefined, color: '', convert: null };
   if (!e || typeof e !== 'object') return { column: '', label: '', stack: false, axis: undefined, color: '', convert: null };
@@ -641,6 +673,10 @@ export function buildOption(values, data, helpers = {}) {
     }
     rows = [...byCat.values()];
   }
+
+  // Before gap detection, which walks consecutive deltas, and the
+  // accumulator, which plots value[i] - value[i-1] — both assume time order.
+  rows = sortRowsOldestFirst(rows, xColIdxRaw);
 
   // Build categories from the x-axis column. The 'auto' format resolves
   // to a concrete preset from the data (span → time-only/date+time,
