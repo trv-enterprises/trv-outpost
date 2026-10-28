@@ -6,6 +6,48 @@ prior releases are described in the git history (see `git tag`).
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.62.0] — 2026-10-28
+
+### Added
+
+- **Border adornments can snap to ⅓ and ⅔ of a cell.** A free-drawn border
+  could only sit on whole-cell boundaries, so a box couldn't enclose a
+  region that doesn't line up with the 32 × 32 grid. Each edge now has four
+  stops per cell: the boundary plus the ⅓ and ⅔ marks. An edge on a cell
+  boundary still grows outward into the gutter, so neighbouring boxes don't
+  overlap. An edge on a third has no gutter to grow into, so it centres on
+  the mark. Even line widths (2 or 4) render the most evenly there. Dragging
+  a third-aligned box moves it without snapping it back onto the grid.
+  Existing dashboards are unchanged, and no migration is needed. Panel
+  borders and panels themselves still snap to whole cells. (#309)
+
+### Fixed
+
+- **Line, area and bar charts drew time backwards on REST ts-store
+  connections.** The newest reading appeared on the left. Time-series
+  charts run earliest on the left to latest on the right, but only
+  streaming charts were being put in that order, and ts-store's "newest"
+  query returns its rows newest-first. These charts now sort a timestamp
+  x-axis oldest-first, whatever order the data arrives in. Charts with a
+  category x-axis keep the order the query returns, and value tiles still
+  show the latest reading. Counter (delta) series also come out right now:
+  on newest-first data their deltas had been negative and were dropped.
+  (#317)
+- **Border adornments with corrupt geometry are repaired when saved.** A
+  stored non-numeric (NaN) edge could never be moved, resized or deleted,
+  so the border was stuck permanently. The server now resets such a value to
+  a safe position or minimum size before storing it.
+
+### Security
+
+- **Go toolchain 1.26.10 and `golang.org/x/net` v0.60.0.** These clear 13
+  newly published advisories: 12 in the Go standard library (mostly HTTP/2
+  and HTTP/1 handling, plus a certificate-distrust update) and the x/net
+  copies of four HTTP/2 ones. The server image's build stage also moves from
+  Go 1.26.5 to 1.26.10. The image ignores the `go.mod` toolchain setting, so
+  the released binary had still been compiling with the older standard
+  library. (#317)
+
 ## [0.61.0] — 2026-10-03
 
 ### Added
