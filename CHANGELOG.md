@@ -47,6 +47,12 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   Go 1.26.5 to 1.26.10. The image ignores the `go.mod` toolchain setting, so
   the released binary had still been compiling with the older standard
   library. (#317)
+- **User-manual site dependencies.** Clears the critical advisories in
+  `udoc`'s build tooling (`proxy-addr`, `shell-quote` and `tinypool`, all
+  pulled in by Docusaurus). `tinypool` has no fixed 1.x release, and
+  Docusaurus still asks for 1.x, so it is pinned to 2.2.0 through an npm
+  override. It is only used when Docusaurus's opt-in worker-thread build is
+  turned on, and was checked against Docusaurus's own usage.
 
 ## [0.61.0] — 2026-10-03
 
